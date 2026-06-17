@@ -1873,32 +1873,38 @@ async function downloadInvoiceAsImage() {
   
   showToast('Đang tạo ảnh hóa đơn, vui lòng đợi...', 'info');
   
-  // Lưu lại các thuộc tính CSS nguyên bản
-  const originalWidth = element.style.width;
-  const originalMaxWidth = element.style.maxWidth;
-  const originalBoxSizing = element.style.boxSizing;
+  // Nhân bản hóa đơn để xử lý độc lập
+  const clone = element.cloneNode(true);
   
-  // Ép kích thước chuẩn 750px (tương đương màn hình máy tính) để bố cục hiển thị hoàn hảo
-  element.style.width = '750px';
-  element.style.maxWidth = '750px';
-  element.style.boxSizing = 'border-box';
+  // Định hình kiểu dáng cho bản sao ẩn ngoài màn hình để có kích thước chuẩn desktop
+  clone.style.position = 'fixed';
+  clone.style.top = '-9999px';
+  clone.style.left = '-9999px';
+  clone.style.width = '750px';
+  clone.style.maxWidth = '750px';
+  clone.style.minWidth = '750px';
+  clone.style.boxSizing = 'border-box';
+  clone.style.display = 'block';
+  clone.style.margin = '0';
+  clone.style.transform = 'none';
+  
+  // Đưa bản sao vào body để trình duyệt biên dịch CSS
+  document.body.appendChild(clone);
   
   try {
-    // Chờ 150ms để trình duyệt vẽ lại giao diện theo kích thước mới
+    // Chờ 150ms cho trình duyệt vẽ xong layout bản sao ẩn
     await new Promise(resolve => setTimeout(resolve, 150));
 
-    const canvas = await html2canvas(element, {
+    const canvas = await html2canvas(clone, {
       scale: 2, // Tăng chất lượng ảnh lên 2 lần
       useCORS: true, 
       logging: false,
       backgroundColor: '#ffffff',
-      windowWidth: 750 // Mô phỏng chiều rộng màn hình là 750px cho html2canvas
+      windowWidth: 750 // Giả lập cửa sổ rộng 750px để lấy CSS chuẩn
     });
     
-    // Khôi phục lại giao diện ban đầu ngay lập tức
-    element.style.width = originalWidth;
-    element.style.maxWidth = originalMaxWidth;
-    element.style.boxSizing = originalBoxSizing;
+    // Xóa bản sao ẩn sau khi đã chụp xong
+    document.body.removeChild(clone);
     
     const image = canvas.toDataURL('image/png');
     const link = document.createElement('a');
@@ -1914,11 +1920,10 @@ async function downloadInvoiceAsImage() {
     link.click();
     showToast('Tải ảnh hóa đơn thành công!', 'success');
   } catch (err) {
-    // Khôi phục lại giao diện nếu xảy ra lỗi
-    element.style.width = originalWidth;
-    element.style.maxWidth = originalMaxWidth;
-    element.style.boxSizing = originalBoxSizing;
-    
+    // Xóa bản sao ẩn nếu xảy ra lỗi
+    if (clone.parentNode) {
+      document.body.removeChild(clone);
+    }
     console.error('Lỗi khi tải ảnh hóa đơn:', err);
     showToast('Có lỗi xảy ra khi tạo ảnh hóa đơn', 'error');
   }
