@@ -167,6 +167,7 @@ function switchTab(tabId) {
     electricity: 'Quản Lý Điện',
     payments: 'Thu Tiền Tháng',
     search: 'Tìm Kiếm Dữ Liệu',
+    invoice: 'Tạo Hóa Đơn',
     settings: 'Cài Đặt Hệ Thống'
   };
   document.getElementById('page-title').textContent = titles[tabId] || 'Nhà Trọ Home';
@@ -187,8 +188,11 @@ function switchTab(tabId) {
     loadRoomsData();
   } else if (tabId === 'electricity') {
     loadRoomsDropdown();
+    initElectricityModeTabs();
   } else if (tabId === 'payments') {
     initPaymentsTab();
+  } else if (tabId === 'invoice') {
+    initInvoiceTab();
   }
 }
 
@@ -445,6 +449,22 @@ async function loadSettings() {
       const input = document.getElementById('setting-electric-price');
       if (input) input.value = currentState.electricityPrice;
     }
+    // Tiền nước/rác
+    currentState.waterPrice = parseFloat(settings.water_price) || 20000;
+    currentState.trashPrice = parseFloat(settings.trash_price) || 10000;
+    const waterInput = document.getElementById('setting-water-price');
+    const trashInput = document.getElementById('setting-trash-price');
+    if (waterInput) waterInput.value = currentState.waterPrice;
+    if (trashInput) trashInput.value = currentState.trashPrice;
+    // Load bank info into settings form
+    const bankName = document.getElementById('setting-bank-name');
+    const bankAccount = document.getElementById('setting-bank-account');
+    const bankOwner = document.getElementById('setting-bank-owner');
+    if (bankName && settings.bank_name) bankName.value = settings.bank_name;
+    if (bankAccount && settings.bank_account) bankAccount.value = settings.bank_account;
+    if (bankOwner && settings.bank_owner) bankOwner.value = settings.bank_owner;
+    // Store bank info in state for invoice use
+    currentState.bankSettings = settings;
   } catch (err) {
     console.error('Không thể load settings', err);
   }
@@ -453,14 +473,29 @@ async function loadSettings() {
 async function handleSettingsSubmit(e) {
   e.preventDefault();
   const price = document.getElementById('setting-electric-price').value;
+  const waterPrice = document.getElementById('setting-water-price')?.value || '';
+  const trashPrice = document.getElementById('setting-trash-price')?.value || '';
+  const bankName = document.getElementById('setting-bank-name')?.value || '';
+  const bankAccount = document.getElementById('setting-bank-account')?.value || '';
+  const bankOwner = document.getElementById('setting-bank-owner')?.value || '';
   
   try {
     await fetchAPI('/api/settings', {
       method: 'PUT',
-      body: JSON.stringify({ electricity_price: price })
+      body: JSON.stringify({
+        electricity_price: price,
+        water_price: waterPrice,
+        trash_price: trashPrice,
+        bank_name: bankName,
+        bank_account: bankAccount,
+        bank_owner: bankOwner
+      })
     });
     currentState.electricityPrice = parseFloat(price);
-    showToast('Đã lưu cấu hình giá điện mới', 'success');
+    currentState.waterPrice = parseFloat(waterPrice) || 20000;
+    currentState.trashPrice = parseFloat(trashPrice) || 10000;
+    currentState.bankSettings = { electricity_price: price, water_price: waterPrice, trash_price: trashPrice, bank_name: bankName, bank_account: bankAccount, bank_owner: bankOwner };
+    showToast('Đã lưu cài đặt thành công', 'success');
   } catch (err) {
     console.error(err);
   }
@@ -604,18 +639,22 @@ function renderRoomPaymentHistory(paymentHistory) {
   container.innerHTML = '';
 
   if (!paymentHistory || paymentHistory.length === 0) {
-    container.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Chưa có lịch sử hóa đơn cho phòng này</td></tr>';
+    container.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Chưa có lịch sử hóa đơn cho phòng này</td></tr>';
     return;
   }
 
   paymentHistory.forEach(p => {
     const tr = document.createElement('tr');
     const isPaid = p.is_paid === 1;
+    const waterAmt = p.water_amount || 0;
+    const trashAmt = p.trash_amount || 0;
     tr.innerHTML = `
       <td><strong>Tháng ${p.month}/${p.year}</strong></td>
       <td>${p.tenant_name || '<span class="text-muted">Không rõ</span>'}</td>
       <td>${formatVND(p.rent_amount)}</td>
       <td>${formatVND(p.electricity_amount)}</td>
+      <td>${waterAmt > 0 ? formatVND(waterAmt) : '<span class="text-muted">0đ</span>'}</td>
+      <td>${trashAmt > 0 ? formatVND(trashAmt) : '<span class="text-muted">0đ</span>'}</td>
       <td><strong>${formatVND(p.total_amount)}</strong></td>
       <td>
         <span class="pay-status-badge ${isPaid ? 'paid' : 'unpaid'}">
@@ -1074,13 +1113,21 @@ function updatePaymentStats(data) {
   const paid = data.filter(r => r.is_paid === 1).length;
   const unpaid = data.filter(r => r.is_paid !== 1).length;
 
+  const calcTotal = (r) => {
+    const rent = r.rent_price || 0;
+    const elec = r.electricity_amount || 0;
+    const water = r.water_amount || 0;
+    const trash = r.trash_amount || 0;
+    return rent + elec + water + trash;
+  };
+
   const collectedAmt = data
     .filter(r => r.is_paid === 1)
-    .reduce((sum, r) => sum + (r.total_amount || (r.rent_price + (r.electricity_amount || 0))), 0);
+    .reduce((sum, r) => sum + (r.total_amount || calcTotal(r)), 0);
 
   const pendingAmt = data
     .filter(r => r.is_paid !== 1)
-    .reduce((sum, r) => sum + r.rent_price + (r.electricity_amount || 0), 0);
+    .reduce((sum, r) => sum + calcTotal(r), 0);
 
   document.getElementById('pay-stat-total').textContent = `${total} phòng`;
   document.getElementById('pay-stat-paid').textContent = `${paid} phòng`;
@@ -1096,7 +1143,7 @@ function renderPaymentsTable(data) {
   if (data.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center text-muted" style="padding: 40px;">
+        <td colspan="9" class="text-center text-muted" style="padding: 40px;">
           ✅ Không có phòng nào đang thuê trong tháng này hoặc chưa có dữ liệu
         </td>
       </tr>
@@ -1111,9 +1158,14 @@ function renderPaymentsTable(data) {
     const isPaid = row.is_paid === 1;
     const elecAmt = row.electricity_amount || 0;
     const rentAmt = row.rent_price || 0;
-    const totalAmt = isPaid ? (row.total_amount || (rentAmt + elecAmt)) : (rentAmt + elecAmt);
+    const waterAmt = row.water_amount || 0;
+    const trashAmt = row.trash_amount || 0;
+    const totalAmt = isPaid
+      ? (row.total_amount || (rentAmt + elecAmt + waterAmt + trashAmt))
+      : (rentAmt + elecAmt + waterAmt + trashAmt);
     const tenantNames = row.tenant_names || 'Chưa có thông tin';
     const tenantPhones = row.tenant_phones || '';
+    const memberCount = row.member_count || 0;
 
     const tr = document.createElement('tr');
     tr.className = isPaid ? 'row-paid' : 'row-unpaid';
@@ -1128,12 +1180,25 @@ function renderPaymentsTable(data) {
       <td>
         <div style="font-weight:500;">${tenantNames}</div>
         ${tenantPhones ? `<div style="font-size:12px;color:var(--neutral-gray)">📞 ${tenantPhones}</div>` : ''}
+        ${memberCount > 0 ? `<div style="font-size:11px;color:var(--neutral-gray);margin-top:2px;">👥 ${memberCount} người</div>` : ''}
       </td>
       <td>${formatVND(rentAmt)}</td>
       <td>
         ${elecAmt > 0
           ? `<span class="text-primary">${formatVND(elecAmt)}</span>${row.consumption ? `<div style="font-size:11px;color:var(--neutral-gray)">${row.consumption} kWh</div>` : ''}`
           : '<span class="text-muted" style="font-size:12px;">Chưa nhập</span>'
+        }
+      </td>
+      <td>
+        ${waterAmt > 0
+          ? `<span class="text-primary">${formatVND(waterAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.waterPrice || (currentState.waterPrice || 20000))}</div>`
+          : '<span class="text-muted" style="font-size:12px;">0đ</span>'
+        }
+      </td>
+      <td>
+        ${trashAmt > 0
+          ? `<span class="text-primary">${formatVND(trashAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.trashPrice || (currentState.trashPrice || 10000))}</div>`
+          : '<span class="text-muted" style="font-size:12px;">0đ</span>'
         }
       </td>
       <td><span class="amount-total">${formatVND(totalAmt)}</span></td>
@@ -1209,3 +1274,628 @@ function formatDateTime(dtString) {
   return `${dd}/${mm} ${hh}:${min}`;
 }
 
+// ==========================================
+// 8. NHẬP ĐIỆN HÀNG LOẠT (BULK ELECTRICITY)
+// ==========================================
+
+let bulkRoomsData = []; // Cache data từ API
+let bulkElecMode = 'single'; // 'single' | 'bulk'
+let bulkInited = false;
+
+function initElectricityModeTabs() {
+  if (bulkInited) return;
+  bulkInited = true;
+
+  const modeBtns = document.querySelectorAll('.elec-mode-btn');
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.getAttribute('data-mode');
+      modeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.getElementById('elec-mode-single').style.display = mode === 'single' ? '' : 'none';
+      document.getElementById('elec-mode-bulk').style.display = mode === 'bulk' ? '' : 'none';
+      bulkElecMode = mode;
+
+      if (mode === 'bulk') {
+        initBulkDropdowns();
+      }
+    });
+  });
+
+  // Bulk load button
+  document.getElementById('btn-load-bulk').addEventListener('click', loadBulkData);
+
+  // Bulk save buttons
+  document.getElementById('btn-bulk-save').addEventListener('click', saveBulkReadings);
+  document.getElementById('btn-bulk-save-bottom').addEventListener('click', saveBulkReadings);
+
+  // Filter pills
+  document.querySelectorAll('.bulk-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.bulk-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      applyBulkFilter(pill.getAttribute('data-filter'));
+    });
+  });
+}
+
+function initBulkDropdowns() {
+  const mSelect = document.getElementById('bulk-month');
+  const ySelect = document.getElementById('bulk-year');
+  if (mSelect.options.length > 0) return; // Already inited
+
+  const now = new Date();
+  const cm = now.getMonth() + 1;
+  const cy = now.getFullYear();
+
+  for (let i = 1; i <= 12; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `Tháng ${i}`;
+    if (i === cm) opt.selected = true;
+    mSelect.appendChild(opt);
+  }
+  for (let i = cy - 2; i <= cy + 1; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `Năm ${i}`;
+    if (i === cy) opt.selected = true;
+    ySelect.appendChild(opt);
+  }
+}
+
+async function loadBulkData() {
+  const month = document.getElementById('bulk-month').value;
+  const year = document.getElementById('bulk-year').value;
+
+  const btn = document.getElementById('btn-load-bulk');
+  btn.textContent = '⏳ Đang tải...';
+  btn.disabled = true;
+
+  try {
+    const data = await fetchAPI(`/api/electricity/bulk-data?year=${year}&month=${month}`);
+    bulkRoomsData = data;
+    renderBulkTable(data, month, year);
+    updateBulkSummary();
+
+    document.getElementById('bulk-period-label').textContent = `${month}/${year}`;
+    document.getElementById('bulk-summary-bar').style.display = 'grid';
+    document.getElementById('bulk-table-container').style.display = 'block';
+    document.getElementById('bulk-filter-bar').style.display = 'flex';
+
+    // Reset filter về "Tất cả"
+    document.querySelectorAll('.bulk-pill').forEach(p => p.classList.remove('active'));
+    document.querySelector('.bulk-pill[data-filter="all"]').classList.add('active');
+
+    showToast(`Đã tải ${data.length} phòng cho tháng ${month}/${year}`, 'success');
+  } catch (err) {
+    console.error(err);
+  } finally {
+    btn.textContent = '📋 Tải danh sách phòng';
+    btn.disabled = false;
+  }
+}
+
+function renderBulkTable(data, month, year) {
+  const tbody = document.getElementById('bulk-elec-tbody');
+  tbody.innerHTML = '';
+
+  data.forEach((room, idx) => {
+    const hasCurrentData = !!room.current;
+    const isVacant = room.status !== 'occupied';
+    const oldReading = hasCurrentData ? room.current.old_reading : room.last_reading;
+    const savedNewReading = hasCurrentData ? room.current.new_reading : '';
+
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-room-id', room.id);
+    tr.setAttribute('data-old-reading', oldReading);
+    tr.setAttribute('data-status', room.status);
+    tr.setAttribute('data-has-data', hasCurrentData ? '1' : '0');
+
+    // Row style
+    if (isVacant) tr.className = 'bulk-row-vacant';
+    else if (hasCurrentData) tr.className = 'bulk-row-done';
+    else tr.className = 'bulk-row-missing';
+
+    const statusBadge = isVacant
+      ? `<span class="bulk-status-badge bulk-status-vacant">⬜ ${room.status === 'maintenance' ? 'Sửa chữa' : 'Trống'}</span>`
+      : hasCurrentData
+        ? `<span class="bulk-status-badge bulk-status-done">✅ Đã nhập</span>`
+        : `<span class="bulk-status-badge bulk-status-missing">⚠️ Chưa nhập</span>`;
+
+    tr.innerHTML = `
+      <td><strong>${room.room_code}</strong></td>
+      <td>${room.zone}</td>
+      <td class="text-center">${oldReading}</td>
+      <td>
+        <input
+          type="number"
+          class="bulk-new-reading ${hasCurrentData ? 'input-valid' : ''}"
+          data-room-id="${room.id}"
+          data-idx="${idx}"
+          value="${savedNewReading}"
+          min="${oldReading}"
+          step="1"
+          placeholder="${isVacant ? 'Bỏ qua' : 'Nhập số mới'}"
+          ${isVacant ? 'disabled style="opacity:0.4;"' : ''}
+        >
+      </td>
+      <td class="text-center bulk-kwh-cell" id="bulk-kwh-${room.id}">
+        ${hasCurrentData ? `<span class="text-primary">${room.current.consumption} kWh</span>` : '--'}
+      </td>
+      <td class="bulk-cost-cell ${hasCurrentData ? '' : 'zero'}" id="bulk-cost-${room.id}">
+        ${hasCurrentData ? formatVND(room.current.total_cost) : '--'}
+      </td>
+      <td id="bulk-status-${room.id}">${statusBadge}</td>
+    `;
+
+    tbody.appendChild(tr);
+
+    // Real-time calculation on input
+    const input = tr.querySelector('.bulk-new-reading');
+    if (input && !isVacant) {
+      input.addEventListener('input', () => onBulkInputChange(input, room.id, oldReading));
+
+      // Tab key: jump to next input
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const allInputs = Array.from(document.querySelectorAll('.bulk-new-reading:not([disabled])'));
+          const currentIdx = allInputs.indexOf(input);
+          const nextInput = allInputs[currentIdx + 1];
+          if (nextInput) {
+            nextInput.focus();
+            nextInput.select();
+          }
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const allInputs = Array.from(document.querySelectorAll('.bulk-new-reading:not([disabled])'));
+          const currentIdx = allInputs.indexOf(input);
+          const nextInput = allInputs[currentIdx + 1];
+          if (nextInput) {
+            nextInput.focus();
+            nextInput.select();
+          }
+        }
+      });
+    }
+  });
+}
+
+function onBulkInputChange(input, roomId, oldReading) {
+  const newVal = parseFloat(input.value);
+  const oldVal = parseFloat(oldReading) || 0;
+  const price = currentState.electricityPrice || 3500;
+
+  const kwhCell = document.getElementById(`bulk-kwh-${roomId}`);
+  const costCell = document.getElementById(`bulk-cost-${roomId}`);
+  const statusCell = document.getElementById(`bulk-status-${roomId}`);
+  const tr = input.closest('tr');
+
+  if (input.value === '' || isNaN(newVal)) {
+    // Cleared
+    input.className = 'bulk-new-reading';
+    kwhCell.innerHTML = '--';
+    costCell.innerHTML = '--';
+    costCell.className = 'bulk-cost-cell zero';
+    statusCell.innerHTML = `<span class="bulk-status-badge bulk-status-missing">⚠️ Chưa nhập</span>`;
+    tr.className = 'bulk-row-missing';
+    tr.setAttribute('data-has-data', '0');
+  } else if (newVal < oldVal) {
+    // Error
+    input.className = 'bulk-new-reading input-error';
+    kwhCell.innerHTML = `<span style="color:var(--danger);font-size:11px;">❌ Sai</span>`;
+    costCell.innerHTML = '--';
+    costCell.className = 'bulk-cost-cell zero';
+    statusCell.innerHTML = `<span class="bulk-status-badge" style="background:var(--danger-bg);color:var(--danger);">❌ Lỗi</span>`;
+    tr.className = '';
+  } else {
+    // Valid
+    const consumption = newVal - oldVal;
+    const cost = consumption * price;
+    input.className = 'bulk-new-reading input-valid';
+    kwhCell.innerHTML = `<span class="text-primary">${consumption.toFixed(1)} kWh</span>`;
+    costCell.innerHTML = formatVND(cost);
+    costCell.className = 'bulk-cost-cell';
+    statusCell.innerHTML = `<span class="bulk-status-badge bulk-status-done">✅ Đã nhập</span>`;
+    tr.className = 'bulk-row-done';
+    tr.setAttribute('data-has-data', '1');
+  }
+
+  updateBulkSummary();
+}
+
+function updateBulkSummary() {
+  const rows = document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]');
+  let total = 0, done = 0, missing = 0, totalKwh = 0, totalCost = 0;
+  const price = currentState.electricityPrice || 3500;
+
+  rows.forEach(tr => {
+    const status = tr.getAttribute('data-status');
+    if (status !== 'occupied') return;
+    total++;
+
+    const input = tr.querySelector('.bulk-new-reading');
+    const oldReading = parseFloat(tr.getAttribute('data-old-reading')) || 0;
+    const newVal = parseFloat(input?.value);
+
+    if (input && !isNaN(newVal) && newVal >= oldReading) {
+      done++;
+      const kwh = newVal - oldReading;
+      totalKwh += kwh;
+      totalCost += kwh * price;
+    } else {
+      missing++;
+    }
+  });
+
+  document.getElementById('bulk-sum-total').textContent = total;
+  document.getElementById('bulk-sum-done').textContent = done;
+  document.getElementById('bulk-sum-missing').textContent = missing;
+  document.getElementById('bulk-sum-kwh').textContent = `${totalKwh.toFixed(1)} kWh`;
+  document.getElementById('bulk-sum-cost').textContent = formatVND(totalCost);
+}
+
+function applyBulkFilter(filter) {
+  const rows = document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]');
+  rows.forEach(tr => {
+    const status = tr.getAttribute('data-status');
+    const hasDone = tr.getAttribute('data-has-data') === '1';
+    const isOccupied = status === 'occupied';
+
+    let show = true;
+    if (filter === 'occupied') show = isOccupied;
+    else if (filter === 'missing') show = isOccupied && !hasDone;
+    else if (filter === 'done') show = hasDone;
+
+    tr.style.display = show ? '' : 'none';
+  });
+}
+
+async function saveBulkReadings() {
+  const month = document.getElementById('bulk-month').value;
+  const year = document.getElementById('bulk-year').value;
+
+  const inputs = document.querySelectorAll('.bulk-new-reading:not([disabled])');
+  const readings = [];
+  let errorCount = 0;
+
+  inputs.forEach(input => {
+    const roomId = input.getAttribute('data-room-id');
+    const tr = input.closest('tr');
+    const oldReading = parseFloat(tr.getAttribute('data-old-reading')) || 0;
+    const newVal = input.value;
+
+    if (newVal === '' || newVal === null) return; // Skip empty
+    if (parseFloat(newVal) < oldReading) { errorCount++; return; }
+
+    readings.push({
+      room_id: roomId,
+      old_reading: oldReading,
+      new_reading: parseFloat(newVal)
+    });
+  });
+
+  if (readings.length === 0) {
+    showToast('Chưa có số điện nào được nhập', 'error');
+    return;
+  }
+
+  if (errorCount > 0) {
+    const ok = await showConfirm(`Có ${errorCount} phòng bị lỗi (số mới < số cũ) sẽ bị bỏ qua. Bạn vẫn muốn lưu ${readings.length} phòng còn lại?`);
+    if (!ok) return;
+  }
+
+  const btn = document.getElementById('btn-bulk-save');
+  const btnBottom = document.getElementById('btn-bulk-save-bottom');
+  btn.textContent = '⏳ Đang lưu...';
+  btn.disabled = true;
+  btnBottom.disabled = true;
+
+  try {
+    const result = await fetchAPI('/api/electricity/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ year, month, readings })
+    });
+
+    showToast(`✅ ${result.message}`, 'success');
+    // Reload lại bảng để cập nhật trạng thái
+    await loadBulkData();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    btn.textContent = '💾 Lưu tất cả';
+    btn.disabled = false;
+    btnBottom.disabled = false;
+  }
+}
+
+// ==========================================
+// 9. TẠO HÓA ĐƠN (INVOICE TAB)
+// ==========================================
+
+let invoiceTabInited = false;
+
+async function initInvoiceTab() {
+  // Init date dropdowns once
+  if (!invoiceTabInited) {
+    const mSelect = document.getElementById('inv-month');
+    const ySelect = document.getElementById('inv-year');
+    const now = new Date();
+    const cm = now.getMonth() + 1;
+    const cy = now.getFullYear();
+
+    for (let i = 1; i <= 12; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `Tháng ${i}`;
+      if (i === cm) opt.selected = true;
+      mSelect.appendChild(opt);
+    }
+    for (let i = cy - 2; i <= cy + 1; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `Năm ${i}`;
+      if (i === cy) opt.selected = true;
+      ySelect.appendChild(opt);
+    }
+
+    // Register preview button
+    document.getElementById('btn-preview-invoice').addEventListener('click', generateInvoicePreview);
+
+    // Print button
+    document.getElementById('btn-print-invoice').addEventListener('click', () => {
+      window.print();
+    });
+
+    // Copy text button
+    document.getElementById('btn-share-invoice').addEventListener('click', copyInvoiceText);
+
+    // Download image button
+    document.getElementById('btn-download-invoice-img').addEventListener('click', downloadInvoiceAsImage);
+
+    invoiceTabInited = true;
+  }
+
+  // Load rooms dropdown
+  await loadInvoiceRoomsDropdown();
+}
+
+async function loadInvoiceRoomsDropdown() {
+  try {
+    const rooms = await fetchAPI('/api/rooms');
+    const select = document.getElementById('inv-room-select');
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">-- Chọn phòng --</option>';
+    rooms.forEach(room => {
+      const opt = document.createElement('option');
+      opt.value = room.id;
+      opt.textContent = `Phòng ${room.room_code} (Khu ${room.zone})`;
+      select.appendChild(opt);
+    });
+    if (currentVal) select.value = currentVal;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function generateInvoicePreview() {
+  const roomId = document.getElementById('inv-room-select').value;
+  const month = document.getElementById('inv-month').value;
+  const year = document.getElementById('inv-year').value;
+  const note = document.getElementById('inv-note').value.trim();
+
+  if (!roomId) {
+    showToast('Vui lòng chọn phòng trước', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-preview-invoice');
+  btn.textContent = '⏳ Đang tải...';
+  btn.disabled = true;
+
+  try {
+    const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}`);
+    renderInvoiceDocument(data, note);
+
+    document.getElementById('invoice-empty-state').style.display = 'none';
+    document.getElementById('invoice-preview-container').style.display = 'block';
+
+    // Scroll to preview on mobile
+    document.getElementById('invoice-preview-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    console.error(err);
+  } finally {
+    btn.textContent = '👁️ Xem trước hóa đơn';
+    btn.disabled = false;
+  }
+}
+
+function renderInvoiceDocument(data, note) {
+  const { room, tenants, electricity, payment, settings, summary } = data;
+
+  // Period label
+  document.getElementById('inv-period-label').textContent = `Tháng ${summary.month}/${summary.year}`;
+
+  // Room info
+  document.getElementById('inv-room-code').textContent = `Phòng ${room.room_code}`;
+  document.getElementById('inv-room-zone').textContent = `Khu ${room.zone}`;
+  const statusMap = { vacant: '🟢 Trống', occupied: '🟠 Đang thuê', maintenance: '🔴 Sửa chữa' };
+  document.getElementById('inv-room-status').textContent = statusMap[room.status] || room.status;
+
+  // Tenants
+  const tenantsList = document.getElementById('inv-tenants-list');
+  tenantsList.innerHTML = '';
+  if (tenants.length === 0) {
+    tenantsList.innerHTML = '<span style="color:var(--neutral-gray);font-size:13px">Chưa có người thuê</span>';
+  } else {
+    tenants.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'inv-tenant-row';
+      div.innerHTML = `
+        <span class="inv-tenant-name">${t.full_name}</span>
+        ${t.phone ? `<span class="inv-tenant-phone">📞 ${t.phone}</span>` : ''}
+      `;
+      tenantsList.appendChild(div);
+    });
+  }
+
+  // Charges table
+  const tbody = document.getElementById('inv-charges-tbody');
+  tbody.innerHTML = '';
+
+  // Row: Tiền thuê phòng
+  tbody.innerHTML += `
+    <tr>
+      <td>🏠 Tiền thuê phòng</td>
+      <td><small>Tháng ${summary.month}/${summary.year}</small></td>
+      <td class="text-right">${formatVND(summary.rentAmount)}</td>
+    </tr>
+  `;
+
+  // Row: Tiền điện
+  if (electricity) {
+    const consumption = electricity.consumption || (electricity.new_reading - electricity.old_reading);
+    tbody.innerHTML += `
+      <tr>
+        <td>⚡ Tiền điện</td>
+        <td>
+          ${electricity.old_reading} → ${electricity.new_reading} kWh
+          <small>${consumption} kWh × ${formatVND(electricity.unit_price)}/kWh</small>
+        </td>
+        <td class="text-right">${formatVND(summary.elecAmount)}</td>
+      </tr>
+    `;
+  } else {
+    tbody.innerHTML += `
+      <tr>
+        <td>⚡ Tiền điện</td>
+        <td><small style="color:var(--warning)">⚠️ Chưa nhập chỉ số điện tháng này</small></td>
+        <td class="text-right">--</td>
+      </tr>
+    `;
+  }
+
+  // Row: Tiền nước
+  if (summary.waterAmount > 0 || summary.memberCount > 0) {
+    tbody.innerHTML += `
+      <tr>
+        <td>💧 Tiền nước</td>
+        <td><small>${summary.memberCount || 0} người × ${formatVND(summary.waterPrice || 20000)}/người/tháng</small></td>
+        <td class="text-right">${formatVND(summary.waterAmount)}</td>
+      </tr>
+    `;
+  }
+
+  // Row: Tiền rác
+  if (summary.trashAmount > 0 || summary.memberCount > 0) {
+    tbody.innerHTML += `
+      <tr>
+        <td>🗑️ Tiền rác</td>
+        <td><small>${summary.memberCount || 0} người × ${formatVND(summary.trashPrice || 10000)}/người/tháng</small></td>
+        <td class="text-right">${formatVND(summary.trashAmount)}</td>
+      </tr>
+    `;
+  }
+
+  // Grand total
+  document.getElementById('inv-grand-total').textContent = formatVND(summary.totalAmount);
+
+  // Payment status
+  const statusBox = document.getElementById('inv-payment-status-box');
+  if (payment && payment.is_paid === 1) {
+    statusBox.className = 'inv-payment-status inv-status-paid';
+    statusBox.innerHTML = `✅ Đã thanh toán${payment.paid_at ? ' lúc ' + formatDateTime(payment.paid_at) : ''}`;
+  } else {
+    statusBox.className = 'inv-payment-status inv-status-unpaid';
+    statusBox.innerHTML = '⏳ Chưa thanh toán — Vui lòng thanh toán đúng hạn';
+  }
+
+  // Bank info
+  const bankBox = document.getElementById('inv-bank-details');
+  const bName = settings.bank_name;
+  const bAccount = settings.bank_account;
+  const bOwner = settings.bank_owner;
+
+  if (bName || bAccount || bOwner) {
+    bankBox.innerHTML = `
+      ${bName ? `<div class="inv-bank-row"><span>Ngân hàng</span><strong>${bName}</strong></div>` : ''}
+      ${bOwner ? `<div class="inv-bank-row"><span>Chủ TK</span><strong>${bOwner}</strong></div>` : ''}
+      ${bAccount ? `<div class="inv-bank-account-highlight">${bAccount}</div>` : ''}
+    `;
+    document.getElementById('inv-bank-info-box').style.display = 'block';
+  } else {
+    document.getElementById('inv-bank-info-box').style.display = 'none';
+  }
+
+  // Note
+  const noteDisplay = document.getElementById('inv-note-display');
+  if (note) {
+    document.getElementById('inv-note-text').textContent = note;
+    noteDisplay.style.display = 'block';
+  } else {
+    noteDisplay.style.display = 'none';
+  }
+
+  // Generated timestamp
+  const now = new Date();
+  document.getElementById('inv-gen-time').textContent = now.toLocaleString('vi-VN');
+}
+
+function copyInvoiceText() {
+  const room = document.getElementById('inv-room-code').textContent;
+  const period = document.getElementById('inv-period-label').textContent;
+  const total = document.getElementById('inv-grand-total').textContent;
+  const status = document.getElementById('inv-payment-status-box').textContent.trim();
+  const bankDetails = document.getElementById('inv-bank-details').innerText.trim();
+
+  let text = `=== HÓA ĐƠN TIỀN THUÊ ===\n`;
+  text += `${room} — ${period}\n`;
+  text += `Tổng cộng: ${total}\n`;
+  text += `Trạng thái: ${status}\n`;
+  if (bankDetails) {
+    text += `\nThông tin chuyển khoản:\n${bankDetails}\n`;
+  }
+  text += `\n— Nhà Trọ LISO —`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Đã sao chép nội dung hóa đơn!', 'success');
+  }).catch(() => {
+    showToast('Không thể sao chép. Vui lòng chọn và copy thủ công.', 'error');
+  });
+}
+
+async function downloadInvoiceAsImage() {
+  const element = document.getElementById('invoice-document');
+  if (!element) return;
+  
+  showToast('Đang tạo ảnh hóa đơn, vui lòng đợi...', 'info');
+  
+  try {
+    const canvas = await html2canvas(element, {
+      scale: 2, // higher scale for better resolution
+      useCORS: true, 
+      logging: false,
+      backgroundColor: '#ffffff'
+    });
+    
+    const image = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    
+    const roomCode = document.getElementById('inv-room-code')?.textContent || 'phong';
+    const period = document.getElementById('inv-period-label')?.textContent || 'thang';
+    const cleanPeriod = period.replace(/Tháng\s*/gi, '').trim().replace('/', '_');
+    const cleanRoom = roomCode.replace(/Phòng\s*/gi, '').trim();
+    const filename = `HoaDon_Phong_${cleanRoom}_${cleanPeriod}.png`;
+    
+    link.download = filename;
+    link.href = image;
+    link.click();
+    showToast('Tải ảnh hóa đơn thành công!', 'success');
+  } catch (err) {
+    console.error('Lỗi khi tải ảnh hóa đơn:', err);
+    showToast('Có lỗi xảy ra khi tạo ảnh hóa đơn', 'error');
+  }
+}

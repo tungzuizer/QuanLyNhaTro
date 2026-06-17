@@ -212,11 +212,123 @@ app.post('/api/electricity', async (req, res) => {
     // Đồng bộ với bảng rent_payments nếu bản ghi thanh toán của tháng đó đã tồn tại
     await db.prepare(`
       UPDATE rent_payments 
-      SET electricity_amount = ?, total_amount = rent_amount + ?, updated_at = CURRENT_TIMESTAMP
+      SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount, updated_at = CURRENT_TIMESTAMP
       WHERE room_id = ? AND year = ? AND month = ?
     `).run(totalCost, totalCost, room_id, parseInt(year), parseInt(month));
 
     res.json({ message: 'Lưu chỉ số điện thành công', consumption, totalCost });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// API ĐIỆN HÀNG LOẠT (BULK ELECTRICITY)
+// ==========================================
+
+// Lấy dữ liệu bulk: danh sách phòng + chỉ số cũ gần nhất + chỉ số đã nhập tháng này (nếu có)
+app.get('/api/electricity/bulk-data', async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    if (!year || !month) return res.status(400).json({ error: 'Cần cung cấp year và month' });
+
+    const y = parseInt(year);
+    const m = parseInt(month);
+
+    // Tháng trước để lấy chỉ số cũ
+    const prevM = m === 1 ? 12 : m - 1;
+    const prevY = m === 1 ? y - 1 : y;
+
+    // Lấy tất cả phòng
+    const rooms = await db.prepare(
+      "SELECT r.*, (SELECT COUNT(*) FROM tenants t WHERE t.room_id = r.id) as tenant_count FROM rooms r ORDER BY r.zone ASC, r.room_code ASC"
+    ).all();
+
+    // Lấy chỉ số điện tháng hiện tại (nếu đã nhập)
+    const currentReadings = await db.prepare(
+      'SELECT * FROM electricity_readings WHERE year = ? AND month = ?'
+    ).all(y, m);
+    const currentMap = {};
+    currentReadings.forEach(r => { currentMap[r.room_id] = r; });
+
+    // Lấy chỉ số cũ (new_reading của tháng trước) hoặc chỉ số mới nhất (SQLite compatible)
+    const lastReadings = await db.prepare(`
+      SELECT e.room_id, e.new_reading, e.year, e.month
+      FROM electricity_readings e
+      INNER JOIN (
+        SELECT room_id, MAX(year * 100 + month) as max_ym
+        FROM electricity_readings
+        WHERE (year < ? OR (year = ? AND month < ?))
+        GROUP BY room_id
+      ) latest ON e.room_id = latest.room_id AND (e.year * 100 + e.month) = latest.max_ym
+    `).all(y, y, m);
+    const lastMap = {};
+    lastReadings.forEach(r => { lastMap[r.room_id] = r.new_reading; });
+
+    // Combine
+    const result = rooms.map(room => ({
+      id: room.id,
+      room_code: room.room_code,
+      zone: room.zone,
+      status: room.status,
+      tenant_count: room.tenant_count,
+      last_reading: lastMap[room.id] !== undefined ? lastMap[room.id] : 0,
+      current: currentMap[room.id] || null
+    }));
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lưu hàng loạt chỉ số điện
+app.post('/api/electricity/bulk', async (req, res) => {
+  try {
+    const { year, month, readings } = req.body;
+    // readings: [{ room_id, old_reading, new_reading }]
+    if (!year || !month || !Array.isArray(readings) || readings.length === 0)
+      return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
+
+    const priceSetting = await db.prepare("SELECT value FROM settings WHERE key = 'electricity_price'").get();
+    const unitPrice = priceSetting ? parseFloat(priceSetting.value) : 3500;
+
+    const results = [];
+    let errorCount = 0;
+
+    for (const r of readings) {
+      const { room_id, old_reading, new_reading } = r;
+      if (new_reading === '' || new_reading === null || new_reading === undefined) continue;
+      const newVal = parseFloat(new_reading);
+      const oldVal = parseFloat(old_reading) || 0;
+      if (newVal < oldVal) { errorCount++; continue; }
+
+      const consumption = newVal - oldVal;
+      const totalCost = consumption * unitPrice;
+
+      await db.prepare(`
+        INSERT INTO electricity_readings (room_id, year, month, old_reading, new_reading, consumption, unit_price, total_cost)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(room_id, year, month) DO UPDATE SET
+          old_reading = EXCLUDED.old_reading, new_reading = EXCLUDED.new_reading,
+          consumption = EXCLUDED.consumption, unit_price = EXCLUDED.unit_price, total_cost = EXCLUDED.total_cost
+      `).run(room_id, parseInt(year), parseInt(month), oldVal, newVal, consumption, unitPrice, totalCost);
+
+      // Sync với rent_payments nếu tồn tại
+      await db.prepare(`
+        UPDATE rent_payments 
+        SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount, updated_at = CURRENT_TIMESTAMP
+        WHERE room_id = ? AND year = ? AND month = ?
+      `).run(totalCost, totalCost, room_id, parseInt(year), parseInt(month));
+
+      results.push({ room_id, consumption, totalCost });
+    }
+
+    res.json({
+      message: `Đã lưu ${results.length} phòng thành công${errorCount > 0 ? `, bỏ qua ${errorCount} phòng lỗi` : ''}`,
+      saved: results.length,
+      errors: errorCount
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -231,6 +343,13 @@ app.get('/api/payments', async (req, res) => {
   try {
     const { year, month } = req.query;
     if (!year || !month) return res.status(400).json({ error: 'Cần cung cấp year và month' });
+
+    // Lấy giá nước/rác từ settings
+    const settingsList = await db.prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?)').all('water_price', 'trash_price', 'electricity_price');
+    const settingsMap = {};
+    settingsList.forEach(s => { settingsMap[s.key] = parseFloat(s.value) || 0; });
+    const waterPrice = settingsMap['water_price'] || 20000;
+    const trashPrice = settingsMap['trash_price'] || 10000;
 
     const rows = await db.prepare(`
       SELECT 
@@ -248,6 +367,8 @@ app.get('/api/payments', async (req, res) => {
         p.is_paid,
         p.rent_amount,
         p.electricity_amount as p_elec_amount,
+        p.water_amount,
+        p.trash_amount,
         p.total_amount,
         p.paid_at,
         p.note
@@ -262,7 +383,19 @@ app.get('/api/payments', async (req, res) => {
         r.room_code ASC
     `).all(parseInt(year), parseInt(month), parseInt(year), parseInt(month));
 
-    res.json(rows);
+    // Gắn waterAmount, trashAmount, computedTotal cho mỗi dòng
+    const enrichedRows = rows.map(row => {
+      const memberCount = row.member_count || 0;
+      const waterAmt = row.water_amount !== undefined && row.water_amount !== null
+        ? row.water_amount
+        : waterPrice * memberCount;
+      const trashAmt = row.trash_amount !== undefined && row.trash_amount !== null
+        ? row.trash_amount
+        : trashPrice * memberCount;
+      return { ...row, water_amount: waterAmt, trash_amount: trashAmt, waterPrice, trashPrice };
+    });
+
+    res.json(enrichedRows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -275,7 +408,7 @@ app.post('/api/payments/mark', async (req, res) => {
     if (!room_id || !year || !month)
       return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
 
-    const room = await db.prepare('SELECT rent_price FROM rooms WHERE id = ?').get(room_id);
+    const room = await db.prepare('SELECT rent_price, member_count FROM rooms WHERE id = ?').get(room_id);
     if (!room) return res.status(404).json({ error: 'Không tìm thấy phòng' });
 
     const elec = await db.prepare(
@@ -285,24 +418,36 @@ app.post('/api/payments/mark', async (req, res) => {
     const tenants = await db.prepare('SELECT full_name FROM tenants WHERE room_id = ?').all(room_id);
     const tenantName = tenants.map(t => t.full_name).join(', ') || null;
 
+    // Lấy giá nước/rác từ settings
+    const settingsList = await db.prepare('SELECT key, value FROM settings WHERE key IN (?, ?)').all('water_price', 'trash_price');
+    const settingsMap = {};
+    settingsList.forEach(s => { settingsMap[s.key] = parseFloat(s.value) || 0; });
+    const waterPrice = settingsMap['water_price'] || 20000;
+    const trashPrice = settingsMap['trash_price'] || 10000;
+    const memberCount = room.member_count || 0;
+
     const rentAmount = room.rent_price || 0;
     const elecAmount = elec ? elec.total_cost : 0;
-    const totalAmount = rentAmount + elecAmount;
+    const waterAmount = waterPrice * memberCount;
+    const trashAmount = trashPrice * memberCount;
+    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount;
     const paidAt = is_paid ? new Date().toISOString() : null;
 
     await db.prepare(`
-      INSERT INTO rent_payments (room_id, year, month, rent_amount, electricity_amount, total_amount, is_paid, paid_at, note, tenant_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO rent_payments (room_id, year, month, rent_amount, electricity_amount, water_amount, trash_amount, total_amount, is_paid, paid_at, note, tenant_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(room_id, year, month) DO UPDATE SET
         rent_amount = EXCLUDED.rent_amount,
         electricity_amount = EXCLUDED.electricity_amount,
+        water_amount = EXCLUDED.water_amount,
+        trash_amount = EXCLUDED.trash_amount,
         total_amount = EXCLUDED.total_amount,
         is_paid = EXCLUDED.is_paid,
         paid_at = EXCLUDED.paid_at,
         note = EXCLUDED.note,
         tenant_name = COALESCE(EXCLUDED.tenant_name, rent_payments.tenant_name),
         updated_at = CURRENT_TIMESTAMP
-    `).run(room_id, parseInt(year), parseInt(month), rentAmount, elecAmount, totalAmount, is_paid ? 1 : 0, paidAt, note || null, tenantName);
+    `).run(room_id, parseInt(year), parseInt(month), rentAmount, elecAmount, waterAmount, trashAmount, totalAmount, is_paid ? 1 : 0, paidAt, note || null, tenantName);
 
     res.json({ message: is_paid ? '✅ Đã đánh dấu ĐÃ THU tiền' : '↩️ Đã bỏ đánh dấu thu tiền', totalAmount });
   } catch (err) {
@@ -326,20 +471,103 @@ app.get('/api/settings', async (req, res) => {
 
 app.put('/api/settings', async (req, res) => {
   try {
-    const { electricity_price } = req.body;
-    if (electricity_price === undefined)
-      return res.status(400).json({ error: 'Thiếu giá trị điện năng' });
-    await db.prepare(
-      "INSERT INTO settings (key, value) VALUES ('electricity_price', ?) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP"
-    ).run(electricity_price.toString());
-    res.json({ message: 'Cập nhật giá điện thành công' });
+    const { electricity_price, water_price, trash_price, bank_name, bank_account, bank_owner } = req.body;
+    
+    const upsertSetting = async (key, val) => {
+      if (val !== undefined && val !== null) {
+        await db.prepare(
+          "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP"
+        ).run(key, val.toString());
+      }
+    };
+
+    await upsertSetting('electricity_price', electricity_price);
+    await upsertSetting('water_price', water_price);
+    await upsertSetting('trash_price', trash_price);
+    await upsertSetting('bank_name', bank_name);
+    await upsertSetting('bank_account', bank_account);
+    await upsertSetting('bank_owner', bank_owner);
+
+    res.json({ message: 'Cập nhật cài đặt thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ==========================================
-// 7. API TÌM KIẾM TOÀN CỤC
+// 7. API TẠO HÓA ĐƠN
+// ==========================================
+app.get('/api/invoice', async (req, res) => {
+  try {
+    const { room_id, year, month } = req.query;
+    if (!room_id || !year || !month) {
+      return res.status(400).json({ error: 'Thiếu thông tin phòng, tháng hoặc năm' });
+    }
+
+    const room = await db.prepare('SELECT * FROM rooms WHERE id = ?').get(room_id);
+    if (!room) return res.status(404).json({ error: 'Không tìm thấy phòng' });
+
+    const tenants = await db.prepare(
+      'SELECT full_name, phone FROM tenants WHERE room_id = ? ORDER BY id ASC'
+    ).all(room_id);
+
+    const elec = await db.prepare(
+      'SELECT * FROM electricity_readings WHERE room_id = ? AND year = ? AND month = ?'
+    ).get(room_id, parseInt(year), parseInt(month));
+
+    const payment = await db.prepare(
+      'SELECT * FROM rent_payments WHERE room_id = ? AND year = ? AND month = ?'
+    ).get(room_id, parseInt(year), parseInt(month));
+
+    // Get previous month electricity (for old reading display)
+    const prevMonth = parseInt(month) === 1 ? 12 : parseInt(month) - 1;
+    const prevYear = parseInt(month) === 1 ? parseInt(year) - 1 : parseInt(year);
+    const prevElec = await db.prepare(
+      'SELECT new_reading FROM electricity_readings WHERE room_id = ? AND year = ? AND month = ?'
+    ).get(room_id, prevYear, prevMonth);
+
+    const settingsList = await db.prepare('SELECT * FROM settings').all();
+    const settings = {};
+    settingsList.forEach(s => { settings[s.key] = s.value; });
+
+    const rentAmount = room.rent_price || 0;
+    const elecAmount = elec ? elec.total_cost : 0;
+
+    // Lấy giá nước/rác
+    const waterPrice = parseFloat(settings['water_price']) || 20000;
+    const trashPrice = parseFloat(settings['trash_price']) || 10000;
+    const memberCount = (await db.prepare('SELECT COUNT(*) as cnt FROM tenants WHERE room_id = ?').get(room_id))?.cnt || 0;
+    const waterAmount = payment ? (payment.water_amount || 0) : waterPrice * memberCount;
+    const trashAmount = payment ? (payment.trash_amount || 0) : trashPrice * memberCount;
+    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount;
+
+    res.json({
+      room,
+      tenants,
+      electricity: elec || null,
+      prevElecReading: prevElec ? prevElec.new_reading : null,
+      payment: payment || null,
+      settings,
+      summary: {
+        rentAmount,
+        elecAmount,
+        waterAmount,
+        trashAmount,
+        totalAmount,
+        memberCount,
+        waterPrice,
+        trashPrice,
+        month: parseInt(month),
+        year: parseInt(year)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 8. API TÌM KIẾM TOÀN CỤC
 // ==========================================
 app.get('/api/search', async (req, res) => {
   try {

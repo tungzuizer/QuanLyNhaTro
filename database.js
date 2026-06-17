@@ -78,6 +78,8 @@ async function initDatabase() {
         month INTEGER NOT NULL,
         rent_amount REAL NOT NULL DEFAULT 0,
         electricity_amount REAL NOT NULL DEFAULT 0,
+        water_amount REAL NOT NULL DEFAULT 0,
+        trash_amount REAL NOT NULL DEFAULT 0,
         total_amount REAL NOT NULL DEFAULT 0,
         is_paid INTEGER NOT NULL DEFAULT 0,  -- 0 = chưa thu, 1 = đã thu
         paid_at TIMESTAMP,
@@ -88,6 +90,12 @@ async function initDatabase() {
         UNIQUE(room_id, year, month)
       );
     `);
+
+    // Migration: thêm cột water_amount và trash_amount nếu chưa có (cho DB cũ)
+    try {
+      await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS water_amount REAL NOT NULL DEFAULT 0`);
+      await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS trash_amount REAL NOT NULL DEFAULT 0`);
+    } catch(e) { /* columns already exist */ }
 
     await client.query('COMMIT');
     console.log('✅ Đã tạo các bảng dữ liệu trên Postgres thành công.');
@@ -152,13 +160,21 @@ async function initDatabase() {
       console.log('✅ Khởi tạo thành công danh sách phòng chuẩn mới.');
     }
 
-    // Seed cài đặt mặc định nếu trống
-    const resSettings = await client.query('SELECT COUNT(*) as count FROM settings');
-    const settingsCount = parseInt(resSettings.rows[0].count, 10);
-    if (settingsCount === 0) {
-      await client.query("INSERT INTO settings (key, value) VALUES ($1, $2)", ['electricity_price', '3500']);
-      console.log('Đã khởi tạo giá điện mặc định: 3,500 đ/kWh');
-    }
+    // Seed cài đặt mặc định nếu chưa có
+    const insertSetting = async (key, defaultValue) => {
+      const res = await client.query('SELECT COUNT(*) FROM settings WHERE key = $1', [key]);
+      if (parseInt(res.rows[0].count, 10) === 0) {
+        await client.query('INSERT INTO settings (key, value) VALUES ($1, $2)', [key, defaultValue]);
+        console.log(`Đã khởi tạo cài đặt: ${key} = ${defaultValue}`);
+      }
+    };
+    
+    await insertSetting('electricity_price', '3500');
+    await insertSetting('water_price', '20000');    // VNĐ/người/tháng
+    await insertSetting('trash_price', '10000');    // VNĐ/người/tháng
+    await insertSetting('bank_name', 'MBBank');
+    await insertSetting('bank_account', '099999999999');
+    await insertSetting('bank_owner', 'NGUYEN VAN A');
 
   } catch (err) {
     await client.query('ROLLBACK');
