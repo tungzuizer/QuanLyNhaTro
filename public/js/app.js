@@ -1189,10 +1189,51 @@ function renderPaymentsTable(data) {
     return;
   }
 
-  const month = document.getElementById('pay-month-select').value;
-  const year = document.getElementById('pay-year-select').value;
+  const month = parseInt(document.getElementById('pay-month-select').value);
+  const year = parseInt(document.getElementById('pay-year-select').value);
 
-  data.forEach(row => {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Tính toán hạn đóng và số ngày còn lại/quá hạn cho mỗi dòng
+  const processedData = data.map(row => {
+    let dueDay = currentState.paymentDueDay || 5;
+    if (row.lease_start_date) {
+      const d = new Date(row.lease_start_date);
+      if (!isNaN(d.getTime())) {
+        dueDay = d.getDate();
+      }
+    }
+    const lastDay = new Date(year, month, 0).getDate();
+    const finalDay = Math.min(dueDay, lastDay);
+    const dueDate = new Date(year, month - 1, finalDay);
+    const diffTime = dueDate - todayStart;
+    const daysUntilDue = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    return {
+      ...row,
+      daysUntilDue,
+      dueDateStr: `${String(finalDay).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
+    };
+  });
+
+  // Sắp xếp:
+  // 1. Chưa thu lên đầu, đã thu xuống dưới
+  // 2. Trong số chưa thu: Quá hạn nhiều nhất lên đầu (daysUntilDue từ bé đến lớn)
+  // 3. Trong số đã thu: Sắp xếp theo số phòng
+  processedData.sort((a, b) => {
+    const aPaid = a.is_paid === 1;
+    const bPaid = b.is_paid === 1;
+    if (aPaid !== bPaid) {
+      return aPaid ? 1 : -1;
+    }
+    if (!aPaid) {
+      return a.daysUntilDue - b.daysUntilDue;
+    }
+    return a.room_code.localeCompare(b.room_code, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
+  processedData.forEach(row => {
     const isPaid = row.is_paid === 1;
     const elecAmt = row.electricity_amount || 0;
     const rentAmt = row.rent_price || 0;
@@ -1210,6 +1251,20 @@ function renderPaymentsTable(data) {
     tr.className = isPaid ? 'row-paid' : 'row-unpaid';
     tr.setAttribute('data-room-id', row.room_id);
     tr.setAttribute('data-paid', isPaid ? '1' : '0');
+
+    // Tạo tag trạng thái thanh toán và quá hạn
+    let statusBadgeHtml = '';
+    if (!isPaid) {
+      if (row.daysUntilDue < 0) {
+        statusBadgeHtml = `<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;">⚠️ Trễ ${Math.abs(row.daysUntilDue)} ngày</div>`;
+      } else if (row.daysUntilDue === 0) {
+        statusBadgeHtml = `<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;">🚨 Hạn hôm nay!</div>`;
+      } else if (row.daysUntilDue <= 3) {
+        statusBadgeHtml = `<div style="font-size:11px;color:#b45309;font-weight:600;margin-top:4px;">⏰ Còn ${row.daysUntilDue} ngày</div>`;
+      } else {
+        statusBadgeHtml = `<div style="font-size:11px;color:var(--neutral-gray);margin-top:4px;">📅 Hạn: ${row.dueDateStr}</div>`;
+      }
+    }
 
     tr.innerHTML = `
       <td>
@@ -1252,6 +1307,7 @@ function renderPaymentsTable(data) {
           ${isPaid ? '✅ Đã thu' : '⏳ Chưa thu'}
         </span>
         ${isPaid && row.paid_at ? `<div style="font-size:10px;color:var(--neutral-gray);margin-top:3px;">Thu lúc: ${formatDateTime(row.paid_at)}</div>` : ''}
+        ${statusBadgeHtml}
       </td>
       <td>
         ${isPaid
@@ -2080,28 +2136,49 @@ async function loadNotifications() {
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
-    const today = now.getDate();
-
-    // Ngày thu tiền từ cài đặt (mặc định ngày 5)
-    const dueDay = currentState.paymentDueDay || 5;
-    const daysUntilDue = dueDay - today; // Âm = đã quá hạn, Dương = chưa đến hạn
-
-    // Chỉ thông báo khi còn ≤ 3 ngày hoặc đã quá hạn
-    const shouldNotify = daysUntilDue <= 3;
+    
+    // Ngày bắt đầu hôm nay (0h00) để tính khoảng cách ngày chính xác
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const res = await fetch(`${API_BASE}/api/payments?month=${month}&year=${year}`);
     if (!res.ok) return;
     const payments = await res.json();
 
-    // Lọc phòng chưa đóng tiền và thực sự đang có người ở
+    // Lọc phòng chưa đóng tiền và thực sự đang hoạt động
     const unpaid = payments.filter(p => !p.is_paid && p.room_status === 'occupied');
 
-    // Nếu chưa đến thời điểm cần nhắc → không hiện badge
-    if (!shouldNotify) {
-      _notifData = [];
-    } else {
-      _notifData = unpaid;
-    }
+    // Ánh xạ tính toán ngày hạn thanh toán riêng cho mỗi phòng
+    const unpaidWithDue = unpaid.map(p => {
+      let dueDay = currentState.paymentDueDay || 5;
+      if (p.lease_start_date) {
+        const d = new Date(p.lease_start_date);
+        if (!isNaN(d.getTime())) {
+          dueDay = d.getDate(); // Ngày thuê hàng tháng chính là ngày hạn đóng
+        }
+      }
+
+      // Giới hạn ngày trong tháng hiện tại
+      const lastDay = new Date(year, month, 0).getDate();
+      const finalDay = Math.min(dueDay, lastDay);
+      
+      const dueDate = new Date(year, month - 1, finalDay);
+      const diffTime = dueDate - todayStart;
+      const daysUntilDue = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+      return {
+        ...p,
+        dueDate,
+        daysUntilDue
+      };
+    });
+
+    // Chỉ thông báo các phòng còn ≤ 3 ngày đến hạn hoặc đã quá hạn
+    const filtered = unpaidWithDue.filter(p => p.daysUntilDue <= 3);
+    
+    // Sắp xếp: Quá hạn nhiều nhất (ngày âm nhiều nhất) lên đầu, dần dần đến chưa quá hạn
+    filtered.sort((a, b) => a.daysUntilDue - b.daysUntilDue);
+    
+    _notifData = filtered;
 
     const badge = document.getElementById('notif-badge');
     const bellBtn = document.getElementById('notif-bell-btn');
@@ -2112,18 +2189,17 @@ async function loadNotifications() {
       bellBtn.classList.add('has-notif');
 
       // Gửi thông báo đẩy về điện thoại (mỗi ngày 1 lần)
-      const dueDay2 = currentState.paymentDueDay || 5;
-      const daysLeft = dueDay2 - new Date().getDate();
-      let pushTitle, pushBody;
-      if (daysLeft > 0) {
-        pushTitle = `⏰ Còn ${daysLeft} ngày đến hạn thu tiền`;
-        pushBody = `${_notifData.length} phòng chưa đóng tiền. Hạn nộp: ngày ${dueDay2} tháng này.`;
-      } else if (daysLeft === 0) {
-        pushTitle = `🚨 Hôm nay là ngày thu tiền!`;
-        pushBody = `${_notifData.length} phòng chưa đóng tiền. Vui lòng kiểm tra ngay!`;
-      } else {
-        pushTitle = `⚠️ Đã quá hạn ${Math.abs(daysLeft)} ngày!`;
-        pushBody = `${_notifData.length} phòng chưa đóng tiền. Hạn đã là ngày ${dueDay2}.`;
+      const nearCount = _notifData.filter(p => p.daysUntilDue >= 0).length;
+      const overdueCount = _notifData.filter(p => p.daysUntilDue < 0).length;
+      
+      let pushTitle = `🔔 Cần thu tiền ${_notifData.length} phòng`;
+      let pushBody = `Có ${nearCount} phòng sắp đến hạn và ${overdueCount} phòng đã quá hạn đóng tiền.`;
+      if (overdueCount > 0 && nearCount === 0) {
+        pushTitle = `⚠️ Đã quá hạn ${_notifData.length} phòng!`;
+        pushBody = `Có ${_notifData.length} phòng đã quá hạn đóng tiền trọ tháng này.`;
+      } else if (nearCount > 0 && overdueCount === 0) {
+        pushTitle = `⏰ Sắp đến hạn ${nearCount} phòng`;
+        pushBody = `Có ${nearCount} phòng sắp đến hạn đóng tiền trọ trong 3 ngày tới.`;
       }
       showBrowserNotification(pushTitle, pushBody);
     } else {
@@ -2145,39 +2221,10 @@ function renderNotifications() {
   const list = document.getElementById('notif-list');
   if (!list) return;
 
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
-  const today = now.getDate();
-  const dueDay = currentState.paymentDueDay || 5;
-  const daysUntilDue = dueDay - today;
-
-  // Nếu chưa đến thời điểm cần nhắc
-  if (daysUntilDue > 3) {
-    const nextNotifDate = dueDay - 3;
-    list.innerHTML = `<div class="notif-empty">📅 Sẽ nhắc từ ngày <strong>${nextNotifDate}</strong> hàng tháng<br><span style="font-size:12px;">Ngày thu tiền: ngày ${dueDay} mỗi tháng</span></div>`;
-    return;
-  }
-
   if (_notifData.length === 0) {
-    list.innerHTML = '<div class="notif-all-paid">✅ Tất cả phòng đã đóng tiền tháng này!</div>';
+    list.innerHTML = '<div class="notif-all-paid">✅ Không có phòng nào đến hạn/quá hạn chưa đóng tiền!</div>';
     return;
   }
-
-  // Tạo label trạng thái
-  let statusLabel, statusStyle;
-  if (daysUntilDue > 0) {
-    statusLabel = `⏰ Còn ${daysUntilDue} ngày đến hạn (ngày ${dueDay})`;
-    statusStyle = 'background:#fff7e6;color:#b45309;border-bottom:1px solid #fde68a;';
-  } else if (daysUntilDue === 0) {
-    statusLabel = `🚨 Hôm nay là ngày thu tiền (ngày ${dueDay})!`;
-    statusStyle = 'background:#fef2f2;color:#dc2626;border-bottom:1px solid #fecaca;';
-  } else {
-    statusLabel = `⚠️ Đã quá hạn ${Math.abs(daysUntilDue)} ngày (hạn ngày ${dueDay})`;
-    statusStyle = 'background:#fef2f2;color:#dc2626;border-bottom:1px solid #fecaca;';
-  }
-
-  const isOverdue = daysUntilDue <= 0;
 
   const formatDateVN = (dateStr) => {
     if (!dateStr) return 'Chưa rõ';
@@ -2194,26 +2241,44 @@ function renderNotifications() {
   };
 
   list.innerHTML = `
-    <div style="padding:10px 14px;font-size:12px;font-weight:600;${statusStyle}">
-      ${statusLabel}
+    <div style="padding:10px 14px;font-size:12px;font-weight:600;background:var(--neutral-light);color:var(--neutral-dark);border-bottom:1px solid var(--border-color);">
+      ⏰ Danh sách phòng đến hạn & quá hạn
     </div>
     ${_notifData.map(p => {
       const tenantName = p.tenant_names || 'Chưa có người thuê';
       const total = formatVND(p.total_amount || p.rent_price || 0);
       const roomCode = p.room_code || p.room_id || '--';
       const leaseStart = formatDateVN(p.lease_start_date);
-      const currentMonthStr = String(month).padStart(2, '0');
-      const dueDateStr = `${String(dueDay).padStart(2, '0')}/${currentMonthStr}/${year}`;
+      
+      const due = p.dueDate;
+      const dueDateStr = `${String(due.getDate()).padStart(2, '0')}/${String(due.getMonth() + 1).padStart(2, '0')}/${due.getFullYear()}`;
+      
+      let statusText = '';
+      let statusColor = 'var(--neutral-gray)';
+      if (p.daysUntilDue > 0) {
+        statusText = `⏰ Còn ${p.daysUntilDue} ngày`;
+        statusColor = '#b45309';
+      } else if (p.daysUntilDue === 0) {
+        statusText = `🚨 Đến hạn hôm nay!`;
+        statusColor = '#dc2626';
+      } else {
+        statusText = `⚠️ Quá hạn ${Math.abs(p.daysUntilDue)} ngày!`;
+        statusColor = '#dc2626';
+      }
 
       return `
         <div class="notif-item" onclick="goToPaymentRoom('${p.room_id}')" style="display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-weight: 700; color: var(--neutral-dark); font-size: 14px;">🚪 Phòng ${roomCode}</span>
-            <span style="font-weight: 700; color: var(--danger); font-size: 14px;">${total}</span>
+            <span style="font-size: 11px; font-weight: 600; color: ${statusColor};">${statusText}</span>
           </div>
           <div style="font-size: 13px; color: var(--neutral-dark); display: flex; align-items: center; gap: 6px;">
             <span style="color: var(--neutral-gray); font-size: 12px;">👤</span>
             <strong>${tenantName}</strong>
+          </div>
+          <div style="font-size: 13px; color: var(--danger); font-weight: 700; display: flex; align-items: center; gap: 6px; background: #fff5f5; padding: 4px 8px; border-radius: 6px; border: 1px solid #fed7d7; width: fit-content;">
+            <span>💰 Số tiền:</span>
+            <span>${total}</span>
           </div>
           <div style="font-size: 11px; color: var(--neutral-gray); display: flex; flex-direction: column; gap: 2px; border-top: 1px dashed #e2e8f0; padding-top: 4px; margin-top: 2px;">
             <div>📅 Thuê từ: <span style="color: var(--neutral-dark); font-weight: 500;">${leaseStart}</span></div>
