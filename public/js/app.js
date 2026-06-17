@@ -1509,7 +1509,18 @@ function renderBulkTable(data, month, year) {
     tr.innerHTML = `
       <td><strong>${room.room_code}</strong></td>
       <td>${room.zone}</td>
-      <td class="text-center">${oldReading}</td>
+      <td class="text-center">
+        <input
+          type="number"
+          class="bulk-old-reading"
+          data-room-id="${room.id}"
+          data-idx="${idx}"
+          value="${oldReading}"
+          step="1"
+          style="width: 85px; text-align: center; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 5px 8px; font-weight: 500;"
+          ${isVacant ? 'disabled style="opacity:0.4; width: 85px; text-align: center;"' : ''}
+        >
+      </td>
       <td>
         <input
           type="number"
@@ -1517,9 +1528,9 @@ function renderBulkTable(data, month, year) {
           data-room-id="${room.id}"
           data-idx="${idx}"
           value="${savedNewReading}"
-          min="${oldReading}"
           step="1"
           placeholder="${isVacant ? 'Bỏ qua' : 'Nhập số mới'}"
+          style="width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 5px 8px;"
           ${isVacant ? 'disabled style="opacity:0.4;"' : ''}
         >
       </td>
@@ -1535,49 +1546,47 @@ function renderBulkTable(data, month, year) {
     tbody.appendChild(tr);
 
     // Real-time calculation on input
-    const input = tr.querySelector('.bulk-new-reading');
-    if (input && !isVacant) {
-      input.addEventListener('input', () => onBulkInputChange(input, room.id, oldReading));
+    const oldInput = tr.querySelector('.bulk-old-reading');
+    const newInput = tr.querySelector('.bulk-new-reading');
+    
+    if (!isVacant) {
+      if (oldInput) oldInput.addEventListener('input', () => onBulkInputChange(newInput, room.id));
+      if (newInput) {
+        newInput.addEventListener('input', () => onBulkInputChange(newInput, room.id));
 
-      // Tab key: jump to next input
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Tab') {
-          e.preventDefault();
-          const allInputs = Array.from(document.querySelectorAll('.bulk-new-reading:not([disabled])'));
-          const currentIdx = allInputs.indexOf(input);
-          const nextInput = allInputs[currentIdx + 1];
-          if (nextInput) {
-            nextInput.focus();
-            nextInput.select();
+        // Tab/Enter key: jump to next input
+        newInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Tab' || e.key === 'Enter') {
+            e.preventDefault();
+            const allInputs = Array.from(document.querySelectorAll('.bulk-new-reading:not([disabled])'));
+            const currentIdx = allInputs.indexOf(newInput);
+            const nextInput = allInputs[currentIdx + 1];
+            if (nextInput) {
+              nextInput.focus();
+              nextInput.select();
+            }
           }
-        }
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const allInputs = Array.from(document.querySelectorAll('.bulk-new-reading:not([disabled])'));
-          const currentIdx = allInputs.indexOf(input);
-          const nextInput = allInputs[currentIdx + 1];
-          if (nextInput) {
-            nextInput.focus();
-            nextInput.select();
-          }
-        }
-      });
+        });
+      }
     }
   });
 }
 
-function onBulkInputChange(input, roomId, oldReading) {
+function onBulkInputChange(input, roomId) {
+  const tr = input.closest('tr');
+  const oldInput = tr.querySelector('.bulk-old-reading');
   const newVal = parseFloat(input.value);
-  const oldVal = parseFloat(oldReading) || 0;
+  const oldVal = parseFloat(oldInput?.value) || 0;
   const price = currentState.electricityPrice || 3500;
 
   const kwhCell = document.getElementById(`bulk-kwh-${roomId}`);
   const costCell = document.getElementById(`bulk-cost-${roomId}`);
   const statusCell = document.getElementById(`bulk-status-${roomId}`);
-  const tr = input.closest('tr');
+
+  // Cập nhật thuộc tính để hàm thống kê dùng đúng số cũ mới sửa
+  tr.setAttribute('data-old-reading', oldVal);
 
   if (input.value === '' || isNaN(newVal)) {
-    // Cleared
     input.className = 'bulk-new-reading';
     kwhCell.innerHTML = '--';
     costCell.innerHTML = '--';
@@ -1586,7 +1595,6 @@ function onBulkInputChange(input, roomId, oldReading) {
     tr.className = 'bulk-row-missing';
     tr.setAttribute('data-has-data', '0');
   } else if (newVal < oldVal) {
-    // Error
     input.className = 'bulk-new-reading input-error';
     kwhCell.innerHTML = `<span style="color:var(--danger);font-size:11px;">❌ Sai</span>`;
     costCell.innerHTML = '--';
@@ -1594,7 +1602,6 @@ function onBulkInputChange(input, roomId, oldReading) {
     statusCell.innerHTML = `<span class="bulk-status-badge" style="background:var(--danger-bg);color:var(--danger);">❌ Lỗi</span>`;
     tr.className = '';
   } else {
-    // Valid
     const consumption = newVal - oldVal;
     const cost = consumption * price;
     input.className = 'bulk-new-reading input-valid';
@@ -1620,7 +1627,8 @@ function updateBulkSummary() {
     total++;
 
     const input = tr.querySelector('.bulk-new-reading');
-    const oldReading = parseFloat(tr.getAttribute('data-old-reading')) || 0;
+    const oldInput = tr.querySelector('.bulk-old-reading');
+    const oldReading = parseFloat(oldInput?.value) || 0;
     const newVal = parseFloat(input?.value);
 
     if (input && !isNaN(newVal) && newVal >= oldReading) {
@@ -1667,7 +1675,8 @@ async function saveBulkReadings() {
   inputs.forEach(input => {
     const roomId = input.getAttribute('data-room-id');
     const tr = input.closest('tr');
-    const oldReading = parseFloat(tr.getAttribute('data-old-reading')) || 0;
+    const oldInput = tr.querySelector('.bulk-old-reading');
+    const oldReading = parseFloat(oldInput?.value) || 0;
     const newVal = input.value;
 
     if (newVal === '' || newVal === null) return; // Skip empty
