@@ -196,6 +196,7 @@ async function initDatabase() {
     await insertSetting('water_price', '20000');    // VNĐ/người/tháng
     await insertSetting('trash_price', '10000');    // VNĐ/người/tháng
     await insertSetting('residence_price', '50000'); // VNĐ/người (tháng đầu tiên)
+    await insertSetting('payment_due_day', '5');     // Ngày thu tiền hàng tháng (mặc định ngày 5)
     await insertSetting('bank_name', 'MBBank');
     await insertSetting('bank_account', '099999999999');
     await insertSetting('bank_owner', 'NGUYEN VAN A');

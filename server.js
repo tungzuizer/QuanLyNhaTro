@@ -520,7 +520,7 @@ app.get('/api/settings', async (req, res) => {
 
 app.put('/api/settings', async (req, res) => {
   try {
-    const { electricity_price, water_price, trash_price, residence_price, bank_name, bank_account, bank_owner } = req.body;
+    const { electricity_price, water_price, trash_price, residence_price, payment_due_day, bank_name, bank_account, bank_owner } = req.body;
     
     const upsertSetting = async (key, val) => {
       if (val !== undefined && val !== null) {
@@ -534,6 +534,7 @@ app.put('/api/settings', async (req, res) => {
     await upsertSetting('water_price', water_price);
     await upsertSetting('trash_price', trash_price);
     await upsertSetting('residence_price', residence_price);
+    await upsertSetting('payment_due_day', payment_due_day);
     await upsertSetting('bank_name', bank_name);
     await upsertSetting('bank_account', bank_account);
     await upsertSetting('bank_owner', bank_owner);
@@ -543,6 +544,7 @@ app.put('/api/settings', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // ==========================================
 // 7. API TẠO HÓA ĐƠN

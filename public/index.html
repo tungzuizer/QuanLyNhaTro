@@ -74,11 +74,31 @@
           <h1 id="page-title" style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Dashboard
           </h1>
         </div>
-        <div class="quick-search-container">
-          <input type="text" id="quick-search-input" placeholder="Tìm phòng, tên người..." readonly
-            data-tab-trigger="search">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="quick-search-container">
+            <input type="text" id="quick-search-input" placeholder="Tìm phòng, tên người..." readonly
+              data-tab-trigger="search">
+          </div>
+          <!-- Notification Bell -->
+          <div class="notif-bell-wrapper" id="notif-bell-wrapper">
+            <button class="notif-bell-btn" id="notif-bell-btn" title="Thông báo phòng đến hạn" onclick="toggleNotifPanel()">
+              🔔
+              <span class="notif-badge" id="notif-badge" style="display:none;">0</span>
+            </button>
+            <!-- Dropdown Panel -->
+            <div class="notif-panel" id="notif-panel" style="display:none;">
+              <div class="notif-panel-header">
+                <span>🔔 Phòng chưa đóng tiền tháng này</span>
+                <button class="notif-close-btn" onclick="toggleNotifPanel()">✕</button>
+              </div>
+              <div id="notif-list" class="notif-list">
+                <div class="notif-empty">Đang tải...</div>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
+
 
       <!-- Content Container -->
       <div class="content-body">
@@ -568,7 +588,7 @@
                       </div>
                     </div>
                     <div class="inv-title-box">
-                      <h1>HÓA ĐƠN TIỀN THUÊ</h1>
+                      <h1>HÓA ĐƠN TIỀN TRỌ</h1>
                       <p id="inv-period-label">Tháng --/----</p>
                     </div>
                   </div>
@@ -672,6 +692,11 @@
                   <input type="number" id="setting-residence-price" class="form-control" min="0" placeholder="VD: 50000">
                   <span class="help-text">Chỉ tự động tính trong tháng đầu tiên khách dời vào.</span>
                 </div>
+                <div class="form-group col">
+                  <label for="setting-due-day">📅 Ngày thu tiền hàng tháng (ngày bao nhiêu)</label>
+                  <input type="number" id="setting-due-day" class="form-control" min="1" max="28" placeholder="VD: 5">
+                  <span class="help-text">Hệ thống sẽ nhắc nhở trước 3 ngày và khi đến hạn.</span>
+                </div>
               </div>
               <hr style="margin: 20px 0; border-color: var(--border-color);">
               <h4 style="margin-bottom: 14px; font-size: 14px;">&#x1f3e6; Thông tin ngân hàng (dùng trong hóa đơn)</h4>
@@ -689,6 +714,25 @@
               </div>
               <button type="submit" class="btn btn-primary">Lưu cài đặt</button>
             </form>
+
+            <!-- Khối thông báo đẩy -->
+            <hr style="margin: 28px 0; border-color: var(--border-color);">
+            <div>
+              <h4 style="margin-bottom:6px; font-size:14px;">🔔 Thông báo đẩy (Push Notification)</h4>
+              <p class="help-text" style="margin-bottom:16px;">Cho phép hệ thống gửi thông báo đến điện thoại / máy tính khi phòng sắp đến hạn đóng tiền.</p>
+              <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <div id="notif-permission-status" style="display:flex; align-items:center; gap:8px; font-size:14px; font-weight:500; padding:8px 14px; border-radius:8px; background:var(--neutral-light); border:1px solid var(--border-color);">
+                  <span id="notif-perm-icon">⏳</span>
+                  <span id="notif-perm-text">Đang kiểm tra quyền...</span>
+                </div>
+                <button id="btn-request-notif" class="btn btn-primary" onclick="requestPushPermission()" style="display:none;">
+                  🔔 Bật thông báo
+                </button>
+                <button class="btn btn-secondary" onclick="testPushNotification()" id="btn-test-notif">
+                  🧪 Test thông báo
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 

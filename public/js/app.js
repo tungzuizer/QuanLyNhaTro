@@ -92,6 +92,14 @@ function initApp() {
       }
     }, 200);
   }
+
+  // 5. Tải thông báo phòng chưa đóng tiền
+  loadNotifications();
+  // Tự động làm mới thông báo mỗi 5 phút
+  setInterval(loadNotifications, 5 * 60 * 1000);
+
+  // 6. Khởi tạo cài đặt quyền thông báo đẩy
+  initPushNotifications();
 }
 
 // ==========================================
@@ -193,6 +201,8 @@ function switchTab(tabId) {
     initPaymentsTab();
   } else if (tabId === 'invoice') {
     initInvoiceTab();
+  } else if (tabId === 'settings') {
+    updateNotifPermissionUI();
   }
 }
 
@@ -454,13 +464,16 @@ async function loadSettings() {
     currentState.waterPrice = parseFloat(settings.water_price) || 20000;
     currentState.trashPrice = parseFloat(settings.trash_price) || 10000;
     currentState.residencePrice = parseFloat(settings.residence_price) || 50000;
+    currentState.paymentDueDay = parseInt(settings.payment_due_day) || 5;
     
     const waterInput = document.getElementById('setting-water-price');
     const trashInput = document.getElementById('setting-trash-price');
     const residenceInput = document.getElementById('setting-residence-price');
+    const dueDayInput = document.getElementById('setting-due-day');
     if (waterInput) waterInput.value = currentState.waterPrice;
     if (trashInput) trashInput.value = currentState.trashPrice;
     if (residenceInput) residenceInput.value = currentState.residencePrice;
+    if (dueDayInput) dueDayInput.value = currentState.paymentDueDay;
     
     // Load bank info into settings form
     const bankName = document.getElementById('setting-bank-name');
@@ -476,12 +489,14 @@ async function loadSettings() {
   }
 }
 
+
 async function handleSettingsSubmit(e) {
   e.preventDefault();
   const price = document.getElementById('setting-electric-price').value;
   const waterPrice = document.getElementById('setting-water-price')?.value || '';
   const trashPrice = document.getElementById('setting-trash-price')?.value || '';
   const residencePrice = document.getElementById('setting-residence-price')?.value || '';
+  const dueDay = document.getElementById('setting-due-day')?.value || '5';
   const bankName = document.getElementById('setting-bank-name')?.value || '';
   const bankAccount = document.getElementById('setting-bank-account')?.value || '';
   const bankOwner = document.getElementById('setting-bank-owner')?.value || '';
@@ -494,6 +509,7 @@ async function handleSettingsSubmit(e) {
         water_price: waterPrice,
         trash_price: trashPrice,
         residence_price: residencePrice,
+        payment_due_day: dueDay,
         bank_name: bankName,
         bank_account: bankAccount,
         bank_owner: bankOwner
@@ -503,12 +519,16 @@ async function handleSettingsSubmit(e) {
     currentState.waterPrice = parseFloat(waterPrice) || 20000;
     currentState.trashPrice = parseFloat(trashPrice) || 10000;
     currentState.residencePrice = parseFloat(residencePrice) || 50000;
+    currentState.paymentDueDay = parseInt(dueDay) || 5;
     currentState.bankSettings = { electricity_price: price, water_price: waterPrice, trash_price: trashPrice, residence_price: residencePrice, bank_name: bankName, bank_account: bankAccount, bank_owner: bankOwner };
     showToast('Đã lưu cài đặt thành công', 'success');
+    // Cập nhật lại thông báo theo ngày thu mới
+    loadNotifications();
   } catch (err) {
     console.error(err);
   }
 }
+
 
 // ==========================================
 // 3. QUẢN LÝ PHÒNG (ROOMS TAB)
@@ -1887,7 +1907,7 @@ function copyInvoiceText() {
   const status = document.getElementById('inv-payment-status-box').textContent.trim();
   const bankDetails = document.getElementById('inv-bank-details').innerText.trim();
 
-  let text = `=== HÓA ĐƠN TIỀN THUÊ ===\n`;
+  let text = `=== HÓA ĐƠN TIỀN TRỌ ===\n`;
   text += `${room} — ${period}\n`;
   text += `Tổng cộng: ${total}\n`;
   text += `Trạng thái: ${status}\n`;
@@ -2049,3 +2069,322 @@ function _downloadBlobAsFile(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+// ==========================================
+// NOTIFICATION BELL — PHÒNG ĐẾN HẠN ĐÓNG TIỀN
+// ==========================================
+
+let _notifData = [];
+
+async function loadNotifications() {
+  try {
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    const today = now.getDate();
+
+    // Ngày thu tiền từ cài đặt (mặc định ngày 5)
+    const dueDay = currentState.paymentDueDay || 5;
+    const daysUntilDue = dueDay - today; // Âm = đã quá hạn, Dương = chưa đến hạn
+
+    // Chỉ thông báo khi còn ≤ 3 ngày hoặc đã quá hạn
+    const shouldNotify = daysUntilDue <= 3;
+
+    const res = await fetch(`${API_BASE}/api/payments?month=${month}&year=${year}`);
+    if (!res.ok) return;
+    const payments = await res.json();
+
+    // Lọc phòng chưa đóng tiền và thực sự đang có người ở
+    const unpaid = payments.filter(p => !p.is_paid && p.room_status === 'occupied');
+
+    // Nếu chưa đến thời điểm cần nhắc → không hiện badge
+    if (!shouldNotify) {
+      _notifData = [];
+    } else {
+      _notifData = unpaid;
+    }
+
+    const badge = document.getElementById('notif-badge');
+    const bellBtn = document.getElementById('notif-bell-btn');
+
+    if (_notifData.length > 0) {
+      badge.textContent = _notifData.length > 99 ? '99+' : _notifData.length;
+      badge.style.display = 'flex';
+      bellBtn.classList.add('has-notif');
+
+      // Gửi thông báo đẩy về điện thoại (mỗi ngày 1 lần)
+      const dueDay2 = currentState.paymentDueDay || 5;
+      const daysLeft = dueDay2 - new Date().getDate();
+      let pushTitle, pushBody;
+      if (daysLeft > 0) {
+        pushTitle = `⏰ Còn ${daysLeft} ngày đến hạn thu tiền`;
+        pushBody = `${_notifData.length} phòng chưa đóng tiền. Hạn nộp: ngày ${dueDay2} tháng này.`;
+      } else if (daysLeft === 0) {
+        pushTitle = `🚨 Hôm nay là ngày thu tiền!`;
+        pushBody = `${_notifData.length} phòng chưa đóng tiền. Vui lòng kiểm tra ngay!`;
+      } else {
+        pushTitle = `⚠️ Đã quá hạn ${Math.abs(daysLeft)} ngày!`;
+        pushBody = `${_notifData.length} phòng chưa đóng tiền. Hạn đã là ngày ${dueDay2}.`;
+      }
+      showBrowserNotification(pushTitle, pushBody);
+    } else {
+      badge.style.display = 'none';
+      bellBtn.classList.remove('has-notif');
+    }
+
+    // Cập nhật nội dung panel nếu đang mở
+    const panel = document.getElementById('notif-panel');
+    if (panel && panel.style.display !== 'none') {
+      renderNotifications();
+    }
+  } catch (e) {
+    console.warn('Không thể tải thông báo:', e);
+  }
+}
+
+function renderNotifications() {
+  const list = document.getElementById('notif-list');
+  if (!list) return;
+
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const today = now.getDate();
+  const dueDay = currentState.paymentDueDay || 5;
+  const daysUntilDue = dueDay - today;
+
+  // Nếu chưa đến thời điểm cần nhắc
+  if (daysUntilDue > 3) {
+    const nextNotifDate = dueDay - 3;
+    list.innerHTML = `<div class="notif-empty">📅 Sẽ nhắc từ ngày <strong>${nextNotifDate}</strong> hàng tháng<br><span style="font-size:12px;">Ngày thu tiền: ngày ${dueDay} mỗi tháng</span></div>`;
+    return;
+  }
+
+  if (_notifData.length === 0) {
+    list.innerHTML = '<div class="notif-all-paid">✅ Tất cả phòng đã đóng tiền tháng này!</div>';
+    return;
+  }
+
+  // Tạo label trạng thái
+  let statusLabel, statusStyle;
+  if (daysUntilDue > 0) {
+    statusLabel = `⏰ Còn ${daysUntilDue} ngày đến hạn (ngày ${dueDay})`;
+    statusStyle = 'background:#fff7e6;color:#b45309;border-bottom:1px solid #fde68a;';
+  } else if (daysUntilDue === 0) {
+    statusLabel = `🚨 Hôm nay là ngày thu tiền (ngày ${dueDay})!`;
+    statusStyle = 'background:#fef2f2;color:#dc2626;border-bottom:1px solid #fecaca;';
+  } else {
+    statusLabel = `⚠️ Đã quá hạn ${Math.abs(daysUntilDue)} ngày (hạn ngày ${dueDay})`;
+    statusStyle = 'background:#fef2f2;color:#dc2626;border-bottom:1px solid #fecaca;';
+  }
+
+  const isOverdue = daysUntilDue <= 0;
+
+  const formatDateVN = (dateStr) => {
+    if (!dateStr) return 'Chưa rõ';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const day = String(d.getDate()).padStart(2, '0');
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const y = d.getFullYear();
+      return `${day}/${m}/${y}`;
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
+  list.innerHTML = `
+    <div style="padding:10px 14px;font-size:12px;font-weight:600;${statusStyle}">
+      ${statusLabel}
+    </div>
+    ${_notifData.map(p => {
+      const tenantName = p.tenant_names || 'Chưa có người thuê';
+      const total = formatVND(p.total_amount || p.rent_price || 0);
+      const roomCode = p.room_code || p.room_id || '--';
+      const leaseStart = formatDateVN(p.lease_start_date);
+      const currentMonthStr = String(month).padStart(2, '0');
+      const dueDateStr = `${String(dueDay).padStart(2, '0')}/${currentMonthStr}/${year}`;
+
+      return `
+        <div class="notif-item" onclick="goToPaymentRoom('${p.room_id}')" style="display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 700; color: var(--neutral-dark); font-size: 14px;">🚪 Phòng ${roomCode}</span>
+            <span style="font-weight: 700; color: var(--danger); font-size: 14px;">${total}</span>
+          </div>
+          <div style="font-size: 13px; color: var(--neutral-dark); display: flex; align-items: center; gap: 6px;">
+            <span style="color: var(--neutral-gray); font-size: 12px;">👤</span>
+            <strong>${tenantName}</strong>
+          </div>
+          <div style="font-size: 11px; color: var(--neutral-gray); display: flex; flex-direction: column; gap: 2px; border-top: 1px dashed #e2e8f0; padding-top: 4px; margin-top: 2px;">
+            <div>📅 Thuê từ: <span style="color: var(--neutral-dark); font-weight: 500;">${leaseStart}</span></div>
+            <div>⏰ Hạn đóng: <span style="color: var(--danger); font-weight: 600;">${dueDateStr}</span></div>
+          </div>
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+
+function toggleNotifPanel() {
+  const panel = document.getElementById('notif-panel');
+  if (!panel) return;
+
+  const isOpen = panel.style.display !== 'none';
+  if (isOpen) {
+    panel.style.display = 'none';
+  } else {
+    panel.style.display = 'block';
+    renderNotifications();
+  }
+}
+
+function goToPaymentRoom(roomId) {
+  // Đóng panel
+  const panel = document.getElementById('notif-panel');
+  if (panel) panel.style.display = 'none';
+  // Chuyển sang tab Thu Tiền
+  switchTab('payments');
+}
+
+// Đóng panel khi click ra ngoài
+document.addEventListener('click', (e) => {
+  const wrapper = document.getElementById('notif-bell-wrapper');
+  if (wrapper && !wrapper.contains(e.target)) {
+    const panel = document.getElementById('notif-panel');
+    if (panel) panel.style.display = 'none';
+  }
+});
+
+// ==========================================
+// PUSH NOTIFICATION (THÔNG BÁO ĐẨY)
+// ==========================================
+
+// Cập nhật hiển thị trạng thái quyền thông báo
+function updateNotifPermissionUI() {
+  const icon = document.getElementById('notif-perm-icon');
+  const text = document.getElementById('notif-perm-text');
+  const btn  = document.getElementById('btn-request-notif');
+  const box  = document.getElementById('notif-permission-status');
+  if (!icon || !text) return;
+
+  if (!('Notification' in window)) {
+    icon.textContent = '❌';
+    text.textContent = 'Trình duyệt không hỗ trợ thông báo';
+    if (box) { box.style.background = 'var(--danger-bg)'; box.style.borderColor = 'var(--danger-border)'; }
+    return;
+  }
+
+  const perm = Notification.permission;
+  if (perm === 'granted') {
+    icon.textContent = '✅';
+    text.textContent = 'Thông báo đã được bật';
+    if (box) { box.style.background = 'var(--success-bg)'; box.style.borderColor = 'var(--success-border)'; }
+    if (btn) btn.style.display = 'none';
+  } else if (perm === 'denied') {
+    icon.textContent = '🚫';
+    text.textContent = 'Thông báo bị chặn — vào cài đặt trình duyệt để bật lại';
+    if (box) { box.style.background = 'var(--danger-bg)'; box.style.borderColor = 'var(--danger-border)'; }
+    if (btn) btn.style.display = 'none';
+  } else {
+    icon.textContent = '🔕';
+    text.textContent = 'Chưa bật thông báo';
+    if (box) { box.style.background = 'var(--warning-bg)'; box.style.borderColor = 'var(--warning-border)'; }
+    if (btn) btn.style.display = 'inline-flex';
+  }
+}
+
+// Xin quyền thông báo
+async function requestPushPermission() {
+  if (!('Notification' in window)) {
+    showToast('Trình duyệt không hỗ trợ thông báo đẩy', 'error');
+    return;
+  }
+  const result = await Notification.requestPermission();
+  updateNotifPermissionUI();
+  if (result === 'granted') {
+    showToast('✅ Đã bật thông báo thành công!', 'success');
+    // Gửi ngay thông báo chào mừng
+    new Notification('🏠 Nhà Trọ LISO', {
+      body: 'Thông báo đã được bật! Bạn sẽ nhận nhắc nhở khi phòng sắp đến hạn thu tiền.',
+      icon: '/logo.png',
+      badge: '/logo.png'
+    });
+  } else if (result === 'denied') {
+    showToast('Bạn đã chặn thông báo. Vui lòng bật lại trong cài đặt trình duyệt.', 'error');
+  }
+}
+
+// Gửi thông báo hệ thống (chống spam: mỗi ngày chỉ gửi 1 lần)
+function showBrowserNotification(title, body, tag = 'rent-reminder') {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  // Kiểm tra đã gửi hôm nay chưa
+  const today = new Date().toDateString();
+  const lastSentKey = `notif_sent_${tag}`;
+  const lastSent = localStorage.getItem(lastSentKey);
+  if (lastSent === today) return; // Đã gửi hôm nay rồi, bỏ qua
+
+  // Lưu ngày gửi
+  localStorage.setItem(lastSentKey, today);
+
+  try {
+    const n = new Notification(title, {
+      body,
+      icon: '/logo.png',
+      badge: '/logo.png',
+      tag, // Cùng tag sẽ thay thế nhau thay vì stack
+      requireInteraction: true // Giữ thông báo cho đến khi người dùng bấm
+    });
+    n.onclick = () => {
+      window.focus();
+      switchTab('payments');
+      n.close();
+    };
+  } catch (e) {
+    console.warn('Không thể gửi thông báo:', e);
+  }
+}
+
+// Nút Test thông báo trong Cài đặt
+function testPushNotification() {
+  if (!('Notification' in window)) {
+    showToast('Trình duyệt không hỗ trợ thông báo đẩy', 'error');
+    return;
+  }
+  if (Notification.permission !== 'granted') {
+    showToast('Vui lòng bật thông báo trước!', 'error');
+    // Tự động xin quyền
+    requestPushPermission();
+    return;
+  }
+
+  // Xóa cache chống spam để test được ngay
+  localStorage.removeItem('notif_sent_rent-reminder');
+  localStorage.removeItem('notif_sent_rent-test');
+
+  const dueDay = currentState.paymentDueDay || 5;
+  try {
+    const n = new Notification('🔔 Nhà Trọ LISO — Test thông báo', {
+      body: `Đây là thông báo thử nghiệm.\nNgày thu tiền được đặt là ngày ${dueDay} hàng tháng.\nHệ thống sẽ nhắc bạn trước 3 ngày.`,
+      icon: '/logo.png',
+      badge: '/logo.png',
+      tag: 'rent-test',
+      requireInteraction: false
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+    showToast('✅ Đã gửi thông báo test!', 'success');
+  } catch (e) {
+    showToast('Có lỗi khi gửi thông báo: ' + e.message, 'error');
+  }
+}
+
+// Khởi tạo quyền thông báo khi load app
+function initPushNotifications() {
+  updateNotifPermissionUI();
+  // Nếu chưa xin quyền và đang ở settings tab thì cũng cập nhật UI
+  // Tự động xin quyền khi lần đầu mở app (nếu chưa có quyết định)
+  if ('Notification' in window && Notification.permission === 'default') {
+    // Không xin ngay, để người dùng chủ động bấm nút
+  }
+}
