@@ -1873,13 +1873,32 @@ async function downloadInvoiceAsImage() {
   
   showToast('Đang tạo ảnh hóa đơn, vui lòng đợi...', 'info');
   
+  // Lưu lại các thuộc tính CSS nguyên bản
+  const originalWidth = element.style.width;
+  const originalMaxWidth = element.style.maxWidth;
+  const originalBoxSizing = element.style.boxSizing;
+  
+  // Ép kích thước chuẩn 750px (tương đương màn hình máy tính) để bố cục hiển thị hoàn hảo
+  element.style.width = '750px';
+  element.style.maxWidth = '750px';
+  element.style.boxSizing = 'border-box';
+  
   try {
+    // Chờ 150ms để trình duyệt vẽ lại giao diện theo kích thước mới
+    await new Promise(resolve => setTimeout(resolve, 150));
+
     const canvas = await html2canvas(element, {
-      scale: 2, // higher scale for better resolution
+      scale: 2, // Tăng chất lượng ảnh lên 2 lần
       useCORS: true, 
       logging: false,
-      backgroundColor: '#ffffff'
+      backgroundColor: '#ffffff',
+      windowWidth: 750 // Mô phỏng chiều rộng màn hình là 750px cho html2canvas
     });
+    
+    // Khôi phục lại giao diện ban đầu ngay lập tức
+    element.style.width = originalWidth;
+    element.style.maxWidth = originalMaxWidth;
+    element.style.boxSizing = originalBoxSizing;
     
     const image = canvas.toDataURL('image/png');
     const link = document.createElement('a');
@@ -1895,6 +1914,11 @@ async function downloadInvoiceAsImage() {
     link.click();
     showToast('Tải ảnh hóa đơn thành công!', 'success');
   } catch (err) {
+    // Khôi phục lại giao diện nếu xảy ra lỗi
+    element.style.width = originalWidth;
+    element.style.maxWidth = originalMaxWidth;
+    element.style.boxSizing = originalBoxSizing;
+    
     console.error('Lỗi khi tải ảnh hóa đơn:', err);
     showToast('Có lỗi xảy ra khi tạo ảnh hóa đơn', 'error');
   }
