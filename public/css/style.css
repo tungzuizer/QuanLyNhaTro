@@ -1366,8 +1366,6 @@ body {
   height: 40px;
   object-fit: contain;
   border-radius: var(--radius-sm);
-  background: white;
-  padding: 2px;
 }
 
 .login-card-logo {
@@ -1377,8 +1375,6 @@ body {
   border-radius: var(--radius-md);
   margin: 0 auto 20px auto;
   display: block;
-  background: white;
-  padding: 4px;
   box-shadow: var(--shadow-md);
 }
 

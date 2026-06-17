@@ -228,6 +228,10 @@ class PostgresStatement {
     if (!row) return null;
     for (const key in row) {
       if (typeof row[key] === 'string' && /^\d+$/.test(row[key])) {
+        // Không chuyển đổi nếu chuỗi bắt đầu bằng '0' và dài hơn 1 ký tự (như số tài khoản, số điện thoại, CCCD)
+        if (row[key].startsWith('0') && row[key].length > 1) {
+          continue;
+        }
         const val = parseInt(row[key], 10);
         if (!isNaN(val)) row[key] = val;
       } else if (typeof row[key] === 'string' && /^\d+\.\d+$/.test(row[key])) {
