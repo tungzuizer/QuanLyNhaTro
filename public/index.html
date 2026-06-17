@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản Lý Nhà Trọ</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- App Container -->
+  <div class="app-container">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo-icon">🏠</span>
+        <h2>Nhà Trọ Home</h2>
+      </div>
+      <nav class="nav-links">
+        <a href="#" class="nav-item active" data-tab="dashboard">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">Dashboard</span>
+        </a>
+        <a href="#" class="nav-item" data-tab="rooms">
+          <span class="nav-icon">🔑</span>
+          <span class="nav-text">Quản lý Phòng</span>
+        </a>
+        <a href="#" class="nav-item" data-tab="electricity">
+          <span class="nav-icon">⚡</span>
+          <span class="nav-text">Quản lý Điện</span>
+        </a>
+        <a href="#" class="nav-item" data-tab="payments">
+          <span class="nav-icon">💰</span>
+          <span class="nav-text">Thu Tiền Tháng</span>
+        </a>
+        <a href="#" class="nav-item" data-tab="search">
+          <span class="nav-icon">🔍</span>
+          <span class="nav-text">Tìm kiếm</span>
+        </a>
+        <a href="#" class="nav-item" data-tab="settings">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-text">Cài đặt</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <p>Phiên bản 1.0.0</p>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top Bar (Mobile header & Search) -->
+      <header class="topbar">
+        <button id="mobile-menu-toggle" class="mobile-only">☰</button>
+        <h1 id="page-title">Dashboard</h1>
+        <div class="quick-search-container">
+          <input type="text" id="quick-search-input" placeholder="Tìm phòng, tên người..." readonly data-tab-trigger="search">
+        </div>
+      </header>
+
+      <!-- Content Container -->
+      <div class="content-body">
+        
+        <!-- ========================================== -->
+        <!-- TAB: DASHBOARD -->
+        <!-- ========================================== -->
+        <section id="tab-dashboard" class="tab-pane active">
+          <!-- Stats Grid -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon bg-primary">🔑</div>
+              <div class="stat-info">
+                <h3>Tổng số phòng</h3>
+                <p id="stat-total-rooms">50</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon bg-success">🟢</div>
+              <div class="stat-info">
+                <h3>Phòng trống</h3>
+                <p id="stat-vacant-rooms">0</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon bg-warning">🟠</div>
+              <div class="stat-info">
+                <h3>Đang thuê</h3>
+                <p id="stat-occupied-rooms">0</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon bg-danger">🔴</div>
+              <div class="stat-info">
+                <h3>Đang sửa chữa</h3>
+                <p id="stat-maintenance-rooms">0</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Financial Highlights -->
+          <div class="financial-grid">
+            <div class="financial-card card-rent">
+              <h3>Dự kiến tiền phòng hàng tháng</h3>
+              <p class="money-text" id="stat-total-rent">0đ</p>
+              <span class="desc">Tính theo tổng giá phòng đang thuê</span>
+            </div>
+            <div class="financial-card card-electric">
+              <h3>Tiền điện thu tháng này</h3>
+              <p class="money-text" id="stat-total-electric">0đ</p>
+              <span class="desc" id="stat-electric-month-label">Tính cho Tháng --/----</span>
+            </div>
+          </div>
+
+          <!-- Tổng kết thu tiền tháng này -->
+          <div class="payment-summary-grid">
+            <div class="pay-sum-card card-collected">
+              <div class="pay-sum-icon">✅</div>
+              <div class="pay-sum-info">
+                <h3>Đã thu tháng này</h3>
+                <p id="stat-collected">0đ</p>
+                <span id="stat-paid-count">0 phòng</span>
+              </div>
+            </div>
+            <div class="pay-sum-card card-pending">
+              <div class="pay-sum-icon">⏳</div>
+              <div class="pay-sum-info">
+                <h3>Còn chờ thu</h3>
+                <p id="stat-pending">0đ</p>
+                <span id="stat-unpaid-count">0 phòng</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shortcuts/Quick Actions -->
+          <div class="dashboard-actions">
+            <h2>Hành động nhanh</h2>
+            <div class="action-buttons">
+              <button class="btn btn-primary" onclick="switchTab('rooms')">🔑 Xem DS Phòng</button>
+              <button class="btn btn-warning" onclick="switchTab('payments')">💰 Thu Tiền Tháng Này</button>
+              <button class="btn btn-secondary" onclick="switchTab('electricity')">⚡ Nhập số điện</button>
+              <button class="btn btn-accent" onclick="switchTab('search')">🔍 Tìm người thuê</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB: ROOMS (QUẢN LÝ PHÒNG) -->
+        <!-- ========================================== -->
+        <section id="tab-rooms" class="tab-pane">
+          <!-- Zone Filter Tabs -->
+          <div class="filter-bar">
+            <div class="zone-tabs">
+              <button class="zone-tab-btn active" data-zone="ALL">Tất cả khu</button>
+              <button class="zone-tab-btn" data-zone="A">Khu A (35 phòng)</button>
+              <button class="zone-tab-btn" data-zone="B">Khu B (15 phòng)</button>
+            </div>
+            <div class="status-select-wrapper">
+              <select id="status-filter" class="form-control">
+                <option value="ALL">Tất cả trạng thái</option>
+                <option value="vacant">Phòng trống</option>
+                <option value="occupied">Đang thuê</option>
+                <option value="maintenance">Đang sửa chữa</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Rooms Grid -->
+          <div id="rooms-grid" class="rooms-grid">
+            <!-- Render động bằng JS -->
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB: ELECTRICITY (QUẢN LÝ ĐIỆN) -->
+        <!-- ========================================== -->
+        <section id="tab-electricity" class="tab-pane">
+          <div class="electric-management-container">
+            <!-- Form nhập số điện -->
+            <div class="card card-form">
+              <h3>⚡ Nhập chỉ số điện hàng tháng</h3>
+              <form id="electric-form">
+                <div class="form-group">
+                  <label for="elec-room-select">Chọn phòng</label>
+                  <select id="elec-room-select" class="form-control" required>
+                    <option value="">-- Chọn phòng --</option>
+                    <!-- Render động danh sách phòng -->
+                  </select>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col">
+                    <label for="elec-month">Tháng</label>
+                    <select id="elec-month" class="form-control" required></select>
+                  </div>
+                  <div class="form-group col">
+                    <label for="elec-year">Năm</label>
+                    <select id="elec-year" class="form-control" required></select>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col">
+                    <label for="elec-old">Chỉ số cũ (kWh)</label>
+                    <input type="number" id="elec-old" class="form-control" min="0" step="any" required>
+                  </div>
+                  <div class="form-group col">
+                    <label for="elec-new">Chỉ số mới (kWh)</label>
+                    <input type="number" id="elec-new" class="form-control" min="0" step="any" required>
+                  </div>
+                </div>
+                <div class="calculation-summary" id="elec-calc-summary" style="display: none;">
+                  <p>Số điện tiêu thụ: <strong id="calc-consumption">0</strong> kWh</p>
+                  <p>Đơn giá: <strong id="calc-unit-price">0</strong> đ/kWh</p>
+                  <p>Tổng tiền điện: <strong id="calc-total-cost" class="text-primary">0đ</strong></p>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Lưu chỉ số điện</button>
+              </form>
+            </div>
+
+            <!-- Bảng lịch sử điện của phòng được chọn -->
+            <div class="card card-table">
+              <h3>🗓️ Lịch sử chỉ số điện gần đây</h3>
+              <div class="table-responsive">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Tháng/Năm</th>
+                      <th>Số cũ</th>
+                      <th>Số mới</th>
+                      <th>Tiêu thụ</th>
+                      <th>Đơn giá</th>
+                      <th>Tổng tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody id="electric-history-table-body">
+                    <tr>
+                      <td colspan="6" class="text-center text-muted">Vui lòng chọn phòng để xem lịch sử</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB: PAYMENTS (THU TIỀN THÁNG) -->
+        <!-- ========================================== -->
+        <section id="tab-payments" class="tab-pane">
+          <!-- Filter tháng/năm -->
+          <div class="payments-header">
+            <div class="payments-month-filter">
+              <label>Tháng:</label>
+              <select id="pay-month-select" class="form-control"></select>
+              <label>Năm:</label>
+              <select id="pay-year-select" class="form-control"></select>
+              <button class="btn btn-primary" id="btn-load-payments">Xem danh sách</button>
+            </div>
+            <div class="payments-legend">
+              <span class="legend-item legend-paid">✅ Đã thu</span>
+              <span class="legend-item legend-unpaid">⏳ Chưa thu</span>
+            </div>
+          </div>
+
+          <!-- Tổng kết thu tiền tháng -->
+          <div class="payments-stats-bar" id="payments-stats-bar">
+            <div class="pay-stat-item">
+              <span class="pay-stat-label">🏠 Tổng phòng đang thuê</span>
+              <strong id="pay-stat-total">--</strong>
+            </div>
+            <div class="pay-stat-item green">
+              <span class="pay-stat-label">✅ Đã thu</span>
+              <strong id="pay-stat-paid">-- phòng</strong>
+              <span id="pay-stat-collected-amount" class="pay-money">0đ</span>
+            </div>
+            <div class="pay-stat-item orange">
+              <span class="pay-stat-label">⏳ Chưa thu</span>
+              <strong id="pay-stat-unpaid">-- phòng</strong>
+              <span id="pay-stat-pending-amount" class="pay-money">0đ</span>
+            </div>
+          </div>
+
+          <!-- Bảng thu tiền từng phòng -->
+          <div class="payments-table-card card">
+            <div class="payments-table-header">
+              <h3>💰 Danh sách thu tiền tháng <span id="pay-month-display">--/----</span></h3>
+              <div class="pay-filter-btns">
+                <button class="btn btn-sm pay-filter-btn active" data-filter="all">Tất cả</button>
+                <button class="btn btn-sm pay-filter-btn" data-filter="unpaid">⏳ Chưa thu</button>
+                <button class="btn btn-sm pay-filter-btn" data-filter="paid">✅ Đã thu</button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table payments-table">
+                <thead>
+                  <tr>
+                    <th>Phòng</th>
+                    <th>Người thuê</th>
+                    <th>Tiền thuê</th>
+                    <th>Tiền điện</th>
+                    <th class="col-total">Tổng cần thu</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="payments-table-body">
+                  <tr>
+                    <td colspan="7" class="text-center text-muted" style="padding: 40px;">
+                      Chọn tháng/năm và bấm "Xem danh sách" để tải dữ liệu
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB: SEARCH (TÌM KIẾM) -->
+        <!-- ========================================== -->
+        <section id="tab-search" class="tab-pane">
+          <div class="search-section">
+            <div class="search-box-container">
+              <input type="text" id="search-input" class="form-control search-input" placeholder="Tìm kiếm theo: tên người thuê, số điện thoại, CCCD, mã phòng...">
+              <button class="btn btn-primary btn-search" id="btn-search-trigger">Tìm kiếm</button>
+            </div>
+            <div class="search-results-container">
+              <!-- Kết quả tìm kiếm người thuê -->
+              <div class="results-section">
+                <h3>👥 Người thuê tìm thấy (<span id="count-tenants">0</span>)</h3>
+                <div id="search-tenants-results" class="results-list">
+                  <!-- Render động -->
+                </div>
+              </div>
+
+              <!-- Kết quả tìm kiếm phòng -->
+              <div class="results-section">
+                <h3>🔑 Phòng tìm thấy (<span id="count-rooms">0</span>)</h3>
+                <div id="search-rooms-results" class="results-grid">
+                  <!-- Render động -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB: SETTINGS (CÀI ĐẶT) -->
+        <!-- ========================================== -->
+        <section id="tab-settings" class="tab-pane">
+          <div class="card card-settings">
+            <h3>⚙️ Cài đặt hệ thống</h3>
+            <form id="settings-form">
+              <div class="form-group">
+                <label for="setting-electric-price">Giá điện tiêu chuẩn (VNĐ / kWh)</label>
+                <input type="number" id="setting-electric-price" class="form-control" min="0" required>
+                <span class="help-text">Giá trị này dùng để tự động tính tiền điện mỗi khi bạn nhập chỉ số điện mới.</span>
+              </div>
+              <button type="submit" class="btn btn-primary">Lưu cài đặt</button>
+            </form>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: CHI TIẾT PHÒNG -->
+  <!-- ========================================== -->
+  <div id="room-detail-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-room-title">Phòng A01</h2>
+        <span class="close-btn" onclick="closeModal('room-detail-modal')">&times;</span>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Info Tabs inside Modal (Xem/Sửa thông tin phòng) -->
+        <div class="modal-room-info-card">
+          <div class="info-row">
+            <span>Khu:</span>
+            <strong id="modal-room-zone">Khu A</strong>
+          </div>
+          <div class="info-row">
+            <span>Trạng thái:</span>
+            <span id="modal-room-status-badge" class="badge">Trống</span>
+          </div>
+          <div class="info-row">
+            <span>Giá thuê:</span>
+            <strong id="modal-room-price">0đ</strong>
+          </div>
+          <div class="info-row">
+            <span>Tiền đặt cọc:</span>
+            <strong id="modal-room-deposit">0đ</strong>
+          </div>
+          <div class="info-row">
+            <span>Số người ở:</span>
+            <strong id="modal-room-members">0 người</strong>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary btn-edit-room" id="btn-edit-room-trigger">⚙️ Chỉnh sửa thông tin phòng</button>
+        </div>
+
+        <!-- Form Edit Room (Hidden by default) -->
+        <form id="edit-room-form" class="card-form-embedded" style="display: none;">
+          <h4>Cập nhật thông tin phòng</h4>
+          <div class="form-row">
+            <div class="form-group col">
+              <label for="edit-rent-price">Giá thuê (VNĐ)</label>
+              <input type="number" id="edit-rent-price" class="form-control" min="0" required>
+            </div>
+            <div class="form-group col">
+              <label for="edit-deposit">Tiền cọc (VNĐ)</label>
+              <input type="number" id="edit-deposit" class="form-control" min="0" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="edit-status">Trạng thái phòng</label>
+            <select id="edit-status" class="form-control">
+              <option value="vacant">🟢 Trống</option>
+              <option value="occupied">🟠 Đang thuê</option>
+              <option value="maintenance">🔴 Sửa chữa</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-sm btn-success">Lưu lại</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="btn-cancel-edit-room">Hủy</button>
+          </div>
+        </form>
+
+        <hr/>
+
+        <!-- Section: Tenants List -->
+        <div class="modal-section">
+          <div class="section-header-row">
+            <h3>👥 Danh sách người thuê</h3>
+            <button class="btn btn-sm btn-primary" id="btn-add-tenant-trigger">+ Thêm người ở</button>
+          </div>
+
+          <!-- Form Add/Edit Tenant (Hidden by default) -->
+          <form id="tenant-form" class="card-form-embedded" style="display: none;">
+            <h4 id="tenant-form-title">Thêm người thuê mới</h4>
+            <input type="hidden" id="tenant-id">
+            <div class="form-group">
+              <label for="tenant-name">Họ tên *</label>
+              <input type="text" id="tenant-name" class="form-control" required>
+            </div>
+            <div class="form-row">
+              <div class="form-group col">
+                <label for="tenant-phone">Số điện thoại</label>
+                <input type="text" id="tenant-phone" class="form-control">
+              </div>
+              <div class="form-group col">
+                <label for="tenant-cccd">Căn cước công dân (CCCD)</label>
+                <input type="text" id="tenant-cccd" class="form-control">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group col">
+                <label for="tenant-start-date">Ngày bắt đầu thuê *</label>
+                <input type="date" id="tenant-start-date" class="form-control" required>
+              </div>
+              <div class="form-group col">
+                <label for="tenant-end-date">Ngày hết hạn HĐ</label>
+                <input type="date" id="tenant-end-date" class="form-control">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="tenant-notes">Ghi chú</label>
+              <textarea id="tenant-notes" class="form-control" rows="2"></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-sm btn-primary" id="btn-save-tenant">Lưu người thuê</button>
+              <button type="button" class="btn btn-sm btn-secondary" id="btn-cancel-tenant">Hủy</button>
+            </div>
+          </form>
+
+          <div id="modal-tenants-list" class="tenants-list">
+            <!-- Render động bằng JS -->
+          </div>
+        </div>
+
+        <hr/>
+
+        <!-- Section: Billing History -->
+        <div class="modal-section">
+          <h3>🗓️ Lịch sử hóa đơn & điện nước (12 tháng gần nhất)</h3>
+          <div class="table-responsive">
+            <table class="table" style="font-size: 13px;">
+              <thead>
+                <tr>
+                  <th>Tháng/Năm</th>
+                  <th>Người thuê</th>
+                  <th>Tiền phòng</th>
+                  <th>Tiền điện</th>
+                  <th>Tổng cộng</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody id="modal-payment-history-list">
+                <tr>
+                  <td colspan="6" class="text-center text-muted">Chưa có lịch sử hóa đơn cho phòng này</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Confirmation Modal -->
+  <div id="confirm-modal" class="modal">
+    <div class="modal-content" style="max-width: 400px; border-radius: 12px; padding: 25px; text-align: center;">
+      <h3 style="margin-bottom: 12px; font-weight: 600;">Xác nhận</h3>
+      <p id="confirm-modal-message" style="margin-bottom: 24px; color: var(--neutral-gray); line-height: 1.5;">Bạn có chắc chắn muốn thực hiện hành động này?</p>
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button id="btn-confirm-yes" class="btn btn-danger" style="flex: 1; padding: 10px;">Đồng ý</button>
+        <button id="btn-confirm-no" class="btn btn-secondary" style="flex: 1; padding: 10px;">Hủy bỏ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification System -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- App Script JS -->
+  <script src="js/app.js"></script>
+</body>
+</html>
