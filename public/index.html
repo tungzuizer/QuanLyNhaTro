@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nhà Trọ LISO</title>
   <link rel="icon" type="image/png" href="logo.png?v=2">
+  <link rel="apple-touch-icon" href="logo.png?v=2">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Nhà Trọ LISO">
+  <link rel="manifest" href="manifest.json">
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,8 +24,7 @@
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <img src="logo.png" alt="Logo Nhà Trọ LISO" class="logo-img">
-        <h2>Nhà Trọ LISO</h2>
+        <img src="logo.png" alt="Logo Nhà Trọ LISO" class="logo-img" style="margin: 0 auto;">
       </div>
       <nav class="nav-links">
         <a href="#" class="nav-item active" data-tab="dashboard">
@@ -94,7 +98,7 @@
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-icon bg-warning">🟠</div>
+              <div class="stat-icon bg-warning">🟡</div>
               <div class="stat-info">
                 <h3>Đang thuê</h3>
                 <p id="stat-occupied-rooms">0</p>
@@ -109,36 +113,39 @@
             </div>
           </div>
 
-          <!-- Financial Highlights -->
+          <!-- Financial Overview -->
           <div class="financial-grid">
             <div class="financial-card card-rent">
-              <h3>Dự kiến tiền phòng hàng tháng</h3>
+              <h3>💰 Tổng tiền thuê phòng thu dự kiến</h3>
               <p class="money-text" id="stat-total-rent">0đ</p>
-              <span class="desc">Tính theo tổng giá phòng đang thuê</span>
+              <span>Tính trên các phòng đang hoạt động</span>
             </div>
             <div class="financial-card card-electric">
-              <h3>Tiền điện thu tháng này</h3>
+              <h3>⚡ Tổng tiền điện tháng này</h3>
               <p class="money-text" id="stat-total-electric">0đ</p>
-              <span class="desc" id="stat-electric-month-label">Tính cho Tháng --/----</span>
+              <span id="stat-electric-month-label">Chưa có chỉ số điện tháng này</span>
             </div>
           </div>
 
-          <!-- Tổng kết thu tiền tháng này -->
-          <div class="payment-summary-grid">
-            <div class="pay-sum-card card-collected">
-              <div class="pay-sum-icon">✅</div>
-              <div class="pay-sum-info">
-                <h3>Đã thu tháng này</h3>
-                <p id="stat-collected">0đ</p>
-                <span id="stat-paid-count">0 phòng</span>
+          <!-- Payment Stats Overview -->
+          <div style="margin-top: 32px;">
+            <h2>Thống kê thu tiền tháng này</h2>
+            <div class="payment-summary-grid" style="margin-top: 16px;">
+              <div class="pay-sum-card card-collected">
+                <span class="pay-sum-icon">✅</span>
+                <div class="pay-sum-info">
+                  <h3>Đã thu được</h3>
+                  <p id="stat-collected">0đ</p>
+                  <span id="stat-paid-count">0 phòng</span>
+                </div>
               </div>
-            </div>
-            <div class="pay-sum-card card-pending">
-              <div class="pay-sum-icon">⏳</div>
-              <div class="pay-sum-info">
-                <h3>Còn chờ thu</h3>
-                <p id="stat-pending">0đ</p>
-                <span id="stat-unpaid-count">0 phòng</span>
+              <div class="pay-sum-card card-pending">
+                <span class="pay-sum-icon">⏳</span>
+                <div class="pay-sum-info">
+                  <h3>Còn lại cần thu</h3>
+                  <p id="stat-pending">0đ</p>
+                  <span id="stat-unpaid-count">0 phòng</span>
+                </div>
               </div>
             </div>
           </div>
@@ -160,19 +167,31 @@
         <!-- ========================================== -->
         <section id="tab-rooms" class="tab-pane">
           <!-- Zone Filter Tabs -->
-          <div class="filter-bar">
+          <div class="filter-bar" style="display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
             <div class="zone-tabs">
               <button class="zone-tab-btn active" data-zone="ALL">Tất cả khu</button>
-              <button class="zone-tab-btn" data-zone="A">Khu A (35 phòng)</button>
+              <button class="zone-tab-btn" data-zone="A">Khu A (36 phòng)</button>
               <button class="zone-tab-btn" data-zone="B">Khu B (15 phòng)</button>
             </div>
-            <div class="status-select-wrapper">
-              <select id="status-filter" class="form-control">
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="vacant">Phòng trống</option>
-                <option value="occupied">Đang thuê</option>
-                <option value="maintenance">Đang sửa chữa</option>
-              </select>
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <!-- Lựa chọn Tầng (Chỉ hiện khi ở Khu A) -->
+              <div class="floor-select-wrapper" id="floor-filter-container" style="display: none;">
+                <select id="floor-filter" class="form-control" style="min-width: 140px;">
+                  <option value="ALL">Tất cả tầng</option>
+                  <option value="1">Tầng 1</option>
+                  <option value="2">Tầng 2</option>
+                  <option value="3">Tầng 3</option>
+                  <option value="4">Tầng 4</option>
+                </select>
+              </div>
+              <div class="status-select-wrapper">
+                <select id="status-filter" class="form-control" style="min-width: 160px;">
+                  <option value="ALL">Tất cả trạng thái</option>
+                  <option value="vacant">Phòng trống</option>
+                  <option value="occupied">Đang thuê</option>
+                  <option value="maintenance">Đang sửa chữa</option>
+                </select>
+              </div>
             </div>
           </div>
 

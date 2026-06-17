@@ -289,16 +289,27 @@ function registerEventListeners() {
 
   // --- ZONE FILTER TABS ---
   const zoneBtns = document.querySelectorAll('.zone-tab-btn');
+  const floorFilterContainer = document.getElementById('floor-filter-container');
+  const floorFilter = document.getElementById('floor-filter');
+
   zoneBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       zoneBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      const zone = btn.getAttribute('data-zone');
+      if (zone === 'A') {
+        floorFilterContainer.style.display = 'block';
+      } else {
+        floorFilterContainer.style.display = 'none';
+        floorFilter.value = 'ALL'; // Reset về tất cả tầng khi đổi sang khu khác
+      }
       loadRoomsData();
     });
   });
 
   const statusFilter = document.getElementById('status-filter');
   statusFilter.addEventListener('change', loadRoomsData);
+  floorFilter.addEventListener('change', loadRoomsData);
 
   // --- TAB THU TIỀN EVENTS ---
   document.getElementById('btn-load-payments').addEventListener('click', loadPaymentsData);
@@ -462,6 +473,7 @@ async function loadRoomsData() {
   const activeZoneBtn = document.querySelector('.zone-tab-btn.active');
   const zone = activeZoneBtn.getAttribute('data-zone');
   const status = document.getElementById('status-filter').value;
+  const floor = document.getElementById('floor-filter').value;
 
   let url = '/api/rooms';
   const params = [];
@@ -473,7 +485,13 @@ async function loadRoomsData() {
   }
 
   try {
-    const rooms = await fetchAPI(url);
+    let rooms = await fetchAPI(url);
+    
+    // Nếu chọn Khu A và chọn tầng cụ thể, lọc ở client
+    if (zone === 'A' && floor !== 'ALL') {
+      rooms = rooms.filter(room => room.room_code.startsWith(`A${floor}`));
+    }
+    
     currentState.rooms = rooms;
     renderRoomsGrid(rooms);
   } catch (err) {

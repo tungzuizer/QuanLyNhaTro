@@ -1,0 +1,21 @@
+{
+  "short_name": "Nhà Trọ LISO",
+  "name": "Hệ thống Quản lý Nhà Trọ LISO",
+  "icons": [
+    {
+      "src": "logo.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "logo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0a0c10",
+  "theme_color": "#2173f3",
+  "display": "standalone",
+  "orientation": "portrait"
+}
