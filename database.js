@@ -92,22 +92,56 @@ async function initDatabase() {
     await client.query('COMMIT');
     console.log('✅ Đã tạo các bảng dữ liệu trên Postgres thành công.');
 
-    // Seed data nếu chưa có phòng nào
+    // Seed data nếu chưa có phòng hoặc chưa có người thuê (reset danh sách phòng chuẩn)
     const resRooms = await client.query('SELECT COUNT(*) as count FROM rooms');
     const roomCount = parseInt(resRooms.rows[0].count, 10);
-    if (roomCount === 0) {
-      console.log('Chưa có dữ liệu phòng, đang tự động khởi tạo 50 phòng...');
+    const resTenants = await client.query('SELECT COUNT(*) as count FROM tenants');
+    const tenantCount = parseInt(resTenants.rows[0].count, 10);
+
+    if (roomCount === 0 || tenantCount === 0) {
+      console.log('Đang khởi tạo/cập nhật lại danh sách phòng chuẩn mới...');
       
-      // Khu A: 35 phòng (A01 - A35)
-      for (let i = 1; i <= 35; i++) {
+      // Xóa sạch phòng cũ nếu chưa có người thuê để nạp lại danh sách mới
+      await client.query('TRUNCATE TABLE rooms RESTART IDENTITY CASCADE');
+      
+      // 1. Khu A:
+      // Tầng 1: A101 - A114 (14 phòng)
+      for (let i = 1; i <= 14; i++) {
         const num = i < 10 ? `0${i}` : `${i}`;
         await client.query(
           `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [`A${num}`, 'A', 0, 0, 'vacant', 0]
+          [`A1${num}`, 'A', 0, 0, 'vacant', 0]
         );
       }
 
-      // Khu B: 15 phòng (B01 - B15)
+      // Tầng 2: A201 - A208 (8 phòng)
+      for (let i = 1; i <= 8; i++) {
+        const num = i < 10 ? `0${i}` : `${i}`;
+        await client.query(
+          `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [`A2${num}`, 'A', 0, 0, 'vacant', 0]
+        );
+      }
+
+      // Tầng 3: A301 - A308 (8 phòng)
+      for (let i = 1; i <= 8; i++) {
+        const num = i < 10 ? `0${i}` : `${i}`;
+        await client.query(
+          `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [`A3${num}`, 'A', 0, 0, 'vacant', 0]
+        );
+      }
+
+      // Tầng 4: A401 - A406 (6 phòng)
+      for (let i = 1; i <= 6; i++) {
+        const num = i < 10 ? `0${i}` : `${i}`;
+        await client.query(
+          `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [`A4${num}`, 'A', 0, 0, 'vacant', 0]
+        );
+      }
+
+      // 2. Khu B: 15 phòng (B01 - B15)
       for (let i = 1; i <= 15; i++) {
         const num = i < 10 ? `0${i}` : `${i}`;
         await client.query(
@@ -115,7 +149,7 @@ async function initDatabase() {
           [`B${num}`, 'B', 0, 0, 'vacant', 0]
         );
       }
-      console.log('Đã tạo thành công 50 phòng (35 phòng Khu A, 15 phòng Khu B).');
+      console.log('✅ Khởi tạo thành công danh sách phòng chuẩn mới.');
     }
 
     // Seed cài đặt mặc định nếu trống
