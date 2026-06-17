@@ -113,10 +113,10 @@ app.get('/api/rooms/:id', async (req, res) => {
 
 app.put('/api/rooms/:id', async (req, res) => {
   try {
-    const { rent_price, deposit, status } = req.body;
+    const { rent_price, deposit, status, member_count } = req.body;
     const info = await db.prepare(
-      'UPDATE rooms SET rent_price = ?, deposit = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(rent_price, deposit, status, req.params.id);
+      'UPDATE rooms SET rent_price = ?, deposit = ?, status = ?, member_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(rent_price, deposit, status, parseInt(member_count) || 0, req.params.id);
     if (info.changes === 0) return res.status(404).json({ error: 'Không tìm thấy phòng' });
     res.json({ message: 'Cập nhật phòng thành công' });
   } catch (err) {

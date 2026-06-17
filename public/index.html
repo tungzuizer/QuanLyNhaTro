@@ -737,13 +737,19 @@
               <input type="number" id="edit-deposit" class="form-control" min="0" required>
             </div>
           </div>
-          <div class="form-group">
-            <label for="edit-status">Trạng thái phòng</label>
-            <select id="edit-status" class="form-control">
-              <option value="vacant">🟢 Trống</option>
-              <option value="occupied">🟠 Đang thuê</option>
-              <option value="maintenance">🔴 Sửa chữa</option>
-            </select>
+          <div class="form-row">
+            <div class="form-group col">
+              <label for="edit-status">Trạng thái phòng</label>
+              <select id="edit-status" class="form-control">
+                <option value="vacant">🟢 Trống</option>
+                <option value="occupied">🟠 Đang thuê</option>
+                <option value="maintenance">🔴 Sửa chữa</option>
+              </select>
+            </div>
+            <div class="form-group col">
+              <label for="edit-member-count">Số người ở thực tế (tính nước/rác)</label>
+              <input type="number" id="edit-member-count" class="form-control" min="0" required>
+            </div>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-sm btn-success">Lưu lại</button>

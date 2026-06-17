@@ -213,6 +213,7 @@ function registerEventListeners() {
       document.getElementById('edit-rent-price').value = room.rent_price;
       document.getElementById('edit-deposit').value = room.deposit;
       document.getElementById('edit-status').value = room.status;
+      document.getElementById('edit-member-count').value = room.member_count || 0;
       editRoomForm.style.display = 'block';
       btnEditRoomTrigger.style.display = 'none';
     }
@@ -739,6 +740,7 @@ async function handleRoomUpdateSubmit(e) {
   const price = document.getElementById('edit-rent-price').value;
   const deposit = document.getElementById('edit-deposit').value;
   const status = document.getElementById('edit-status').value;
+  const memberCount = document.getElementById('edit-member-count').value;
 
   try {
     await fetchAPI(`/api/rooms/${currentState.selectedRoomId}`, {
@@ -746,7 +748,8 @@ async function handleRoomUpdateSubmit(e) {
       body: JSON.stringify({
         rent_price: parseFloat(price),
         deposit: parseFloat(deposit),
-        status: status
+        status: status,
+        member_count: parseInt(memberCount) || 0
       })
     });
     
