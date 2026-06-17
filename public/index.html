@@ -450,6 +450,7 @@
                     <th>Tiền điện</th>
                     <th>💧 Tiền nước</th>
                     <th>🗑️ Tiền rác</th>
+                    <th>🛂 Tạm trú</th>
                     <th class="col-total">Tổng cần thu</th>
                     <th>Trạng thái</th>
                     <th>Thao tác</th>
@@ -457,7 +458,7 @@
                 </thead>
                 <tbody id="payments-table-body">
                   <tr>
-                    <td colspan="9" class="text-center text-muted" style="padding: 40px;">
+                    <td colspan="10" class="text-center text-muted" style="padding: 40px;">
                       Chọn tháng/năm và bấm "Xem danh sách" để tải dữ liệu
                     </td>
                   </tr>
@@ -664,6 +665,13 @@
                   <span class="help-text">Tự động tính theo số người đang ở trong phòng.</span>
                 </div>
               </div>
+              <div class="form-row">
+                <div class="form-group col">
+                  <label for="setting-residence-price">🛂 Phí tạm trú (VNĐ / người / tháng đầu tiên)</label>
+                  <input type="number" id="setting-residence-price" class="form-control" min="0" placeholder="VD: 50000">
+                  <span class="help-text">Chỉ tự động tính trong tháng đầu tiên khách dời vào.</span>
+                </div>
+              </div>
               <hr style="margin: 20px 0; border-color: var(--border-color);">
               <h4 style="margin-bottom: 14px; font-size: 14px;">&#x1f3e6; Thông tin ngân hàng (dùng trong hóa đơn)</h4>
               <div class="form-group">
@@ -824,13 +832,14 @@
                   <th>Tiền điện</th>
                   <th>💧 Nước</th>
                   <th>🗑️ Rác</th>
+                  <th>🛂 Tạm trú</th>
                   <th>Tổng cộng</th>
                   <th>Trạng thái</th>
                 </tr>
               </thead>
               <tbody id="modal-payment-history-list">
                 <tr>
-                  <td colspan="8" class="text-center text-muted">Chưa có lịch sử hóa đơn cho phòng này</td>
+                  <td colspan="9" class="text-center text-muted">Chưa có lịch sử hóa đơn cho phòng này</td>
                 </tr>
               </tbody>
             </table>

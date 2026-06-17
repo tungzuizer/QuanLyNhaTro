@@ -91,10 +91,11 @@ async function initDatabase() {
       );
     `);
 
-    // Migration: thêm cột water_amount và trash_amount nếu chưa có (cho DB cũ)
+    // Migration: thêm cột water_amount, trash_amount, và residence_amount nếu chưa có (cho DB cũ)
     try {
       await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS water_amount REAL NOT NULL DEFAULT 0`);
       await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS trash_amount REAL NOT NULL DEFAULT 0`);
+      await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS residence_amount REAL NOT NULL DEFAULT 0`);
     } catch(e) { /* columns already exist */ }
 
     // Migration: Đổi tên các phòng Khu B cũ (B01 - B15) sang định dạng tầng mới (B101 - B305) để giữ dữ liệu
@@ -194,6 +195,7 @@ async function initDatabase() {
     await insertSetting('electricity_price', '3500');
     await insertSetting('water_price', '20000');    // VNĐ/người/tháng
     await insertSetting('trash_price', '10000');    // VNĐ/người/tháng
+    await insertSetting('residence_price', '50000'); // VNĐ/người (tháng đầu tiên)
     await insertSetting('bank_name', 'MBBank');
     await insertSetting('bank_account', '099999999999');
     await insertSetting('bank_owner', 'NGUYEN VAN A');

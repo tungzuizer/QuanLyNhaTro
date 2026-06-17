@@ -450,13 +450,18 @@ async function loadSettings() {
       const input = document.getElementById('setting-electric-price');
       if (input) input.value = currentState.electricityPrice;
     }
-    // Tiền nước/rác
+    // Tiền nước/rác/tạm trú
     currentState.waterPrice = parseFloat(settings.water_price) || 20000;
     currentState.trashPrice = parseFloat(settings.trash_price) || 10000;
+    currentState.residencePrice = parseFloat(settings.residence_price) || 50000;
+    
     const waterInput = document.getElementById('setting-water-price');
     const trashInput = document.getElementById('setting-trash-price');
+    const residenceInput = document.getElementById('setting-residence-price');
     if (waterInput) waterInput.value = currentState.waterPrice;
     if (trashInput) trashInput.value = currentState.trashPrice;
+    if (residenceInput) residenceInput.value = currentState.residencePrice;
+    
     // Load bank info into settings form
     const bankName = document.getElementById('setting-bank-name');
     const bankAccount = document.getElementById('setting-bank-account');
@@ -476,6 +481,7 @@ async function handleSettingsSubmit(e) {
   const price = document.getElementById('setting-electric-price').value;
   const waterPrice = document.getElementById('setting-water-price')?.value || '';
   const trashPrice = document.getElementById('setting-trash-price')?.value || '';
+  const residencePrice = document.getElementById('setting-residence-price')?.value || '';
   const bankName = document.getElementById('setting-bank-name')?.value || '';
   const bankAccount = document.getElementById('setting-bank-account')?.value || '';
   const bankOwner = document.getElementById('setting-bank-owner')?.value || '';
@@ -487,6 +493,7 @@ async function handleSettingsSubmit(e) {
         electricity_price: price,
         water_price: waterPrice,
         trash_price: trashPrice,
+        residence_price: residencePrice,
         bank_name: bankName,
         bank_account: bankAccount,
         bank_owner: bankOwner
@@ -495,7 +502,8 @@ async function handleSettingsSubmit(e) {
     currentState.electricityPrice = parseFloat(price);
     currentState.waterPrice = parseFloat(waterPrice) || 20000;
     currentState.trashPrice = parseFloat(trashPrice) || 10000;
-    currentState.bankSettings = { electricity_price: price, water_price: waterPrice, trash_price: trashPrice, bank_name: bankName, bank_account: bankAccount, bank_owner: bankOwner };
+    currentState.residencePrice = parseFloat(residencePrice) || 50000;
+    currentState.bankSettings = { electricity_price: price, water_price: waterPrice, trash_price: trashPrice, residence_price: residencePrice, bank_name: bankName, bank_account: bankAccount, bank_owner: bankOwner };
     showToast('Đã lưu cài đặt thành công', 'success');
   } catch (err) {
     console.error(err);
@@ -644,7 +652,7 @@ function renderRoomPaymentHistory(paymentHistory) {
   container.innerHTML = '';
 
   if (!paymentHistory || paymentHistory.length === 0) {
-    container.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Chưa có lịch sử hóa đơn cho phòng này</td></tr>';
+    container.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Chưa có lịch sử hóa đơn cho phòng này</td></tr>';
     return;
   }
 
@@ -653,6 +661,7 @@ function renderRoomPaymentHistory(paymentHistory) {
     const isPaid = p.is_paid === 1;
     const waterAmt = p.water_amount || 0;
     const trashAmt = p.trash_amount || 0;
+    const residenceAmt = p.residence_amount || 0;
     tr.innerHTML = `
       <td><strong>Tháng ${p.month}/${p.year}</strong></td>
       <td>${p.tenant_name || '<span class="text-muted">Không rõ</span>'}</td>
@@ -660,6 +669,7 @@ function renderRoomPaymentHistory(paymentHistory) {
       <td>${formatVND(p.electricity_amount)}</td>
       <td>${waterAmt > 0 ? formatVND(waterAmt) : '<span class="text-muted">0đ</span>'}</td>
       <td>${trashAmt > 0 ? formatVND(trashAmt) : '<span class="text-muted">0đ</span>'}</td>
+      <td>${residenceAmt > 0 ? formatVND(residenceAmt) : '<span class="text-muted">0đ</span>'}</td>
       <td><strong>${formatVND(p.total_amount)}</strong></td>
       <td>
         <span class="pay-status-badge ${isPaid ? 'paid' : 'unpaid'}">
@@ -1125,7 +1135,8 @@ function updatePaymentStats(data) {
     const elec = r.electricity_amount || 0;
     const water = r.water_amount || 0;
     const trash = r.trash_amount || 0;
-    return rent + elec + water + trash;
+    const residence = r.residence_amount || 0;
+    return rent + elec + water + trash + residence;
   };
 
   const collectedAmt = data
@@ -1150,7 +1161,7 @@ function renderPaymentsTable(data) {
   if (data.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center text-muted" style="padding: 40px;">
+        <td colspan="10" class="text-center text-muted" style="padding: 40px;">
           ✅ Không có phòng nào đang thuê trong tháng này hoặc chưa có dữ liệu
         </td>
       </tr>
@@ -1167,9 +1178,10 @@ function renderPaymentsTable(data) {
     const rentAmt = row.rent_price || 0;
     const waterAmt = row.water_amount || 0;
     const trashAmt = row.trash_amount || 0;
+    const residenceAmt = row.residence_amount || 0;
     const totalAmt = isPaid
-      ? (row.total_amount || (rentAmt + elecAmt + waterAmt + trashAmt))
-      : (rentAmt + elecAmt + waterAmt + trashAmt);
+      ? (row.total_amount || (rentAmt + elecAmt + waterAmt + trashAmt + residenceAmt))
+      : (rentAmt + elecAmt + waterAmt + trashAmt + residenceAmt);
     const tenantNames = row.tenant_names || 'Chưa có thông tin';
     const tenantPhones = row.tenant_phones || '';
     const memberCount = row.member_count || 0;
@@ -1205,6 +1217,12 @@ function renderPaymentsTable(data) {
       <td>
         ${trashAmt > 0
           ? `<span class="text-primary">${formatVND(trashAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.trashPrice || (currentState.trashPrice || 10000))}</div>`
+          : '<span class="text-muted" style="font-size:12px;">0đ</span>'
+        }
+      </td>
+      <td>
+        ${residenceAmt > 0
+          ? `<span class="text-primary">${formatVND(residenceAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.residencePrice || (currentState.residencePrice || 50000))}</div>`
           : '<span class="text-muted" style="font-size:12px;">0đ</span>'
         }
       </td>
@@ -1803,6 +1821,17 @@ function renderInvoiceDocument(data, note) {
         <td>🗑️ Tiền rác</td>
         <td><small>${summary.memberCount || 0} người × ${formatVND(summary.trashPrice || 10000)}/người/tháng</small></td>
         <td class="text-right">${formatVND(summary.trashAmount)}</td>
+      </tr>
+    `;
+  }
+
+  // Row: Phí tạm trú (chỉ hiện khi có phát sinh)
+  if (summary.residenceAmount > 0) {
+    tbody.innerHTML += `
+      <tr>
+        <td>🛂 Phí tạm trú tạm vắng</td>
+        <td><small>${summary.memberCount || 0} người × ${formatVND(summary.residencePrice || 50000)} (tháng đầu tiên)</small></td>
+        <td class="text-right">${formatVND(summary.residenceAmount)}</td>
       </tr>
     `;
   }
