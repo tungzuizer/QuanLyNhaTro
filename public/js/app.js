@@ -1275,6 +1275,7 @@ function renderPaymentsTable(data) {
         <div style="font-weight:500;">${tenantNames}</div>
         ${tenantPhones ? `<div style="font-size:12px;color:var(--neutral-gray)">📞 ${tenantPhones}</div>` : ''}
         ${memberCount > 0 ? `<div style="font-size:11px;color:var(--neutral-gray);margin-top:2px;">👥 ${memberCount} người</div>` : ''}
+        ${row.lease_start_date ? `<div style="font-size:11px;color:var(--neutral-gray);margin-top:2px;">📅 Thuê từ: <strong style="color:var(--neutral-dark)">${formatDate(row.lease_start_date)}</strong></div>` : ''}
       </td>
       <td>${formatVND(rentAmt)}</td>
       <td>

@@ -114,9 +114,35 @@ app.get('/api/rooms/:id', async (req, res) => {
 app.put('/api/rooms/:id', async (req, res) => {
   try {
     const { rent_price, deposit, status, member_count } = req.body;
+    
+    // Nếu chuyển trạng thái thành trống (vacant), tự động xóa sạch người thuê trong phòng
+    if (status === 'vacant') {
+      await db.prepare('DELETE FROM tenants WHERE room_id = ?').run(req.params.id);
+    }
+    
+    // Đếm số lượng người thuê thực tế đăng ký trong DB
+    const countResult = await db.prepare('SELECT COUNT(*) as count FROM tenants WHERE room_id = ?').get(req.params.id);
+    const actualCount = countResult ? countResult.count : 0;
+    
+    // Bảo lưu số người do người dùng nhập thủ công (vì họ có thể chỉ đăng ký 1 người đại diện nhưng thực tế ở đông hơn)
+    let finalMemberCount = parseInt(member_count) || 0;
+    
+    // Nếu phòng có người thuê trong DB nhưng số người nhập lại là 0, tự động đặt tối thiểu là 1
+    if (actualCount > 0 && finalMemberCount === 0) {
+      finalMemberCount = 1;
+    }
+    
+    // Nếu trạng thái là trống (vacant), bắt buộc số người về 0
+    if (status === 'vacant') {
+      finalMemberCount = 0;
+    }
+
+    const finalStatus = finalMemberCount > 0 ? 'occupied' : status;
+
     const info = await db.prepare(
       'UPDATE rooms SET rent_price = ?, deposit = ?, status = ?, member_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(rent_price, deposit, status, parseInt(member_count) || 0, req.params.id);
+    ).run(rent_price, deposit, finalStatus, finalMemberCount, req.params.id);
+    
     if (info.changes === 0) return res.status(404).json({ error: 'Không tìm thấy phòng' });
     res.json({ message: 'Cập nhật phòng thành công' });
   } catch (err) {
@@ -132,12 +158,21 @@ app.post('/api/tenants', async (req, res) => {
     const { room_id, full_name, phone, cccd, start_date, end_date, notes } = req.body;
     if (!room_id || !full_name || !start_date)
       return res.status(400).json({ error: 'Vui lòng điền đầy đủ Họ tên và Ngày bắt đầu' });
+    
     const info = await db.prepare(
       'INSERT INTO tenants (room_id, full_name, phone, cccd, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id'
     ).run(room_id, full_name, phone || null, cccd || null, start_date, end_date || null, notes || null);
+    
+    // Khi thêm người thuê mới: Đảm bảo trạng thái phòng chuyển thành 'occupied'.
+    // Bảo lưu số người hiện có nếu đang > 0. Nếu đang là 0 thì đặt tối thiểu là 1.
+    const room = await db.prepare('SELECT member_count FROM rooms WHERE id = ?').get(room_id);
+    const currentMembers = room ? room.member_count : 0;
+    const newMembers = currentMembers === 0 ? 1 : currentMembers;
+    
     await db.prepare(
-      "UPDATE rooms SET member_count = member_count + 1, status = CASE WHEN status = 'vacant' THEN 'occupied' ELSE status END, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-    ).run(room_id);
+      "UPDATE rooms SET member_count = ?, status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).run(newMembers, room_id);
+    
     res.status(201).json({ id: info.lastInsertRowid, message: 'Thêm người thuê thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -163,11 +198,25 @@ app.delete('/api/tenants/:id', async (req, res) => {
   try {
     const tenant = await db.prepare('SELECT room_id FROM tenants WHERE id = ?').get(req.params.id);
     if (!tenant) return res.status(404).json({ error: 'Không tìm thấy người thuê' });
+    
     await db.prepare('DELETE FROM tenants WHERE id = ?').run(req.params.id);
-    await db.prepare('UPDATE rooms SET member_count = MAX(0, member_count - 1), updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(tenant.room_id);
-    const room = await db.prepare('SELECT member_count, status FROM rooms WHERE id = ?').get(tenant.room_id);
-    if (room && room.member_count === 0 && room.status === 'occupied')
-      await db.prepare("UPDATE rooms SET status = 'vacant' WHERE id = ?").run(tenant.room_id);
+    
+    // Kiểm tra số lượng người thuê còn lại trong DB
+    const countResult = await db.prepare('SELECT COUNT(*) as count FROM tenants WHERE room_id = ?').get(tenant.room_id);
+    const actualCount = countResult ? countResult.count : 0;
+    
+    if (actualCount === 0) {
+      // Nếu không còn bất kỳ người thuê đăng ký nào, đưa trạng thái phòng về trống và số người về 0
+      await db.prepare(
+        "UPDATE rooms SET member_count = 0, status = 'vacant', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+      ).run(tenant.room_id);
+    } else {
+      // Nếu vẫn còn người thuê khác, giữ nguyên trạng thái occupied và bảo lưu số người ở thực tế hiện tại
+      await db.prepare(
+        "UPDATE rooms SET status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+      ).run(tenant.room_id);
+    }
+    
     res.json({ message: 'Xóa người thuê thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
