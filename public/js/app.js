@@ -301,7 +301,7 @@ function registerEventListeners() {
       zoneBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       const zone = btn.getAttribute('data-zone');
-      if (zone === 'A') {
+      if (zone === 'A' || zone === 'B') {
         floorFilterContainer.style.display = 'block';
       } else {
         floorFilterContainer.style.display = 'none';
@@ -522,9 +522,13 @@ async function loadRoomsData() {
   try {
     let rooms = await fetchAPI(url);
     
-    // Nếu chọn Khu A và chọn tầng cụ thể, lọc ở client
-    if (zone === 'A' && floor !== 'ALL') {
-      rooms = rooms.filter(room => room.room_code.startsWith(`A${floor}`));
+    // Nếu chọn tầng cụ thể, lọc ở client
+    if (floor !== 'ALL') {
+      if (zone === 'A') {
+        rooms = rooms.filter(room => room.room_code.startsWith(`A${floor}`));
+      } else if (zone === 'B') {
+        rooms = rooms.filter(room => room.room_code.startsWith(`B${floor}`));
+      }
     }
     
     currentState.rooms = rooms;

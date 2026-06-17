@@ -97,6 +97,26 @@ async function initDatabase() {
       await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS trash_amount REAL NOT NULL DEFAULT 0`);
     } catch(e) { /* columns already exist */ }
 
+    // Migration: Đổi tên các phòng Khu B cũ (B01 - B15) sang định dạng tầng mới (B101 - B305) để giữ dữ liệu
+    try {
+      const bRooms = await client.query("SELECT id, room_code FROM rooms WHERE zone = 'B' AND LENGTH(room_code) <= 3 ORDER BY room_code ASC");
+      for (const r of bRooms.rows) {
+        const match = r.room_code.match(/^B(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num >= 1 && num <= 15) {
+            const floor = Math.floor((num - 1) / 5) + 1;
+            const idx = ((num - 1) % 5) + 1;
+            const newCode = `B${floor}0${idx}`;
+            await client.query("UPDATE rooms SET room_code = $1 WHERE id = $2", [newCode, r.id]);
+            console.log(`Đã chuyển đổi phòng ${r.room_code} -> ${newCode}`);
+          }
+        }
+      }
+    } catch(e) {
+      console.error("Lỗi khi chạy migration đổi tên phòng khu B:", e);
+    }
+
     await client.query('COMMIT');
     console.log('✅ Đã tạo các bảng dữ liệu trên Postgres thành công.');
 
@@ -149,13 +169,15 @@ async function initDatabase() {
         );
       }
 
-      // 2. Khu B: 15 phòng (B01 - B15)
-      for (let i = 1; i <= 15; i++) {
-        const num = i < 10 ? `0${i}` : `${i}`;
-        await client.query(
-          `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [`B${num}`, 'B', 0, 0, 'vacant', 0]
-        );
+      // 2. Khu B: 15 phòng, mỗi tầng 5 phòng (B101-B105, B201-B205, B301-B305)
+      for (let floor = 1; floor <= 3; floor++) {
+        for (let i = 1; i <= 5; i++) {
+          const roomCode = `B${floor}0${i}`;
+          await client.query(
+            `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [roomCode, 'B', 0, 0, 'vacant', 0]
+          );
+        }
       }
       console.log('✅ Khởi tạo thành công danh sách phòng chuẩn mới.');
     }
@@ -196,7 +218,6 @@ class PostgresStatement {
     
     // Một số từ khóa đặc trưng của SQLite sang Postgres
     newSql = newSql.replace(/\bGROUP_CONCAT\(([^,]+),\s*([^)]+)\)/gi, 'STRING_AGG($1, $2)');
-    newSql = newSql.replace(/\bMAX\b/gi, 'GREATEST');
     this.sql = newSql;
   }
 
