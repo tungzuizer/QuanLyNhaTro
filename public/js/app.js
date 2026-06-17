@@ -1445,6 +1445,13 @@ function initBulkDropdowns() {
     if (i === cy) opt.selected = true;
     ySelect.appendChild(opt);
   }
+
+  // Tự động tải lại khi đổi tháng/năm
+  mSelect.addEventListener('change', () => loadBulkData());
+  ySelect.addEventListener('change', () => loadBulkData());
+
+  // Tự động tải ngay lần đầu
+  loadBulkData();
 }
 
 async function loadBulkData() {
@@ -1486,8 +1493,14 @@ function renderBulkTable(data, month, year) {
   data.forEach((room, idx) => {
     const hasCurrentData = !!room.current;
     const isVacant = room.status !== 'occupied';
-    const oldReading = hasCurrentData ? room.current.old_reading : room.last_reading;
+    // Nếu tháng hiện tại đã có dữ liệu → dùng old_reading đã lưu
+    // Nếu tháng mới → dùng new_reading của tháng trước làm số cũ (tự động)
+    const oldReading = hasCurrentData ? room.current.old_reading : (room.last_reading || 0);
     const savedNewReading = hasCurrentData ? room.current.new_reading : '';
+    // Label giải thích nguồn số cũ
+    const oldReadingSource = hasCurrentData
+      ? `Số cũ đã lưu tháng ${month}/${year}`
+      : (room.last_reading > 0 ? `Lấy từ số mới tháng trước` : 'Chưa có dữ liệu tháng trước');
 
     const tr = document.createElement('tr');
     tr.setAttribute('data-room-id', room.id);
@@ -1517,9 +1530,11 @@ function renderBulkTable(data, month, year) {
           data-idx="${idx}"
           value="${oldReading}"
           step="1"
-          style="width: 85px; text-align: center; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 5px 8px; font-weight: 500;"
-          ${isVacant ? 'disabled style="opacity:0.4; width: 85px; text-align: center;"' : ''}
+          title="${oldReadingSource}"
+          style="width: 85px; text-align: center; border: 1px solid ${hasCurrentData ? 'var(--border-color)' : '#f59e0b'}; border-radius: var(--radius-md); padding: 5px 8px; font-weight: 500; background: ${hasCurrentData ? '' : '#fffbeb'};"
+          ${isVacant ? 'disabled' : ''}
         >
+        ${!hasCurrentData && room.last_reading > 0 ? `<div style="font-size:10px;color:#92400e;margin-top:2px;">↑ từ tháng trước</div>` : ''}
       </td>
       <td>
         <input
