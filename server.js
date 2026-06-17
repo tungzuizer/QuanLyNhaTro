@@ -46,15 +46,84 @@ app.get('/api/dashboard', async (req, res) => {
     ).get(prevYear, prevMonth);
     const prevMonthElec = prevMonthElecRes ? prevMonthElecRes.sum : 0;
 
-    const paymentStats = await db.prepare(`
+    // Lấy giá nước/rác/tạm trú từ settings
+    const settingsList = await db.prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?)').all('water_price', 'trash_price', 'electricity_price', 'residence_price');
+    const settingsMap = {};
+    settingsList.forEach(s => { settingsMap[s.key] = parseFloat(s.value) || 0; });
+    const waterPrice = settingsMap['water_price'] || 20000;
+    const trashPrice = settingsMap['trash_price'] || 10000;
+    const residencePrice = settingsMap['residence_price'] || 50000;
+
+    // Tính toán số liệu thu tiền đồng bộ 100% với tab danh sách thu tiền
+    const rows = await db.prepare(`
       SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN is_paid = 1 THEN 1 ELSE 0 END) as paid_count,
-        SUM(CASE WHEN is_paid = 0 THEN 1 ELSE 0 END) as unpaid_count,
-        SUM(CASE WHEN is_paid = 1 THEN total_amount ELSE 0 END) as collected,
-        SUM(CASE WHEN is_paid = 0 THEN total_amount ELSE 0 END) as pending
-      FROM rent_payments WHERE year = ? AND month = ?
-    `).get(currentYear, currentMonth);
+        r.id as room_id,
+        r.room_code,
+        COALESCE(p.rent_amount, r.rent_price) as rent_price,
+        r.status as room_status,
+        r.member_count,
+        (SELECT MIN(start_date) FROM tenants WHERE room_id = r.id) as lease_start_date,
+        COALESCE(p.electricity_amount, e.total_cost) as electricity_amount,
+        p.is_paid,
+        p.rent_amount,
+        p.electricity_amount as p_elec_amount,
+        p.water_amount,
+        p.trash_amount,
+        p.residence_amount,
+        p.total_amount
+      FROM rooms r
+      LEFT JOIN electricity_readings e ON e.room_id = r.id AND e.year = ? AND e.month = ?
+      LEFT JOIN rent_payments p ON p.room_id = r.id AND p.year = ? AND p.month = ?
+      WHERE r.status = 'occupied' OR p.id IS NOT NULL OR e.id IS NOT NULL
+      GROUP BY r.id, p.id, e.id
+    `).all(currentYear, currentMonth, currentYear, currentMonth);
+
+    let paidCount = 0;
+    let unpaidCount = 0;
+    let collected = 0;
+    let pending = 0;
+
+    rows.forEach(row => {
+      const isPaid = row.is_paid === 1;
+      const memberCount = row.member_count || 0;
+
+      // Xác định tháng đầu tiên của hợp đồng
+      let isFirstMonth = false;
+      if (row.lease_start_date) {
+        const leaseDate = new Date(row.lease_start_date);
+        if (!isNaN(leaseDate.getTime())) {
+          const leaseYear = leaseDate.getFullYear();
+          const leaseMonth = leaseDate.getMonth() + 1;
+          if (leaseYear === currentYear && leaseMonth === currentMonth) {
+            isFirstMonth = true;
+          }
+        }
+      }
+
+      const rentAmt = row.rent_price || 0;
+      const elecAmt = row.electricity_amount || 0;
+      const waterAmt = (isPaid && row.water_amount !== null && row.water_amount !== undefined)
+        ? row.water_amount
+        : waterPrice * memberCount;
+      const trashAmt = (isPaid && row.trash_amount !== null && row.trash_amount !== undefined)
+        ? row.trash_amount
+        : trashPrice * memberCount;
+      const residenceAmt = (isPaid && row.residence_amount !== null && row.residence_amount !== undefined)
+        ? row.residence_amount
+        : (isFirstMonth ? residencePrice * memberCount : 0);
+
+      const totalAmt = isPaid
+        ? (row.total_amount || (rentAmt + elecAmt + waterAmt + trashAmt + residenceAmt))
+        : (rentAmt + elecAmt + waterAmt + trashAmt + residenceAmt);
+
+      if (isPaid) {
+        paidCount++;
+        collected += totalAmt;
+      } else {
+        unpaidCount++;
+        pending += totalAmt;
+      }
+    });
 
     res.json({
       totalRooms, occupiedRooms, vacantRooms, maintenanceRooms,
@@ -63,11 +132,11 @@ app.get('/api/dashboard', async (req, res) => {
       electricityMonth: totalElectricityCost > 0 ? currentMonth : prevMonth,
       electricityYear: totalElectricityCost > 0 ? currentYear : prevYear,
       paymentStats: {
-        total: paymentStats ? (paymentStats.total || 0) : 0,
-        paidCount: paymentStats ? (paymentStats.paid_count || 0) : 0,
-        unpaidCount: paymentStats ? (paymentStats.unpaid_count || 0) : 0,
-        collected: paymentStats ? (paymentStats.collected || 0) : 0,
-        pending: paymentStats ? (paymentStats.pending || 0) : 0
+        total: rows.length,
+        paidCount,
+        unpaidCount,
+        collected,
+        pending
       }
     });
   } catch (err) {

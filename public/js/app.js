@@ -438,7 +438,7 @@ async function loadDashboardData() {
     }
 
     // Hiển thị thống kê thu tiền
-    if (data.paymentStats && data.paymentStats.total > 0) {
+    if (data.paymentStats) {
       document.getElementById('stat-collected').textContent = formatVND(data.paymentStats.collected);
       document.getElementById('stat-paid-count').textContent = `${data.paymentStats.paidCount} phòng đã đóng`;
       document.getElementById('stat-pending').textContent = formatVND(data.paymentStats.pending);
