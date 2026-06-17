@@ -12,13 +12,46 @@ let currentState = {
 
 // Khởi chạy khi DOM load xong
 document.addEventListener('DOMContentLoaded', () => {
-  initApp();
+  checkAuthentication();
 });
+
+// ==========================================
+// XÁC THỰC MẬT KHẨU
+// ==========================================
+function checkAuthentication() {
+  const overlay = document.getElementById('login-overlay');
+  const form = document.getElementById('login-form');
+  const passwordInput = document.getElementById('login-password');
+  const errorMsg = document.getElementById('login-error');
+
+  const isAuthenticated = localStorage.getItem('isAuthenticated');
+  if (isAuthenticated === 'true') {
+    overlay.style.display = 'none';
+    initApp();
+  } else {
+    overlay.style.display = 'flex';
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (passwordInput.value === 'tungduong12') {
+        localStorage.setItem('isAuthenticated', 'true');
+        overlay.style.display = 'none';
+        initApp();
+      } else {
+        errorMsg.style.display = 'block';
+        passwordInput.value = '';
+        passwordInput.focus();
+      }
+    });
+  }
+}
 
 // ==========================================
 // KHỞI TẠO ỨNG DỤNG
 // ==========================================
 function initApp() {
+  // Khởi tạo menu điều hướng trên mobile
+  initMobileMenu();
+
   // 1. Quản lý Router / Tabs
   initTabs();
 
@@ -83,6 +116,33 @@ function initTabs() {
       setTimeout(() => {
         document.getElementById('search-input').focus();
       }, 100);
+    });
+  }
+}
+
+function initMobileMenu() {
+  const mobileToggle = document.getElementById('mobile-menu-toggle');
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const navItems = document.querySelectorAll('.nav-item');
+
+  if (mobileToggle && sidebar && overlay) {
+    mobileToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('active');
+      overlay.classList.toggle('active');
+    });
+
+    overlay.addEventListener('click', () => {
+      sidebar.classList.remove('active');
+      overlay.classList.remove('active');
+    });
+
+    // Khi chọn 1 mục lục trên mobile, tự động đóng menu
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        sidebar.classList.remove('active');
+        overlay.classList.remove('active');
+      });
     });
   }
 }
