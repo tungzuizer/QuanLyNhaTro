@@ -1964,3 +1964,88 @@ async function downloadInvoiceAsImage() {
     showToast('Có lỗi xảy ra khi tạo ảnh hóa đơn', 'error');
   }
 }
+
+// Chia sẻ hóa đơn qua Zalo (dùng Web Share API trên mobile)
+async function shareInvoiceViaZalo() {
+  const element = document.getElementById('invoice-document');
+  if (!element) return;
+
+  showToast('Đang chuẩn bị hóa đơn để chia sẻ...', 'info');
+
+  // Nhân bản hóa đơn ra ngoài màn hình để render đúng kích thước
+  const clone = element.cloneNode(true);
+  clone.style.position = 'fixed';
+  clone.style.top = '-9999px';
+  clone.style.left = '-9999px';
+  clone.style.width = '750px';
+  clone.style.maxWidth = '750px';
+  clone.style.minWidth = '750px';
+  clone.style.boxSizing = 'border-box';
+  clone.style.display = 'block';
+  clone.style.margin = '0';
+  clone.style.transform = 'none';
+  document.body.appendChild(clone);
+
+  try {
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const canvas = await html2canvas(clone, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: 750
+    });
+    document.body.removeChild(clone);
+
+    const roomCode = document.getElementById('inv-room-code')?.textContent || 'phong';
+    const period = document.getElementById('inv-period-label')?.textContent || 'thang';
+    const cleanPeriod = period.replace(/Tháng\s*/gi, '').trim().replace('/', '_');
+    const cleanRoom = roomCode.replace(/Phòng\s*/gi, '').trim();
+    const filename = `HoaDon_Phong_${cleanRoom}_${cleanPeriod}.png`;
+
+    // Chuyển canvas thành Blob (file ảnh)
+    canvas.toBlob(async (blob) => {
+      const file = new File([blob], filename, { type: 'image/png' });
+
+      // Kiểm tra thiết bị có hỗ trợ Web Share API với file không
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        // Mobile: hiện menu chia sẻ hệ thống (Zalo, Messenger, v.v.)
+        try {
+          await navigator.share({
+            files: [file],
+            title: `Hóa đơn ${roomCode}`,
+            text: `Hóa đơn tiền thuê ${roomCode} — ${period} từ Nhà Trọ LISO`
+          });
+          showToast('Chia sẻ hóa đơn thành công!', 'success');
+        } catch (shareErr) {
+          if (shareErr.name !== 'AbortError') {
+            // Người dùng không hủy → lỗi thật → fallback tải về
+            _downloadBlobAsFile(blob, filename);
+            showToast('Đã tải ảnh — hãy gửi qua Zalo thủ công nhé!', 'info');
+          }
+        }
+      } else {
+        // Desktop hoặc trình duyệt không hỗ trợ → tải ảnh về
+        _downloadBlobAsFile(blob, filename);
+        showToast('Đã tải ảnh hóa đơn — hãy gửi file này qua Zalo cho khách!', 'info');
+      }
+    }, 'image/png');
+
+  } catch (err) {
+    if (clone.parentNode) document.body.removeChild(clone);
+    console.error('Lỗi khi tạo ảnh chia sẻ:', err);
+    showToast('Có lỗi xảy ra khi chuẩn bị hóa đơn', 'error');
+  }
+}
+
+// Helper: tải Blob thành file
+function _downloadBlobAsFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+

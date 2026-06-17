@@ -358,6 +358,9 @@ body {
 .btn-success { background-color: var(--success); color: var(--white); }
 .btn-success:hover { background-color: hsl(142, 70%, 30%); }
 
+.btn-zalo { background-color: #0068ff; color: #fff; }
+.btn-zalo:hover { background-color: #0054cc; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,104,255,0.35); }
+
 .btn-outline-secondary { background-color: transparent; color: var(--neutral-gray); border-color: var(--border-color); }
 .btn-outline-secondary:hover { color: var(--neutral-dark); border-color: var(--neutral-gray); }
 
