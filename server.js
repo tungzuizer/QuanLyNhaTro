@@ -78,23 +78,39 @@ app.get('/api/dashboard', async (req, res) => {
       GROUP BY r.id, p.id, e.id
     `).all(currentYear, currentMonth, currentYear, currentMonth);
 
+    const filteredRows = rows.filter(row => {
+      if (row.lease_start_date) {
+        const leaseDate = new Date(row.lease_start_date);
+        if (!isNaN(leaseDate.getTime())) {
+          const leaseYear = leaseDate.getFullYear();
+          const leaseMonth = leaseDate.getMonth() + 1;
+          // Nếu thuê bắt đầu từ tháng này hoặc tương lai, và chưa thanh toán, thì không tính tiền tháng này
+          if ((leaseYear > currentYear || (leaseYear === currentYear && leaseMonth >= currentMonth)) && row.is_paid !== 1) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+
     let paidCount = 0;
     let unpaidCount = 0;
     let collected = 0;
     let pending = 0;
 
-    rows.forEach(row => {
+    filteredRows.forEach(row => {
       const isPaid = row.is_paid === 1;
       const memberCount = row.member_count || 0;
 
-      // Xác định tháng đầu tiên của hợp đồng
+      // Xác định tháng đầu tiên thu tiền (sau tháng bắt đầu hợp đồng 1 tháng)
       let isFirstMonth = false;
       if (row.lease_start_date) {
         const leaseDate = new Date(row.lease_start_date);
         if (!isNaN(leaseDate.getTime())) {
           const leaseYear = leaseDate.getFullYear();
           const leaseMonth = leaseDate.getMonth() + 1;
-          if (leaseYear === currentYear && leaseMonth === currentMonth) {
+          const diffMonths = (currentYear - leaseYear) * 12 + (currentMonth - leaseMonth);
+          if (diffMonths === 1) {
             isFirstMonth = true;
           }
         }
@@ -504,19 +520,37 @@ app.get('/api/payments', async (req, res) => {
         r.room_code ASC
     `).all(parseInt(year), parseInt(month), parseInt(year), parseInt(month));
 
+    const filteredRows = rows.filter(row => {
+      if (row.lease_start_date) {
+        const leaseDate = new Date(row.lease_start_date);
+        if (!isNaN(leaseDate.getTime())) {
+          const leaseYear = leaseDate.getFullYear();
+          const leaseMonth = leaseDate.getMonth() + 1;
+          const billingYear = parseInt(year);
+          const billingMonth = parseInt(month);
+          // Nếu thuê bắt đầu từ tháng này hoặc tương lai, và chưa thanh toán, thì không tính tiền tháng này
+          if ((leaseYear > billingYear || (leaseYear === billingYear && leaseMonth >= billingMonth)) && row.is_paid !== 1) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+
     // Gắn waterAmount, trashAmount, residenceAmount, computedTotal cho mỗi dòng
-    const enrichedRows = rows.map(row => {
+    const enrichedRows = filteredRows.map(row => {
       const memberCount = row.member_count || 0;
       const isPaid = row.is_paid === 1;
 
-      // Xác định tháng đầu tiên của hợp đồng
+      // Xác định tháng đầu tiên thu tiền (sau tháng bắt đầu hợp đồng 1 tháng)
       let isFirstMonth = false;
       if (row.lease_start_date) {
         const leaseDate = new Date(row.lease_start_date);
         if (!isNaN(leaseDate.getTime())) {
           const leaseYear = leaseDate.getFullYear();
           const leaseMonth = leaseDate.getMonth() + 1;
-          if (leaseYear === parseInt(year) && leaseMonth === parseInt(month)) {
+          const diffMonths = (parseInt(year) - leaseYear) * 12 + (parseInt(month) - leaseMonth);
+          if (diffMonths === 1) {
             isFirstMonth = true;
           }
         }
@@ -577,7 +611,7 @@ app.post('/api/payments/mark', async (req, res) => {
     const residencePrice = settingsMap['residence_price'] || 50000;
     const memberCount = room.member_count || 0;
 
-    // Kiểm tra tháng đầu tiên
+    // Kiểm tra tháng đầu tiên thu tiền
     const earliestTenant = await db.prepare('SELECT MIN(start_date) as start_date FROM tenants WHERE room_id = ?').get(room_id);
     let isFirstMonth = false;
     if (earliestTenant && earliestTenant.start_date) {
@@ -585,7 +619,8 @@ app.post('/api/payments/mark', async (req, res) => {
       if (!isNaN(leaseDate.getTime())) {
         const leaseYear = leaseDate.getFullYear();
         const leaseMonth = leaseDate.getMonth() + 1;
-        if (leaseYear === parseInt(year) && leaseMonth === parseInt(month)) {
+        const diffMonths = (parseInt(year) - leaseYear) * 12 + (parseInt(month) - leaseMonth);
+        if (diffMonths === 1) {
           isFirstMonth = true;
         }
       }
@@ -700,8 +735,26 @@ app.get('/api/invoice', async (req, res) => {
     const settings = {};
     settingsList.forEach(s => { settings[s.key] = s.value; });
 
-    const rentAmount = room.rent_price || 0;
-    const elecAmount = elec ? elec.total_cost : 0;
+    // Kiểm tra xem có phải tháng đầu tiên hoặc tháng bắt đầu thuê không
+    const earliestTenant = await db.prepare('SELECT MIN(start_date) as start_date FROM tenants WHERE room_id = ?').get(room_id);
+    let isFirstMonth = false;
+    let isExcludedMonth = false;
+    if (earliestTenant && earliestTenant.start_date) {
+      const leaseDate = new Date(earliestTenant.start_date);
+      if (!isNaN(leaseDate.getTime())) {
+        const leaseYear = leaseDate.getFullYear();
+        const leaseMonth = leaseDate.getMonth() + 1;
+        const diffMonths = (parseInt(year) - leaseYear) * 12 + (parseInt(month) - leaseMonth);
+        if (diffMonths === 1) {
+          isFirstMonth = true;
+        } else if (diffMonths <= 0) {
+          isExcludedMonth = true;
+        }
+      }
+    }
+
+    const rentAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (room.rent_price || 0);
+    const elecAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (elec ? elec.total_cost : 0);
 
     // Lấy giá nước/rác/tạm trú
     const waterPrice = parseFloat(settings['water_price']) || 20000;
@@ -709,23 +762,9 @@ app.get('/api/invoice', async (req, res) => {
     const residencePrice = parseFloat(settings['residence_price']) || 50000;
     const memberCount = room.member_count || 0; // Sửa lỗi ở đây: Sử dụng room.member_count thực tế thay vì đếm số tenants
 
-    // Kiểm tra xem có phải tháng đầu tiên không
-    const earliestTenant = await db.prepare('SELECT MIN(start_date) as start_date FROM tenants WHERE room_id = ?').get(room_id);
-    let isFirstMonth = false;
-    if (earliestTenant && earliestTenant.start_date) {
-      const leaseDate = new Date(earliestTenant.start_date);
-      if (!isNaN(leaseDate.getTime())) {
-        const leaseYear = leaseDate.getFullYear();
-        const leaseMonth = leaseDate.getMonth() + 1;
-        if (leaseYear === parseInt(year) && leaseMonth === parseInt(month)) {
-          isFirstMonth = true;
-        }
-      }
-    }
-
-    const waterAmount = payment ? (payment.water_amount || 0) : waterPrice * memberCount;
-    const trashAmount = payment ? (payment.trash_amount || 0) : trashPrice * memberCount;
-    const residenceAmount = payment ? (payment.residence_amount || 0) : (isFirstMonth ? residencePrice * memberCount : 0);
+    const waterAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (payment ? (payment.water_amount || 0) : waterPrice * memberCount);
+    const trashAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (payment ? (payment.trash_amount || 0) : trashPrice * memberCount);
+    const residenceAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (payment ? (payment.residence_amount || 0) : (isFirstMonth ? residencePrice * memberCount : 0));
     const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount;
 
     res.json({
