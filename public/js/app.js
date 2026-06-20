@@ -81,7 +81,6 @@ function initApp() {
     }
   }
 
-  // Khôi phục phòng đang chọn trong tab điện
   const savedElecRoom = localStorage.getItem('selectedElecRoomId');
   if (savedElecRoom) {
     setTimeout(() => {
@@ -107,7 +106,7 @@ function initApp() {
 // ==========================================
 function initTabs() {
   const navItems = document.querySelectorAll('.nav-item');
-  
+
   navItems.forEach(item => {
     item.addEventListener('click', (e) => {
       e.preventDefault();
@@ -216,7 +215,7 @@ function registerEventListeners() {
 
   const btnEditRoomTrigger = document.getElementById('btn-edit-room-trigger');
   const btnCancelEditRoom = document.getElementById('btn-cancel-edit-room');
-  
+
   btnEditRoomTrigger.addEventListener('click', () => {
     if (currentState.selectedRoomData) {
       const room = currentState.selectedRoomData.room;
@@ -248,7 +247,7 @@ function registerEventListeners() {
     document.getElementById('tenant-phone').value = '';
     document.getElementById('tenant-cccd').value = '';
     document.getElementById('tenant-notes').value = '';
-    
+
     // Set ngày bắt đầu là hôm nay
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('tenant-start-date').value = today;
@@ -294,7 +293,7 @@ function registerEventListeners() {
   // --- TÌM KIẾM ---
   const btnSearchTrigger = document.getElementById('btn-search-trigger');
   const searchInput = document.getElementById('search-input');
-  
+
   btnSearchTrigger.addEventListener('click', triggerGlobalSearch);
   searchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
@@ -351,7 +350,7 @@ async function fetchAPI(endpoint, options = {}) {
       },
       ...options
     });
-    
+
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error || `Lỗi hệ thống (${res.status})`);
@@ -370,7 +369,7 @@ function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  
+
   let icon = 'ℹ️';
   if (type === 'success') icon = '✅';
   if (type === 'error') icon = '❌';
@@ -429,10 +428,10 @@ async function loadDashboardData() {
     document.getElementById('stat-vacant-rooms').textContent = data.vacantRooms;
     document.getElementById('stat-occupied-rooms').textContent = data.occupiedRooms;
     document.getElementById('stat-maintenance-rooms').textContent = data.maintenanceRooms;
-    
+
     document.getElementById('stat-total-rent').textContent = formatVND(data.totalRentCost);
     document.getElementById('stat-total-electric').textContent = formatVND(data.totalElectricityCost);
-    
+
     if (data.electricityMonth) {
       document.getElementById('stat-electric-month-label').textContent = `Dữ liệu tháng ${data.electricityMonth}/${data.electricityYear}`;
     }
@@ -465,7 +464,7 @@ async function loadSettings() {
     currentState.trashPrice = parseFloat(settings.trash_price) || 10000;
     currentState.residencePrice = parseFloat(settings.residence_price) || 50000;
     currentState.paymentDueDay = parseInt(settings.payment_due_day) || 5;
-    
+
     const waterInput = document.getElementById('setting-water-price');
     const trashInput = document.getElementById('setting-trash-price');
     const residenceInput = document.getElementById('setting-residence-price');
@@ -474,7 +473,7 @@ async function loadSettings() {
     if (trashInput) trashInput.value = currentState.trashPrice;
     if (residenceInput) residenceInput.value = currentState.residencePrice;
     if (dueDayInput) dueDayInput.value = currentState.paymentDueDay;
-    
+
     // Load bank info into settings form
     const bankName = document.getElementById('setting-bank-name');
     const bankAccount = document.getElementById('setting-bank-account');
@@ -500,7 +499,7 @@ async function handleSettingsSubmit(e) {
   const bankName = document.getElementById('setting-bank-name')?.value || '';
   const bankAccount = document.getElementById('setting-bank-account')?.value || '';
   const bankOwner = document.getElementById('setting-bank-owner')?.value || '';
-  
+
   try {
     await fetchAPI('/api/settings', {
       method: 'PUT',
@@ -543,14 +542,14 @@ async function loadRoomsData() {
   const params = [];
   if (zone !== 'ALL') params.push(`zone=${zone}`);
   if (status !== 'ALL') params.push(`status=${status}`);
-  
+
   if (params.length > 0) {
     url += '?' + params.join('&');
   }
 
   try {
     let rooms = await fetchAPI(url);
-    
+
     // Nếu chọn tầng cụ thể, lọc ở client
     if (floor !== 'ALL') {
       if (zone === 'A') {
@@ -559,7 +558,7 @@ async function loadRoomsData() {
         rooms = rooms.filter(room => room.room_code.startsWith(`B${floor}`));
       }
     }
-    
+
     currentState.rooms = rooms;
     renderRoomsGrid(rooms);
   } catch (err) {
@@ -579,7 +578,7 @@ function renderRoomsGrid(rooms) {
   rooms.forEach(room => {
     const card = document.createElement('div');
     card.className = `room-card status-${room.status}`;
-    
+
     let statusText = 'Trống';
     if (room.status === 'occupied') statusText = 'Đang thuê';
     if (room.status === 'maintenance') statusText = 'Sửa chữa';
@@ -603,14 +602,14 @@ function renderRoomsGrid(rooms) {
 // ==========================================
 async function openRoomDetailModal(roomId) {
   currentState.selectedRoomId = roomId;
-  
+
   // Reset form hiển thị
   document.getElementById('edit-room-form').style.display = 'none';
   document.getElementById('btn-edit-room-trigger').style.display = 'block';
   document.getElementById('tenant-form').style.display = 'none';
 
   await refreshRoomModalData();
-  
+
   document.getElementById('room-detail-modal').classList.add('active');
 }
 
@@ -632,13 +631,13 @@ async function refreshRoomModalData() {
   try {
     const data = await fetchAPI(`/api/rooms/${currentState.selectedRoomId}`);
     currentState.selectedRoomData = data;
-    
+
     const room = data.room;
-    
+
     // Bind thông tin phòng
     document.getElementById('modal-room-title').textContent = `Phòng ${room.room_code}`;
     document.getElementById('modal-room-zone').textContent = `Khu ${room.zone}`;
-    
+
     const statusBadge = document.getElementById('modal-room-status-badge');
     statusBadge.className = 'badge';
     if (room.status === 'vacant') {
@@ -736,7 +735,7 @@ function renderTenantsList(tenants) {
     card.querySelector('.tenant-name-heading').textContent = tenant.full_name;
     card.querySelector('.tenant-phone-label').textContent = tenant.phone || 'Chưa nhập';
     card.querySelector('.tenant-cccd-label').textContent = tenant.cccd || 'Chưa nhập';
-    
+
     if (tenant.notes) {
       const notesEl = card.querySelector('.tenant-notes-label');
       notesEl.textContent = `📝 ${tenant.notes}`;
@@ -782,11 +781,11 @@ async function handleRoomUpdateSubmit(e) {
         member_count: parseInt(memberCount) || 0
       })
     });
-    
+
     showToast('Cập nhật thông tin phòng thành công', 'success');
     document.getElementById('edit-room-form').style.display = 'none';
     document.getElementById('btn-edit-room-trigger').style.display = 'block';
-    
+
     // Refresh dữ liệu
     refreshRoomModalData();
   } catch (err) {
@@ -797,7 +796,7 @@ async function handleRoomUpdateSubmit(e) {
 // --- NGƯỜI THUÊ SUBMIT ---
 async function handleTenantSubmit(e) {
   e.preventDefault();
-  
+
   const tenantId = document.getElementById('tenant-id').value;
   const body = {
     room_id: currentState.selectedRoomId,
@@ -827,7 +826,7 @@ async function handleTenantSubmit(e) {
     }
 
     document.getElementById('tenant-form').style.display = 'none';
-    
+
     // Refresh modal
     refreshRoomModalData();
   } catch (err) {
@@ -836,12 +835,12 @@ async function handleTenantSubmit(e) {
 }
 
 // Gọi mở form sửa Tenant
-window.editTenant = function(tenant) {
+window.editTenant = function (tenant) {
   document.getElementById('tenant-id').value = tenant.id;
   document.getElementById('tenant-name').value = tenant.full_name;
   document.getElementById('tenant-phone').value = tenant.phone || '';
   document.getElementById('tenant-cccd').value = tenant.cccd || '';
-  
+
   // Format dates for input date tag (YYYY-MM-DD)
   if (tenant.start_date) {
     document.getElementById('tenant-start-date').value = tenant.start_date.split('T')[0];
@@ -858,7 +857,7 @@ window.editTenant = function(tenant) {
 };
 
 // Gọi xóa Tenant
-window.deleteTenant = async function(tenantId) {
+window.deleteTenant = async function (tenantId) {
   const isConfirmed = await showConfirm('Bạn có chắc chắn muốn xóa người thuê này ra khỏi phòng?');
   if (!isConfirmed) return;
 
@@ -877,7 +876,7 @@ window.deleteTenant = async function(tenantId) {
 function initElectricDateDropdowns() {
   const mSelect = document.getElementById('elec-month');
   const ySelect = document.getElementById('elec-year');
-  
+
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
@@ -907,10 +906,10 @@ async function loadRoomsDropdown() {
   try {
     const rooms = await fetchAPI('/api/rooms');
     const select = document.getElementById('elec-room-select');
-    
+
     // Giữ lại option đầu tiên
     select.innerHTML = '<option value="">-- Chọn phòng --</option>';
-    
+
     rooms.forEach(room => {
       const opt = document.createElement('option');
       opt.value = room.id;
@@ -964,7 +963,7 @@ function renderElectricHistoryTable(history) {
 function calculateLiveElectricity() {
   const oldVal = parseFloat(document.getElementById('elec-old').value) || 0;
   const newVal = parseFloat(document.getElementById('elec-new').value) || 0;
-  
+
   if (newVal >= oldVal) {
     const consumption = newVal - oldVal;
     const price = currentState.electricityPrice;
@@ -973,7 +972,7 @@ function calculateLiveElectricity() {
     document.getElementById('calc-consumption').textContent = consumption.toFixed(1);
     document.getElementById('calc-unit-price').textContent = price.toLocaleString('vi-VN');
     document.getElementById('calc-total-cost').textContent = formatVND(total);
-    
+
     document.getElementById('elec-calc-summary').style.display = 'block';
   } else {
     document.getElementById('elec-calc-summary').style.display = 'none';
@@ -982,7 +981,7 @@ function calculateLiveElectricity() {
 
 async function handleElectricitySubmit(e) {
   e.preventDefault();
-  
+
   const body = {
     room_id: document.getElementById('elec-room-select').value,
     year: document.getElementById('elec-year').value,
@@ -998,7 +997,7 @@ async function handleElectricitySubmit(e) {
     });
 
     showToast(`Lưu số điện thành công! Tháng ${body.month}/${body.year} tính hết ${formatVND(result.totalCost)}`, 'success');
-    
+
     // Load lại lịch sử số điện
     loadElectricityReadingForRoom(body.room_id);
   } catch (err) {
@@ -1022,7 +1021,7 @@ async function triggerGlobalSearch() {
 
   try {
     const results = await fetchAPI(`/api/search?q=${encodeURIComponent(q)}`);
-    
+
     // Bind Tenants
     const tenantsContainer = document.getElementById('search-tenants-results');
     tenantsContainer.innerHTML = '';
@@ -1063,7 +1062,7 @@ async function triggerGlobalSearch() {
       results.rooms.forEach(room => {
         const card = document.createElement('div');
         card.className = `room-card status-${room.status}`;
-        
+
         let statusText = 'Trống';
         if (room.status === 'occupied') statusText = 'Đang thuê';
         if (room.status === 'maintenance') statusText = 'Sửa chữa';
@@ -1209,7 +1208,7 @@ function renderPaymentsTable(data) {
     const dueDate = new Date(year, month - 1, finalDay);
     const diffTime = dueDate - todayStart;
     const daysUntilDue = Math.round(diffTime / (1000 * 60 * 60 * 24));
-    
+
     return {
       ...row,
       daysUntilDue,
@@ -1280,27 +1279,27 @@ function renderPaymentsTable(data) {
       <td>${formatVND(rentAmt)}</td>
       <td>
         ${elecAmt > 0
-          ? `<span class="text-primary">${formatVND(elecAmt)}</span>${row.consumption ? `<div style="font-size:11px;color:var(--neutral-gray)">${row.consumption} kWh</div>` : ''}`
-          : '<span class="text-muted" style="font-size:12px;">Chưa nhập</span>'
-        }
+        ? `<span class="text-primary">${formatVND(elecAmt)}</span>${row.consumption ? `<div style="font-size:11px;color:var(--neutral-gray)">${row.consumption} kWh</div>` : ''}`
+        : '<span class="text-muted" style="font-size:12px;">Chưa nhập</span>'
+      }
       </td>
       <td>
         ${waterAmt > 0
-          ? `<span class="text-primary">${formatVND(waterAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.waterPrice || (currentState.waterPrice || 20000))}</div>`
-          : '<span class="text-muted" style="font-size:12px;">0đ</span>'
-        }
+        ? `<span class="text-primary">${formatVND(waterAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.waterPrice || (currentState.waterPrice || 20000))}</div>`
+        : '<span class="text-muted" style="font-size:12px;">0đ</span>'
+      }
       </td>
       <td>
         ${trashAmt > 0
-          ? `<span class="text-primary">${formatVND(trashAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.trashPrice || (currentState.trashPrice || 10000))}</div>`
-          : '<span class="text-muted" style="font-size:12px;">0đ</span>'
-        }
+        ? `<span class="text-primary">${formatVND(trashAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.trashPrice || (currentState.trashPrice || 10000))}</div>`
+        : '<span class="text-muted" style="font-size:12px;">0đ</span>'
+      }
       </td>
       <td>
         ${residenceAmt > 0
-          ? `<span class="text-primary">${formatVND(residenceAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.residencePrice || (currentState.residencePrice || 50000))}</div>`
-          : '<span class="text-muted" style="font-size:12px;">0đ</span>'
-        }
+        ? `<span class="text-primary">${formatVND(residenceAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.residencePrice || (currentState.residencePrice || 50000))}</div>`
+        : '<span class="text-muted" style="font-size:12px;">0đ</span>'
+      }
       </td>
       <td><span class="amount-total">${formatVND(totalAmt)}</span></td>
       <td>
@@ -1312,9 +1311,9 @@ function renderPaymentsTable(data) {
       </td>
       <td>
         ${isPaid
-          ? `<button class="btn btn-sm btn-outline-secondary" onclick="markPayment(${row.room_id}, ${year}, ${month}, false)">↩ Hoàn trả</button>`
-          : `<button class="btn btn-sm btn-success" onclick="markPayment(${row.room_id}, ${year}, ${month}, true)">✅ Đã thu tiền</button>`
-        }
+        ? `<button class="btn btn-sm btn-outline-secondary" onclick="markPayment(${row.room_id}, ${year}, ${month}, false)">↩ Hoàn trả</button>`
+        : `<button class="btn btn-sm btn-success" onclick="markPayment(${row.room_id}, ${year}, ${month}, true)">✅ Đã thu tiền</button>`
+      }
       </td>
     `;
 
@@ -1338,7 +1337,7 @@ function filterPaymentRows(filter) {
 }
 
 // Đánh dấu đã thu / hoàn trả
-window.markPayment = async function(roomId, year, month, isPaid) {
+window.markPayment = async function (roomId, year, month, isPaid) {
   if (!isPaid) {
     const isConfirmed = await showConfirm(`Bỏ đánh dấu đã thu tiền phòng này tháng ${month}/${year}?`);
     if (!isConfirmed) return;
@@ -1563,7 +1562,7 @@ function renderBulkTable(data, month, year) {
     // Real-time calculation on input
     const oldInput = tr.querySelector('.bulk-old-reading');
     const newInput = tr.querySelector('.bulk-new-reading');
-    
+
     if (!isVacant) {
       if (oldInput) oldInput.addEventListener('input', () => onBulkInputChange(newInput, room.id));
       if (newInput) {
@@ -2007,12 +2006,12 @@ function copyInvoiceText() {
 async function downloadInvoiceAsImage() {
   const element = document.getElementById('invoice-document');
   if (!element) return;
-  
+
   showToast('Đang tạo ảnh hóa đơn, vui lòng đợi...', 'info');
-  
+
   // Nhân bản hóa đơn để xử lý độc lập
   const clone = element.cloneNode(true);
-  
+
   // Định hình kiểu dáng cho bản sao ẩn ngoài màn hình để có kích thước chuẩn desktop
   clone.style.position = 'fixed';
   clone.style.top = '-9999px';
@@ -2024,34 +2023,34 @@ async function downloadInvoiceAsImage() {
   clone.style.display = 'block';
   clone.style.margin = '0';
   clone.style.transform = 'none';
-  
+
   // Đưa bản sao vào body để trình duyệt biên dịch CSS
   document.body.appendChild(clone);
-  
+
   try {
     // Chờ 150ms cho trình duyệt vẽ xong layout bản sao ẩn
     await new Promise(resolve => setTimeout(resolve, 150));
 
     const canvas = await html2canvas(clone, {
       scale: 2, // Tăng chất lượng ảnh lên 2 lần
-      useCORS: true, 
+      useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
       windowWidth: 750 // Giả lập cửa sổ rộng 750px để lấy CSS chuẩn
     });
-    
+
     // Xóa bản sao ẩn sau khi đã chụp xong
     document.body.removeChild(clone);
-    
+
     const image = canvas.toDataURL('image/png');
     const link = document.createElement('a');
-    
+
     const roomCode = document.getElementById('inv-room-code')?.textContent || 'phong';
     const period = document.getElementById('inv-period-label')?.textContent || 'thang';
     const cleanPeriod = period.replace(/Tháng\s*/gi, '').trim().replace('/', '_');
     const cleanRoom = roomCode.replace(/Phòng\s*/gi, '').trim();
     const filename = `HoaDon_Phong_${cleanRoom}_${cleanPeriod}.png`;
-    
+
     link.download = filename;
     link.href = image;
     link.click();
@@ -2161,7 +2160,7 @@ async function loadNotifications() {
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
-    
+
     // Ngày bắt đầu hôm nay (0h00) để tính khoảng cách ngày chính xác
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -2185,7 +2184,7 @@ async function loadNotifications() {
       // Giới hạn ngày trong tháng hiện tại
       const lastDay = new Date(year, month, 0).getDate();
       const finalDay = Math.min(dueDay, lastDay);
-      
+
       const dueDate = new Date(year, month - 1, finalDay);
       const diffTime = dueDate - todayStart;
       const daysUntilDue = Math.round(diffTime / (1000 * 60 * 60 * 24));
@@ -2199,10 +2198,10 @@ async function loadNotifications() {
 
     // Chỉ thông báo các phòng còn ≤ 3 ngày đến hạn hoặc đã quá hạn
     const filtered = unpaidWithDue.filter(p => p.daysUntilDue <= 3);
-    
+
     // Sắp xếp: Quá hạn nhiều nhất (ngày âm nhiều nhất) lên đầu, dần dần đến chưa quá hạn
     filtered.sort((a, b) => a.daysUntilDue - b.daysUntilDue);
-    
+
     _notifData = filtered;
 
     const badge = document.getElementById('notif-badge');
@@ -2216,7 +2215,7 @@ async function loadNotifications() {
       // Gửi thông báo đẩy về điện thoại (mỗi ngày 1 lần)
       const nearCount = _notifData.filter(p => p.daysUntilDue >= 0).length;
       const overdueCount = _notifData.filter(p => p.daysUntilDue < 0).length;
-      
+
       let pushTitle = `🔔 Cần thu tiền ${_notifData.length} phòng`;
       let pushBody = `Có ${nearCount} phòng sắp đến hạn và ${overdueCount} phòng đã quá hạn đóng tiền.`;
       if (overdueCount > 0 && nearCount === 0) {
@@ -2270,28 +2269,28 @@ function renderNotifications() {
       ⏰ Danh sách phòng đến hạn & quá hạn
     </div>
     ${_notifData.map(p => {
-      const tenantName = p.tenant_names || 'Chưa có người thuê';
-      const total = formatVND(p.total_amount || p.rent_price || 0);
-      const roomCode = p.room_code || p.room_id || '--';
-      const leaseStart = formatDateVN(p.lease_start_date);
-      
-      const due = p.dueDate;
-      const dueDateStr = `${String(due.getDate()).padStart(2, '0')}/${String(due.getMonth() + 1).padStart(2, '0')}/${due.getFullYear()}`;
-      
-      let statusText = '';
-      let statusColor = 'var(--neutral-gray)';
-      if (p.daysUntilDue > 0) {
-        statusText = `⏰ Còn ${p.daysUntilDue} ngày`;
-        statusColor = '#b45309';
-      } else if (p.daysUntilDue === 0) {
-        statusText = `🚨 Đến hạn hôm nay!`;
-        statusColor = '#dc2626';
-      } else {
-        statusText = `⚠️ Quá hạn ${Math.abs(p.daysUntilDue)} ngày!`;
-        statusColor = '#dc2626';
-      }
+    const tenantName = p.tenant_names || 'Chưa có người thuê';
+    const total = formatVND(p.total_amount || p.rent_price || 0);
+    const roomCode = p.room_code || p.room_id || '--';
+    const leaseStart = formatDateVN(p.lease_start_date);
 
-      return `
+    const due = p.dueDate;
+    const dueDateStr = `${String(due.getDate()).padStart(2, '0')}/${String(due.getMonth() + 1).padStart(2, '0')}/${due.getFullYear()}`;
+
+    let statusText = '';
+    let statusColor = 'var(--neutral-gray)';
+    if (p.daysUntilDue > 0) {
+      statusText = `⏰ Còn ${p.daysUntilDue} ngày`;
+      statusColor = '#b45309';
+    } else if (p.daysUntilDue === 0) {
+      statusText = `🚨 Đến hạn hôm nay!`;
+      statusColor = '#dc2626';
+    } else {
+      statusText = `⚠️ Quá hạn ${Math.abs(p.daysUntilDue)} ngày!`;
+      statusColor = '#dc2626';
+    }
+
+    return `
         <div class="notif-item" onclick="goToPaymentRoom('${p.room_id}')" style="display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-weight: 700; color: var(--neutral-dark); font-size: 14px;">🚪 Phòng ${roomCode}</span>
@@ -2311,7 +2310,7 @@ function renderNotifications() {
           </div>
         </div>
       `;
-    }).join('')}
+  }).join('')}
   `;
 }
 
@@ -2354,8 +2353,8 @@ document.addEventListener('click', (e) => {
 function updateNotifPermissionUI() {
   const icon = document.getElementById('notif-perm-icon');
   const text = document.getElementById('notif-perm-text');
-  const btn  = document.getElementById('btn-request-notif');
-  const box  = document.getElementById('notif-permission-status');
+  const btn = document.getElementById('btn-request-notif');
+  const box = document.getElementById('notif-permission-status');
   if (!icon || !text) return;
 
   if (!('Notification' in window)) {
