@@ -711,6 +711,36 @@
               <div class="form-group">
                 <label for="setting-bank-owner">Chủ tài khoản</label>
                 <input type="text" id="setting-bank-owner" class="form-control" placeholder="VD: NGUYEN VAN A">
+              <hr style="margin: 20px 0; border-color: var(--border-color);">
+              <h4 style="margin-bottom: 14px; font-size: 14px;">✉️ Cấu hình thông báo qua Gmail</h4>
+              <div class="form-row">
+                <div class="form-group col">
+                  <label for="setting-email-sender">Gmail gửi thông báo (Sender)</label>
+                  <input type="email" id="setting-email-sender" class="form-control" placeholder="VD: app.nhatro@gmail.com">
+                </div>
+                <div class="form-group col">
+                  <label for="setting-email-pass">Mật khẩu ứng dụng Gmail (App Password)</label>
+                  <input type="password" id="setting-email-pass" class="form-control" placeholder="Mật khẩu 16 chữ số từ tài khoản Google">
+                  <span class="help-text"><a href="https://support.google.com/accounts/answer/185833" target="_blank" style="color: var(--primary);">Cách tạo Mật khẩu ứng dụng ↗️</a></span>
+                </div>
+              </div>
+              <div class="form-row" style="align-items: flex-end;">
+                <div class="form-group col">
+                  <label for="setting-email-receiver">Gmail nhận thông báo (Receiver)</label>
+                  <input type="email" id="setting-email-receiver" class="form-control" placeholder="VD: gmail.cuaban@gmail.com">
+                </div>
+                <div class="form-group col">
+                  <label for="setting-email-enabled">Trạng thái gửi email ngầm</label>
+                  <select id="setting-email-enabled" class="form-control">
+                    <option value="false">Tắt thông báo Gmail</option>
+                    <option value="true">Bật gửi báo cáo lúc 8:00 sáng mỗi ngày</option>
+                  </select>
+                </div>
+                <div class="form-group col-auto" style="min-width: 120px;">
+                  <button type="button" class="btn btn-secondary btn-block" onclick="testEmailNotification()" id="btn-test-email" style="height: 42px; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                    🧪 Gửi thử
+                  </button>
+                </div>
               </div>
               <button type="submit" class="btn btn-primary">Lưu cài đặt</button>
             </form>

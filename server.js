@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const nodemailer = require('nodemailer');
 const db = require('./database');
 
 const app = express();
@@ -678,7 +679,11 @@ app.get('/api/settings', async (req, res) => {
 
 app.put('/api/settings', async (req, res) => {
   try {
-    const { electricity_price, water_price, trash_price, residence_price, payment_due_day, bank_name, bank_account, bank_owner } = req.body;
+    const { 
+      electricity_price, water_price, trash_price, residence_price, payment_due_day, 
+      bank_name, bank_account, bank_owner,
+      email_sender, email_pass, email_receiver, email_enabled
+    } = req.body;
     
     const upsertSetting = async (key, val) => {
       if (val !== undefined && val !== null) {
@@ -696,6 +701,10 @@ app.put('/api/settings', async (req, res) => {
     await upsertSetting('bank_name', bank_name);
     await upsertSetting('bank_account', bank_account);
     await upsertSetting('bank_owner', bank_owner);
+    await upsertSetting('email_sender', email_sender);
+    await upsertSetting('email_pass', email_pass);
+    await upsertSetting('email_receiver', email_receiver);
+    await upsertSetting('email_enabled', email_enabled);
 
     res.json({ message: 'Cập nhật cài đặt thành công' });
   } catch (err) {
@@ -821,6 +830,245 @@ app.get('/api/search', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ==========================================
+// 9. GỬI BÁO CÁO NHẮC NỢ QUA EMAIL ✉️
+// ==========================================
+
+async function sendDailyEmailNotification(force = false) {
+  try {
+    // 1. Lấy cài đặt từ database settings
+    const list = await db.prepare('SELECT key, value FROM settings').all();
+    const settings = {};
+    list.forEach(s => { settings[s.key] = s.value; });
+
+    const enabled = settings['email_enabled'] === 'true';
+    const sender = settings['email_sender'];
+    const pass = settings['email_pass'];
+    const receiver = settings['email_receiver'];
+
+    if (!force) {
+      if (!enabled || !sender || !pass || !receiver) return;
+
+      // Kiểm tra xem hôm nay đã gửi chưa (theo múi giờ Việt Nam UTC+7)
+      const nowVN = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+      const todayStr = `${nowVN.getFullYear()}-${nowVN.getMonth() + 1}-${nowVN.getDate()}`;
+      
+      if (settings['last_email_sent_date'] === todayStr) {
+        return; // Hôm nay đã gửi báo cáo rồi
+      }
+
+      // Chỉ kiểm tra và gửi vào lúc 8h sáng
+      const hour = nowVN.getHours();
+      if (hour !== 8) {
+        return;
+      }
+    } else {
+      if (!sender || !pass || !receiver) {
+        throw new Error("Thiếu cấu hình Gmail: Vui lòng điền đầy đủ email gửi, mật khẩu ứng dụng và email nhận.");
+      }
+    }
+
+    const nowVN = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+    const todayStr = `${nowVN.getFullYear()}-${nowVN.getMonth() + 1}-${nowVN.getDate()}`;
+
+    // 2. Lấy dữ liệu phòng trọ chưa đóng tiền
+    const currentMonth = nowVN.getMonth() + 1;
+    const currentYear = nowVN.getFullYear();
+    const todayStart = new Date(nowVN.getFullYear(), nowVN.getMonth(), nowVN.getDate());
+
+    const waterPrice = parseFloat(settings['water_price']) || 20000;
+    const trashPrice = parseFloat(settings['trash_price']) || 10000;
+    const residencePrice = parseFloat(settings['residence_price']) || 50000;
+
+    const rows = await db.prepare(`
+      SELECT 
+        r.id as room_id,
+        r.room_code,
+        COALESCE(p.rent_amount, r.rent_price) as rent_price,
+        r.status as room_status,
+        r.member_count,
+        (SELECT MIN(start_date) FROM tenants WHERE room_id = r.id) as lease_start_date,
+        COALESCE(p.tenant_name, STRING_AGG(t.full_name, ', ')) as tenant_names,
+        COALESCE(p.electricity_amount, e.total_cost) as electricity_amount,
+        p.is_paid,
+        p.water_amount,
+        p.trash_amount,
+        p.residence_amount,
+        p.total_amount
+      FROM rooms r
+      LEFT JOIN tenants t ON t.room_id = r.id
+      LEFT JOIN electricity_readings e ON e.room_id = r.id AND e.year = ? AND e.month = ?
+      LEFT JOIN rent_payments p ON p.room_id = r.id AND p.year = ? AND p.month = ?
+      WHERE r.status = 'occupied' OR p.id IS NOT NULL OR e.id IS NOT NULL
+      GROUP BY r.id, p.id, e.id
+    `).all(currentYear, currentMonth, currentYear, currentMonth);
+
+    // Tính toán và lọc danh sách phòng cần gửi mail (chưa thanh toán & còn <= 3 ngày đến hạn hoặc quá hạn)
+    const dueRooms = [];
+    for (const row of rows) {
+      if (row.is_paid === 1 || row.room_status !== 'occupied') continue;
+
+      let isFirstMonth = false;
+      let isExcludedMonth = false;
+      if (row.lease_start_date) {
+        const leaseDate = new Date(row.lease_start_date);
+        if (!isNaN(leaseDate.getTime())) {
+          const leaseYear = leaseDate.getFullYear();
+          const leaseMonth = leaseDate.getMonth() + 1;
+          const diffMonths = (currentYear - leaseYear) * 12 + (currentMonth - leaseMonth);
+          if (diffMonths === 1) {
+            isFirstMonth = true;
+          } else if (diffMonths <= 0) {
+            isExcludedMonth = true;
+          }
+        }
+      }
+
+      const rentAmt = isExcludedMonth ? 0 : (row.rent_price || 0);
+      const elecAmt = isExcludedMonth ? 0 : (row.electricity_amount || 0);
+      const memberCount = row.member_count || 0;
+      const waterAmt = isExcludedMonth ? 0 : (row.water_amount !== null && row.water_amount !== undefined ? row.water_amount : waterPrice * memberCount);
+      const trashAmt = isExcludedMonth ? 0 : (row.trash_amount !== null && row.trash_amount !== undefined ? row.trash_amount : trashPrice * memberCount);
+      const residenceAmt = isExcludedMonth ? 0 : (row.residence_amount !== null && row.residence_amount !== undefined ? row.residence_amount : (isFirstMonth ? residencePrice * memberCount : 0));
+      const totalAmt = rentAmt + elecAmt + waterAmt + trashAmt + residenceAmt;
+
+      // Tính ngày hạn
+      let dueDay = parseInt(settings['payment_due_day']) || 5;
+      if (row.lease_start_date) {
+        const d = new Date(row.lease_start_date);
+        if (!isNaN(d.getTime())) {
+          dueDay = d.getDate();
+        }
+      }
+      const lastDay = new Date(currentYear, currentMonth, 0).getDate();
+      const finalDay = Math.min(dueDay, lastDay);
+      const dueDate = new Date(currentYear, currentMonth - 1, finalDay);
+      const diffTime = dueDate - todayStart;
+      const daysUntilDue = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+      if (daysUntilDue <= 3) {
+        dueRooms.push({
+          room_code: row.room_code,
+          tenant_name: row.tenant_names || 'Chưa có người thuê',
+          total_amount: totalAmt,
+          daysUntilDue,
+          dueDateStr: `${finalDay}/${currentMonth}/${currentYear}`
+        });
+      }
+    }
+
+    if (dueRooms.length === 0 && !force) {
+      console.log(`[Email] Hôm nay ${todayStr} không có phòng nào sắp đến hạn/quá hạn nợ.`);
+      return;
+    }
+
+    // 3. Tiến hành gửi mail qua nodemailer
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: sender,
+        pass: pass
+      }
+    });
+
+    let mailSubject = `[Nhà Trọ LISO] 🔔 Báo cáo nhắc nợ tiền trọ ngày ${todayStr}`;
+    let mailBody = `
+      <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <h2 style="color: #2b6cb0; margin-top: 0;">🏠 Nhà Trọ LISO - Báo cáo nợ tiền phòng</h2>
+        <p style="font-size: 14px; color: #4a5568;">Xin chào chủ nhà trọ, đây là danh sách tổng hợp các phòng sắp đến hạn đóng tiền hoặc đã quá hạn đóng tiền ngày <strong>${todayStr}</strong>:</p>
+    `;
+    
+    if (dueRooms.length > 0) {
+      mailBody += `
+        <table border="1" cellpadding="10" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 14px; border: 1px solid #cbd5e0; margin-bottom: 20px;">
+          <thead>
+            <tr style="background-color: #f7fafc;">
+              <th align="left">Phòng</th>
+              <th align="left">Khách thuê</th>
+              <th align="left">Hạn đóng</th>
+              <th align="left">Trạng thái</th>
+              <th align="right">Số tiền</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      dueRooms.forEach(room => {
+        let statusText = '';
+        let statusColor = '#3182ce'; // Xanh dương
+        if (room.daysUntilDue > 0) {
+          statusText = `⏳ Còn ${room.daysUntilDue} ngày`;
+          statusColor = '#dd6b20'; // Cam
+        } else if (room.daysUntilDue === 0) {
+          statusText = `🚨 Đến hạn hôm nay`;
+          statusColor = '#e53e3e'; // Đỏ
+        } else {
+          statusText = `⚠️ Quá hạn ${Math.abs(room.daysUntilDue)} ngày`;
+          statusColor = '#e53e3e'; // Đỏ
+        }
+
+        mailBody += `
+          <tr>
+            <td><strong>Phòng ${room.room_code}</strong></td>
+            <td>${room.tenant_name}</td>
+            <td>${room.dueDateStr}</td>
+            <td style="color: ${statusColor}; font-weight: bold; font-size: 13px;">${statusText}</td>
+            <td align="right" style="color: #2d3748; font-weight: bold;">${room.total_amount.toLocaleString('vi-VN')}đ</td>
+          </tr>
+        `;
+      });
+      mailBody += `
+          </tbody>
+        </table>
+      `;
+    } else {
+      mailBody += `<p style="color: #38a169; font-weight: bold; font-size: 14px; padding: 10px; background: #f0fff4; border-radius: 6px; border: 1px solid #c6f6d5;">✅ Tuyệt vời! Không có phòng nào sắp đến hạn hay quá hạn đóng tiền trong hôm nay.</p>`;
+    }
+
+    mailBody += `
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+        <p style="font-size: 12px; color: #718096; text-align: center; margin-bottom: 0;">Email này được gửi tự động từ hệ thống quản lý nhà trọ LISO của bạn.<br>Vui lòng duy trì UptimeRobot để tính năng này luôn hoạt động đúng giờ.</p>
+      </div>
+    `;
+
+    await transporter.sendMail({
+      from: `"Nhà Trọ LISO" <${sender}>`,
+      to: receiver,
+      subject: mailSubject,
+      html: mailBody
+    });
+
+    // 4. Cập nhật ngày gửi thành công vào cài đặt
+    await db.prepare(
+      "INSERT INTO settings (key, value) VALUES ('last_email_sent_date', ?) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP"
+    ).run(todayStr);
+
+    console.log(`[Email] Đã gửi báo cáo tự động thành công cho ngày ${todayStr}`);
+  } catch (err) {
+    console.error('[Email Error] Thất bại khi gửi email thông báo:', err);
+    if (force) throw err;
+  }
+}
+
+// Endpoint gửi thử Gmail test
+app.post('/api/settings/test-email', async (req, res) => {
+  try {
+    await sendDailyEmailNotification(true);
+    res.json({ message: '✅ Đã gửi email thử nghiệm thành công! Vui lòng kiểm tra hộp thư của bạn (bao gồm cả thư rác/spam).' });
+  } catch (err) {
+    res.status(500).json({ error: `Gửi email thất bại: ${err.message}` });
+  }
+});
+
+// Lập trình kiểm tra gửi email tự động (Cứ mỗi giờ chạy 1 lần để check lúc 8h sáng)
+setTimeout(() => {
+  sendDailyEmailNotification().catch(console.error);
+}, 10000); // Chạy thử lần đầu 10 giây sau khi khởi động
+
+setInterval(() => {
+  sendDailyEmailNotification().catch(console.error);
+}, 60 * 60 * 1000); // Kiểm tra lại sau mỗi 60 phút
 
 app.listen(PORT, () => {
   console.log(`✅ Server đang chạy tại http://localhost:${PORT}`);

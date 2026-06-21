@@ -481,6 +481,17 @@ async function loadSettings() {
     if (bankName && settings.bank_name) bankName.value = settings.bank_name;
     if (bankAccount && settings.bank_account) bankAccount.value = settings.bank_account;
     if (bankOwner && settings.bank_owner) bankOwner.value = settings.bank_owner;
+
+    // Load email config info
+    const emailSender = document.getElementById('setting-email-sender');
+    const emailPass = document.getElementById('setting-email-pass');
+    const emailReceiver = document.getElementById('setting-email-receiver');
+    const emailEnabled = document.getElementById('setting-email-enabled');
+    if (emailSender && settings.email_sender) emailSender.value = settings.email_sender;
+    if (emailPass && settings.email_pass) emailPass.value = settings.email_pass;
+    if (emailReceiver && settings.email_receiver) emailReceiver.value = settings.email_receiver;
+    if (emailEnabled && settings.email_enabled) emailEnabled.value = settings.email_enabled;
+
     // Store bank info in state for invoice use
     currentState.bankSettings = settings;
   } catch (err) {
@@ -499,6 +510,11 @@ async function handleSettingsSubmit(e) {
   const bankName = document.getElementById('setting-bank-name')?.value || '';
   const bankAccount = document.getElementById('setting-bank-account')?.value || '';
   const bankOwner = document.getElementById('setting-bank-owner')?.value || '';
+  
+  const emailSender = document.getElementById('setting-email-sender')?.value || '';
+  const emailPass = document.getElementById('setting-email-pass')?.value || '';
+  const emailReceiver = document.getElementById('setting-email-receiver')?.value || '';
+  const emailEnabled = document.getElementById('setting-email-enabled')?.value || 'false';
 
   try {
     await fetchAPI('/api/settings', {
@@ -511,7 +527,11 @@ async function handleSettingsSubmit(e) {
         payment_due_day: dueDay,
         bank_name: bankName,
         bank_account: bankAccount,
-        bank_owner: bankOwner
+        bank_owner: bankOwner,
+        email_sender: emailSender,
+        email_pass: emailPass,
+        email_receiver: emailReceiver,
+        email_enabled: emailEnabled
       })
     });
     currentState.electricityPrice = parseFloat(price);
@@ -519,7 +539,19 @@ async function handleSettingsSubmit(e) {
     currentState.trashPrice = parseFloat(trashPrice) || 10000;
     currentState.residencePrice = parseFloat(residencePrice) || 50000;
     currentState.paymentDueDay = parseInt(dueDay) || 5;
-    currentState.bankSettings = { electricity_price: price, water_price: waterPrice, trash_price: trashPrice, residence_price: residencePrice, bank_name: bankName, bank_account: bankAccount, bank_owner: bankOwner };
+    currentState.bankSettings = { 
+      electricity_price: price, 
+      water_price: waterPrice, 
+      trash_price: trashPrice, 
+      residence_price: residencePrice, 
+      bank_name: bankName, 
+      bank_account: bankAccount, 
+      bank_owner: bankOwner,
+      email_sender: emailSender,
+      email_pass: emailPass,
+      email_receiver: emailReceiver,
+      email_enabled: emailEnabled
+    };
     showToast('Đã lưu cài đặt thành công', 'success');
     // Cập nhật lại thông báo theo ngày thu mới
     loadNotifications();
@@ -2466,6 +2498,47 @@ function testPushNotification() {
   } catch (e) {
     showToast('Có lỗi khi gửi thông báo: ' + e.message, 'error');
   }
+}
+
+// Hàm gửi email thử nghiệm (Test Email)
+async function testEmailNotification() {
+  const btn = document.getElementById('btn-test-email');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Đang gửi...';
+  }
+
+  // Đầu tiên, lưu lại các cài đặt hiện tại trên form để server có cấu hình mới nhất
+  const form = document.getElementById('settings-form');
+  if (form) {
+    // Kích hoạt sự kiện submit ngầm để lưu cài đặt trước khi test
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.click();
+    }
+  }
+
+  // Chờ một chút để lưu cài đặt hoàn tất, sau đó gửi yêu cầu gửi email test
+  setTimeout(async () => {
+    try {
+      const res = await fetch('/api/settings/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Lỗi khi gửi email test');
+      }
+      showToast(data.message, 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '🧪 Gửi thử';
+      }
+    }
+  }, 1000);
 }
 
 // Khởi tạo quyền thông báo khi load app
