@@ -10,6 +10,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Route ping nhẹ để giữ server luôn thức trên Render
+app.get('/api/ping', (req, res) => {
+  res.status(200).send('pong');
+});
+
 // ==========================================
 // 1. API DASHBOARD
 // ==========================================
