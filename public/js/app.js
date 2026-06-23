@@ -1903,17 +1903,19 @@ function renderInvoiceDocument(data, note) {
   const tbody = document.getElementById('inv-charges-tbody');
   tbody.innerHTML = '';
 
-  // Row: Tiền thuê phòng
-  tbody.innerHTML += `
-    <tr>
-      <td>🏠 Tiền thuê phòng</td>
-      <td><small>Tháng ${summary.month}/${summary.year}</small></td>
-      <td class="text-right">${formatVND(summary.rentAmount)}</td>
-    </tr>
-  `;
+  // Row: Tiền thuê phòng (chỉ hiện khi có phát sinh)
+  if (summary.rentAmount > 0) {
+    tbody.innerHTML += `
+      <tr>
+        <td>🏠 Tiền thuê phòng</td>
+        <td><small>Tháng ${summary.month}/${summary.year}</small></td>
+        <td class="text-right">${formatVND(summary.rentAmount)}</td>
+      </tr>
+    `;
+  }
 
-  // Row: Tiền điện
-  if (electricity) {
+  // Row: Tiền điện (chỉ hiện khi có tiêu thụ, hoặc hiện cảnh báo chưa nhập ở các tháng sau tháng đầu)
+  if (electricity && summary.elecAmount > 0) {
     const consumption = electricity.consumption || (electricity.new_reading - electricity.old_reading);
     tbody.innerHTML += `
       <tr>
@@ -1925,7 +1927,7 @@ function renderInvoiceDocument(data, note) {
         <td class="text-right">${formatVND(summary.elecAmount)}</td>
       </tr>
     `;
-  } else {
+  } else if (!summary.isDepositMonth) {
     tbody.innerHTML += `
       <tr>
         <td>⚡ Tiền điện</td>
@@ -1935,8 +1937,8 @@ function renderInvoiceDocument(data, note) {
     `;
   }
 
-  // Row: Tiền nước
-  if (summary.waterAmount > 0 || summary.memberCount > 0) {
+  // Row: Tiền nước (chỉ hiện khi có phát sinh)
+  if (summary.waterAmount > 0) {
     tbody.innerHTML += `
       <tr>
         <td>💧 Tiền nước</td>
@@ -1946,8 +1948,8 @@ function renderInvoiceDocument(data, note) {
     `;
   }
 
-  // Row: Tiền rác
-  if (summary.trashAmount > 0 || summary.memberCount > 0) {
+  // Row: Tiền rác (chỉ hiện khi có phát sinh)
+  if (summary.trashAmount > 0) {
     tbody.innerHTML += `
       <tr>
         <td>🗑️ Tiền rác</td>
@@ -1968,8 +1970,35 @@ function renderInvoiceDocument(data, note) {
     `;
   }
 
-  // Grand total
-  document.getElementById('inv-grand-total').textContent = formatVND(summary.totalAmount);
+  // Row: Tiền đặt cọc (Tháng đầu cộng vào tổng, tháng sau chỉ hiển thị dưới tổng cộng)
+  if (summary.depositAmount > 0) {
+    tbody.innerHTML += `
+      <tr>
+        <td>🤝 Tiền đặt cọc</td>
+        <td><small>Thu tháng đầu tiên</small></td>
+        <td class="text-right">${formatVND(summary.depositAmount)}</td>
+      </tr>
+    `;
+  }
+
+  // Reset và hiển thị Grand total
+  const tfoot = document.querySelector('.inv-charges-table tfoot');
+  tfoot.innerHTML = `
+    <tr class="inv-total-row">
+      <td colspan="2"><strong>💰 TỔNG CỘNG</strong></td>
+      <td class="text-right"><strong id="inv-grand-total">${formatVND(summary.totalAmount)}</strong></td>
+    </tr>
+  `;
+
+  // Nếu là tháng sau và phòng có tiền cọc, hiển thị thông tin cọc đang giữ dưới dòng Tổng cộng
+  if (summary.depositAmount === 0 && room.deposit > 0) {
+    tfoot.innerHTML += `
+      <tr class="inv-deposit-ref-row" style="font-size: 13px; color: var(--neutral-gray); border-top: 1px dashed var(--border-color);">
+        <td colspan="2">🤝 Tiền cọc đang giữ:</td>
+        <td class="text-right"><strong>${formatVND(room.deposit)}</strong></td>
+      </tr>
+    `;
+  }
 
   // Payment status
   const statusBox = document.getElementById('inv-payment-status-box');

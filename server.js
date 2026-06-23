@@ -352,7 +352,7 @@ app.post('/api/electricity', async (req, res) => {
     // Đồng bộ với bảng rent_payments nếu bản ghi thanh toán của tháng đó đã tồn tại
     await db.prepare(`
       UPDATE rent_payments 
-      SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount, updated_at = CURRENT_TIMESTAMP
+      SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount + deposit_amount, updated_at = CURRENT_TIMESTAMP
       WHERE room_id = ? AND year = ? AND month = ?
     `).run(totalCost, totalCost, room_id, parseInt(year), parseInt(month));
 
@@ -457,7 +457,7 @@ app.post('/api/electricity/bulk', async (req, res) => {
       // Sync với rent_payments nếu tồn tại
       await db.prepare(`
         UPDATE rent_payments 
-        SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount, updated_at = CURRENT_TIMESTAMP
+        SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount + deposit_amount, updated_at = CURRENT_TIMESTAMP
         WHERE room_id = ? AND year = ? AND month = ?
       `).run(totalCost, totalCost, room_id, parseInt(year), parseInt(month));
 
@@ -500,6 +500,7 @@ app.get('/api/payments', async (req, res) => {
         COALESCE(p.rent_amount, r.rent_price) as rent_price,
         r.status as room_status,
         r.member_count,
+        r.deposit,
         (SELECT MIN(start_date) FROM tenants WHERE room_id = r.id) as lease_start_date,
         COALESCE(p.tenant_name, STRING_AGG(t.full_name, ', ')) as tenant_names,
         STRING_AGG(t.phone, ', ') as tenant_phones,
@@ -512,6 +513,7 @@ app.get('/api/payments', async (req, res) => {
         p.water_amount,
         p.trash_amount,
         p.residence_amount,
+        p.deposit_amount,
         p.total_amount,
         p.paid_at,
         p.note
@@ -534,8 +536,8 @@ app.get('/api/payments', async (req, res) => {
           const leaseMonth = leaseDate.getMonth() + 1;
           const billingYear = parseInt(year);
           const billingMonth = parseInt(month);
-          // Nếu thuê bắt đầu từ tháng này hoặc tương lai, và chưa thanh toán, thì không tính tiền tháng này
-          if ((leaseYear > billingYear || (leaseYear === billingYear && leaseMonth >= billingMonth)) && row.is_paid !== 1) {
+          // Nếu thuê bắt đầu từ tương lai, và chưa thanh toán, thì không tính tiền tháng này
+          if ((leaseYear > billingYear || (leaseYear === billingYear && leaseMonth > billingMonth)) && row.is_paid !== 1) {
             return false;
           }
         }
@@ -543,13 +545,14 @@ app.get('/api/payments', async (req, res) => {
       return true;
     });
 
-    // Gắn waterAmount, trashAmount, residenceAmount, computedTotal cho mỗi dòng
+    // Gắn waterAmount, trashAmount, residenceAmount, depositAmount, computedTotal cho mỗi dòng
     const enrichedRows = filteredRows.map(row => {
       const memberCount = row.member_count || 0;
       const isPaid = row.is_paid === 1;
 
-      // Xác định tháng đầu tiên thu tiền (sau tháng bắt đầu hợp đồng 1 tháng)
+      // Xác định tháng bắt đầu hợp đồng (tháng đóng tiền cọc) và tháng tính tiền đầu tiên (tháng tiếp theo)
       let isFirstMonth = false;
+      let isDepositMonth = false;
       if (row.lease_start_date) {
         const leaseDate = new Date(row.lease_start_date);
         if (!isNaN(leaseDate.getTime())) {
@@ -559,25 +562,36 @@ app.get('/api/payments', async (req, res) => {
           if (diffMonths === 1) {
             isFirstMonth = true;
           }
+          if (diffMonths === 0) {
+            isDepositMonth = true;
+          }
         }
       }
 
       // Nếu chưa thu tiền (isPaid = false), luôn tính lại theo số người ở hiện tại và đơn giá cài đặt mới
+      const rentAmt = (isPaid && row.rent_amount !== null && row.rent_amount !== undefined)
+        ? row.rent_amount
+        : (isDepositMonth ? 0 : (row.rent_price || 0));
       const waterAmt = (isPaid && row.water_amount !== null && row.water_amount !== undefined)
         ? row.water_amount
-        : waterPrice * memberCount;
+        : (isDepositMonth ? 0 : waterPrice * memberCount);
       const trashAmt = (isPaid && row.trash_amount !== null && row.trash_amount !== undefined)
         ? row.trash_amount
-        : trashPrice * memberCount;
+        : (isDepositMonth ? 0 : trashPrice * memberCount);
       const residenceAmt = (isPaid && row.residence_amount !== null && row.residence_amount !== undefined)
         ? row.residence_amount
         : (isFirstMonth ? residencePrice * memberCount : 0);
+      const depositAmt = (isPaid && row.deposit_amount !== null && row.deposit_amount !== undefined)
+        ? row.deposit_amount
+        : (isDepositMonth ? (row.deposit || 0) : 0);
 
       return { 
         ...row, 
+        rent_price: rentAmt,
         water_amount: waterAmt, 
         trash_amount: trashAmt, 
         residence_amount: residenceAmt, 
+        deposit_amount: depositAmt,
         waterPrice, 
         trashPrice, 
         residencePrice 
@@ -597,7 +611,7 @@ app.post('/api/payments/mark', async (req, res) => {
     if (!room_id || !year || !month)
       return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
 
-    const room = await db.prepare('SELECT rent_price, member_count FROM rooms WHERE id = ?').get(room_id);
+    const room = await db.prepare('SELECT rent_price, deposit, member_count FROM rooms WHERE id = ?').get(room_id);
     if (!room) return res.status(404).json({ error: 'Không tìm thấy phòng' });
 
     const elec = await db.prepare(
@@ -620,6 +634,7 @@ app.post('/api/payments/mark', async (req, res) => {
     // Kiểm tra tháng đầu tiên thu tiền
     const earliestTenant = await db.prepare('SELECT MIN(start_date) as start_date FROM tenants WHERE room_id = ?').get(room_id);
     let isFirstMonth = false;
+    let isDepositMonth = false;
     if (earliestTenant && earliestTenant.start_date) {
       const leaseDate = new Date(earliestTenant.start_date);
       if (!isNaN(leaseDate.getTime())) {
@@ -629,33 +644,38 @@ app.post('/api/payments/mark', async (req, res) => {
         if (diffMonths === 1) {
           isFirstMonth = true;
         }
+        if (diffMonths === 0) {
+          isDepositMonth = true;
+        }
       }
     }
 
-    const rentAmount = room.rent_price || 0;
-    const elecAmount = elec ? elec.total_cost : 0;
-    const waterAmount = waterPrice * memberCount;
-    const trashAmount = trashPrice * memberCount;
+    const rentAmount = isDepositMonth ? 0 : (room.rent_price || 0);
+    const elecAmount = isDepositMonth ? 0 : (elec ? elec.total_cost : 0);
+    const waterAmount = isDepositMonth ? 0 : (waterPrice * memberCount);
+    const trashAmount = isDepositMonth ? 0 : (trashPrice * memberCount);
     const residenceAmount = isFirstMonth ? (residencePrice * memberCount) : 0;
-    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount;
+    const depositAmount = isDepositMonth ? (room.deposit || 0) : 0;
+    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
     const paidAt = is_paid ? new Date().toISOString() : null;
 
     await db.prepare(`
-      INSERT INTO rent_payments (room_id, year, month, rent_amount, electricity_amount, water_amount, trash_amount, residence_amount, total_amount, is_paid, paid_at, note, tenant_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO rent_payments (room_id, year, month, rent_amount, electricity_amount, water_amount, trash_amount, residence_amount, deposit_amount, total_amount, is_paid, paid_at, note, tenant_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(room_id, year, month) DO UPDATE SET
         rent_amount = EXCLUDED.rent_amount,
         electricity_amount = EXCLUDED.electricity_amount,
         water_amount = EXCLUDED.water_amount,
         trash_amount = EXCLUDED.trash_amount,
         residence_amount = EXCLUDED.residence_amount,
+        deposit_amount = EXCLUDED.deposit_amount,
         total_amount = EXCLUDED.total_amount,
         is_paid = EXCLUDED.is_paid,
         paid_at = EXCLUDED.paid_at,
         note = EXCLUDED.note,
         tenant_name = COALESCE(EXCLUDED.tenant_name, rent_payments.tenant_name),
         updated_at = CURRENT_TIMESTAMP
-    `).run(room_id, parseInt(year), parseInt(month), rentAmount, elecAmount, waterAmount, trashAmount, residenceAmount, totalAmount, is_paid ? 1 : 0, paidAt, note || null, tenantName);
+    `).run(room_id, parseInt(year), parseInt(month), rentAmount, elecAmount, waterAmount, trashAmount, residenceAmount, depositAmount, totalAmount, is_paid ? 1 : 0, paidAt, note || null, tenantName);
 
     res.json({ message: is_paid ? '✅ Đã đánh dấu ĐÃ THU tiền' : '↩️ Đã bỏ đánh dấu thu tiền', totalAmount });
   } catch (err) {
@@ -752,6 +772,7 @@ app.get('/api/invoice', async (req, res) => {
     // Kiểm tra xem có phải tháng đầu tiên hoặc tháng bắt đầu thuê không
     const earliestTenant = await db.prepare('SELECT MIN(start_date) as start_date FROM tenants WHERE room_id = ?').get(room_id);
     let isFirstMonth = false;
+    let isDepositMonth = false;
     let isExcludedMonth = false;
     if (earliestTenant && earliestTenant.start_date) {
       const leaseDate = new Date(earliestTenant.start_date);
@@ -761,14 +782,16 @@ app.get('/api/invoice', async (req, res) => {
         const diffMonths = (parseInt(year) - leaseYear) * 12 + (parseInt(month) - leaseMonth);
         if (diffMonths === 1) {
           isFirstMonth = true;
-        } else if (diffMonths <= 0) {
+        } else if (diffMonths === 0) {
+          isDepositMonth = true;
+        } else if (diffMonths < 0) {
           isExcludedMonth = true;
         }
       }
     }
 
-    const rentAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (room.rent_price || 0);
-    const elecAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (elec ? elec.total_cost : 0);
+    const rentAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (room.rent_price || 0);
+    const elecAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (elec ? elec.total_cost : 0);
 
     // Lấy giá nước/rác/tạm trú
     const waterPrice = parseFloat(settings['water_price']) || 20000;
@@ -776,10 +799,11 @@ app.get('/api/invoice', async (req, res) => {
     const residencePrice = parseFloat(settings['residence_price']) || 50000;
     const memberCount = room.member_count || 0; // Sửa lỗi ở đây: Sử dụng room.member_count thực tế thay vì đếm số tenants
 
-    const waterAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (payment ? (payment.water_amount || 0) : waterPrice * memberCount);
-    const trashAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (payment ? (payment.trash_amount || 0) : trashPrice * memberCount);
-    const residenceAmount = (isExcludedMonth && (!payment || payment.is_paid !== 1)) ? 0 : (payment ? (payment.residence_amount || 0) : (isFirstMonth ? residencePrice * memberCount : 0));
-    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount;
+    const waterAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (payment ? (payment.water_amount || 0) : waterPrice * memberCount);
+    const trashAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (payment ? (payment.trash_amount || 0) : trashPrice * memberCount);
+    const residenceAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (payment ? (payment.residence_amount || 0) : (isFirstMonth ? residencePrice * memberCount : 0));
+    const depositAmount = isExcludedMonth && (!payment || payment.is_paid !== 1) ? 0 : (payment ? (payment.deposit_amount || 0) : (isDepositMonth ? (room.deposit || 0) : 0));
+    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
 
     res.json({
       room,
@@ -794,13 +818,16 @@ app.get('/api/invoice', async (req, res) => {
         waterAmount,
         trashAmount,
         residenceAmount,
+        depositAmount,
         totalAmount,
         memberCount,
         waterPrice,
         trashPrice,
         residencePrice,
         month: parseInt(month),
-        year: parseInt(year)
+        year: parseInt(year),
+        isFirstMonth,
+        isDepositMonth
       }
     });
   } catch (err) {
@@ -885,6 +912,7 @@ async function sendDailyEmailNotification(force = false) {
       SELECT 
         r.id as room_id,
         r.room_code,
+        r.deposit,
         COALESCE(p.rent_amount, r.rent_price) as rent_price,
         r.status as room_status,
         r.member_count,
@@ -895,6 +923,7 @@ async function sendDailyEmailNotification(force = false) {
         p.water_amount,
         p.trash_amount,
         p.residence_amount,
+        p.deposit_amount,
         p.total_amount
       FROM rooms r
       LEFT JOIN tenants t ON t.room_id = r.id
@@ -917,9 +946,9 @@ async function sendDailyEmailNotification(force = false) {
           const leaseYear = leaseDate.getFullYear();
           const leaseMonth = leaseDate.getMonth() + 1;
           const diffMonths = (currentYear - leaseYear) * 12 + (currentMonth - leaseMonth);
-          if (diffMonths === 1) {
+          if (diffMonths === 0) {
             isFirstMonth = true;
-          } else if (diffMonths <= 0) {
+          } else if (diffMonths < 0) {
             isExcludedMonth = true;
           }
         }
@@ -931,7 +960,8 @@ async function sendDailyEmailNotification(force = false) {
       const waterAmt = isExcludedMonth ? 0 : (row.water_amount !== null && row.water_amount !== undefined ? row.water_amount : waterPrice * memberCount);
       const trashAmt = isExcludedMonth ? 0 : (row.trash_amount !== null && row.trash_amount !== undefined ? row.trash_amount : trashPrice * memberCount);
       const residenceAmt = isExcludedMonth ? 0 : (row.residence_amount !== null && row.residence_amount !== undefined ? row.residence_amount : (isFirstMonth ? residencePrice * memberCount : 0));
-      const totalAmt = rentAmt + elecAmt + waterAmt + trashAmt + residenceAmt;
+      const depositAmt = isExcludedMonth ? 0 : (row.deposit_amount !== null && row.deposit_amount !== undefined ? row.deposit_amount : (isFirstMonth ? (row.deposit || 0) : 0));
+      const totalAmt = rentAmt + elecAmt + waterAmt + trashAmt + residenceAmt + depositAmt;
 
       // Tính ngày hạn
       let dueDay = parseInt(settings['payment_due_day']) || 5;

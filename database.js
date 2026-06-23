@@ -80,6 +80,8 @@ async function initDatabase() {
         electricity_amount REAL NOT NULL DEFAULT 0,
         water_amount REAL NOT NULL DEFAULT 0,
         trash_amount REAL NOT NULL DEFAULT 0,
+        residence_amount REAL NOT NULL DEFAULT 0,
+        deposit_amount REAL NOT NULL DEFAULT 0,
         total_amount REAL NOT NULL DEFAULT 0,
         is_paid INTEGER NOT NULL DEFAULT 0,  -- 0 = chưa thu, 1 = đã thu
         paid_at TIMESTAMP,
@@ -91,11 +93,12 @@ async function initDatabase() {
       );
     `);
 
-    // Migration: thêm cột water_amount, trash_amount, và residence_amount nếu chưa có (cho DB cũ)
+    // Migration: thêm cột water_amount, trash_amount, residence_amount, và deposit_amount nếu chưa có (cho DB cũ)
     try {
       await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS water_amount REAL NOT NULL DEFAULT 0`);
       await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS trash_amount REAL NOT NULL DEFAULT 0`);
       await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS residence_amount REAL NOT NULL DEFAULT 0`);
+      await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS deposit_amount REAL NOT NULL DEFAULT 0`);
     } catch(e) { /* columns already exist */ }
 
     // Migration: Đổi tên các phòng Khu B cũ (B01 - B15) sang định dạng tầng mới (B101 - B305) để giữ dữ liệu
