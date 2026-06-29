@@ -99,6 +99,9 @@ function initApp() {
 
   // 6. Khởi tạo cài đặt quyền thông báo đẩy
   initPushNotifications();
+
+  // 7. Tải trạng thái Telegram Bot
+  loadTelegramStatus();
 }
 
 // ==========================================
@@ -106,12 +109,24 @@ function initApp() {
 // ==========================================
 function initTabs() {
   const navItems = document.querySelectorAll('.nav-item');
+  const bottomNavItems = document.querySelectorAll('.bottom-nav-item');
+
+  const handleTabClick = (item) => {
+    const tabId = item.getAttribute('data-tab');
+    switchTab(tabId);
+  };
 
   navItems.forEach(item => {
     item.addEventListener('click', (e) => {
       e.preventDefault();
-      const tabId = item.getAttribute('data-tab');
-      switchTab(tabId);
+      handleTabClick(item);
+    });
+  });
+
+  bottomNavItems.forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      handleTabClick(item);
     });
   });
 
@@ -160,6 +175,15 @@ function switchTab(tabId) {
 
   // Cập nhật Active class trên Sidebar
   document.querySelectorAll('.nav-item').forEach(item => {
+    if (item.getAttribute('data-tab') === tabId) {
+      item.classList.add('active');
+    } else {
+      item.classList.remove('active');
+    }
+  });
+
+  // Cập nhật Active class trên Bottom Navigation (Mobile)
+  document.querySelectorAll('.bottom-nav-item').forEach(item => {
     if (item.getAttribute('data-tab') === tabId) {
       item.classList.add('active');
     } else {
@@ -223,6 +247,8 @@ function registerEventListeners() {
       document.getElementById('edit-deposit').value = room.deposit;
       document.getElementById('edit-status').value = room.status;
       document.getElementById('edit-member-count').value = room.member_count || 0;
+      const billingDaySelect = document.getElementById('edit-billing-day');
+      if (billingDaySelect) billingDaySelect.value = room.billing_day || 30;
       editRoomForm.style.display = 'block';
       btnEditRoomTrigger.style.display = 'none';
     }
@@ -334,6 +360,15 @@ function registerEventListeners() {
       document.querySelectorAll('.pay-filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       filterPaymentRows(btn.getAttribute('data-filter'));
+    });
+  });
+
+  // Filter buttons đợt thu (Tất cả / Đợt 15 / Đợt 30)
+  document.querySelectorAll('.pay-billing-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.pay-billing-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      filterPaymentsByBilling(btn.getAttribute('data-billing'));
     });
   });
 }
@@ -506,7 +541,6 @@ async function handleSettingsSubmit(e) {
   const waterPrice = document.getElementById('setting-water-price')?.value || '';
   const trashPrice = document.getElementById('setting-trash-price')?.value || '';
   const residencePrice = document.getElementById('setting-residence-price')?.value || '';
-  const dueDay = document.getElementById('setting-due-day')?.value || '5';
   const bankName = document.getElementById('setting-bank-name')?.value || '';
   const bankAccount = document.getElementById('setting-bank-account')?.value || '';
   const bankOwner = document.getElementById('setting-bank-owner')?.value || '';
@@ -524,7 +558,6 @@ async function handleSettingsSubmit(e) {
         water_price: waterPrice,
         trash_price: trashPrice,
         residence_price: residencePrice,
-        payment_due_day: dueDay,
         bank_name: bankName,
         bank_account: bankAccount,
         bank_owner: bankOwner,
@@ -686,6 +719,8 @@ async function refreshRoomModalData() {
     document.getElementById('modal-room-price').textContent = formatVND(room.rent_price);
     document.getElementById('modal-room-deposit').textContent = formatVND(room.deposit);
     document.getElementById('modal-room-members').textContent = `${room.member_count} người`;
+    const billingDayEl = document.getElementById('modal-room-billing-day');
+    if (billingDayEl) billingDayEl.textContent = `Ngày ${room.billing_day || 30}`;
 
     // Render danh sách người thuê
     renderTenantsList(data.tenants);
@@ -802,6 +837,7 @@ async function handleRoomUpdateSubmit(e) {
   const deposit = document.getElementById('edit-deposit').value;
   const status = document.getElementById('edit-status').value;
   const memberCount = document.getElementById('edit-member-count').value;
+  const billingDay = parseInt(document.getElementById('edit-billing-day')?.value) || 30;
 
   try {
     await fetchAPI(`/api/rooms/${currentState.selectedRoomId}`, {
@@ -810,7 +846,8 @@ async function handleRoomUpdateSubmit(e) {
         rent_price: parseFloat(price),
         deposit: parseFloat(deposit),
         status: status,
-        member_count: parseInt(memberCount) || 0
+        member_count: parseInt(memberCount) || 0,
+        billing_day: billingDay
       })
     });
 
@@ -1228,13 +1265,8 @@ function renderPaymentsTable(data) {
 
   // Tính toán hạn đóng và số ngày còn lại/quá hạn cho mỗi dòng
   const processedData = data.map(row => {
-    let dueDay = currentState.paymentDueDay || 5;
-    if (row.lease_start_date) {
-      const d = new Date(row.lease_start_date);
-      if (!isNaN(d.getTime())) {
-        dueDay = d.getDate();
-      }
-    }
+    // Ưu tiên dùng billing_day của phòng (15 hoặc 30), fallback về global setting
+    const dueDay = row.billing_day || currentState.paymentDueDay || 30;
     const lastDay = new Date(year, month, 0).getDate();
     const finalDay = Math.min(dueDay, lastDay);
     const dueDate = new Date(year, month - 1, finalDay);
@@ -1282,6 +1314,7 @@ function renderPaymentsTable(data) {
     tr.className = isPaid ? 'row-paid' : 'row-unpaid';
     tr.setAttribute('data-room-id', row.room_id);
     tr.setAttribute('data-paid', isPaid ? '1' : '0');
+    tr.setAttribute('data-billing-day', String(row.billing_day || 30));
 
     // Tạo tag trạng thái thanh toán và quá hạn
     let statusBadgeHtml = '';
@@ -1355,16 +1388,46 @@ function renderPaymentsTable(data) {
 
 // Filter local không gọi API (hiệu năng tốt)
 function filterPaymentRows(filter) {
+  const activeBillingPill = document.querySelector('.pay-billing-pill.active');
+  const activeBilling = activeBillingPill ? activeBillingPill.getAttribute('data-billing') : 'all';
+
   const rows = document.querySelectorAll('#payments-table-body tr[data-room-id]');
   rows.forEach(tr => {
     const isPaid = tr.getAttribute('data-paid') === '1';
-    if (filter === 'all') {
-      tr.style.display = '';
-    } else if (filter === 'paid') {
-      tr.style.display = isPaid ? '' : 'none';
-    } else if (filter === 'unpaid') {
-      tr.style.display = !isPaid ? '' : 'none';
-    }
+    const billingDay = tr.getAttribute('data-billing-day');
+
+    let showByStatus = true;
+    if (filter === 'all') showByStatus = true;
+    else if (filter === 'paid') showByStatus = isPaid;
+    else if (filter === 'unpaid') showByStatus = !isPaid;
+
+    let showByBilling = true;
+    if (activeBilling === '15') showByBilling = billingDay === '15';
+    else if (activeBilling === '30') showByBilling = billingDay === '30';
+
+    tr.style.display = (showByStatus && showByBilling) ? '' : 'none';
+  });
+}
+
+function filterPaymentsByBilling(billing) {
+  const activePill = document.querySelector('.pay-filter-btn.active');
+  const activeFilter = activePill ? activePill.getAttribute('data-filter') : 'all';
+
+  const rows = document.querySelectorAll('#payments-table-body tr[data-room-id]');
+  rows.forEach(tr => {
+    const isPaid = tr.getAttribute('data-paid') === '1';
+    const billingDay = tr.getAttribute('data-billing-day');
+
+    let showByStatus = true;
+    if (activeFilter === 'all') showByStatus = true;
+    else if (activeFilter === 'paid') showByStatus = isPaid;
+    else if (activeFilter === 'unpaid') showByStatus = !isPaid;
+
+    let showByBilling = true;
+    if (billing === '15') showByBilling = billingDay === '15';
+    else if (billing === '30') showByBilling = billingDay === '30';
+
+    tr.style.display = (showByStatus && showByBilling) ? '' : 'none';
   });
 }
 
@@ -1443,7 +1506,7 @@ function initElectricityModeTabs() {
   document.getElementById('btn-bulk-save').addEventListener('click', saveBulkReadings);
   document.getElementById('btn-bulk-save-bottom').addEventListener('click', saveBulkReadings);
 
-  // Filter pills
+  // Filter pills (trạng thái nhập điện)
   document.querySelectorAll('.bulk-pill').forEach(pill => {
     pill.addEventListener('click', () => {
       document.querySelectorAll('.bulk-pill').forEach(p => p.classList.remove('active'));
@@ -1451,6 +1514,45 @@ function initElectricityModeTabs() {
       applyBulkFilter(pill.getAttribute('data-filter'));
     });
   });
+
+  // Filter pills (đợt thu tiền)
+  document.querySelectorAll('.bulk-billing-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.bulk-billing-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      applyBulkBillingFilter(pill.getAttribute('data-billing'));
+    });
+  });
+
+  // Chat panel toggle
+  const btnOpenChat = document.getElementById('btn-open-chat-panel');
+  const btnCloseChat = document.getElementById('btn-close-chat-panel');
+  const chatPanel = document.getElementById('bulk-chat-panel');
+  if (btnOpenChat && chatPanel) {
+    btnOpenChat.addEventListener('click', () => {
+      chatPanel.style.display = chatPanel.style.display === 'none' ? 'block' : 'none';
+    });
+  }
+  if (btnCloseChat && chatPanel) {
+    btnCloseChat.addEventListener('click', () => {
+      chatPanel.style.display = 'none';
+    });
+  }
+
+  // Chat parse button
+  const btnParseChat = document.getElementById('btn-parse-chat');
+  if (btnParseChat) {
+    btnParseChat.addEventListener('click', parseChatReadings);
+  }
+
+  // Clear chat button
+  const btnClearChat = document.getElementById('btn-clear-chat');
+  if (btnClearChat) {
+    btnClearChat.addEventListener('click', () => {
+      document.getElementById('bulk-chat-input').value = '';
+      document.getElementById('bulk-chat-result').innerHTML = '';
+    });
+  }
 }
 
 function initBulkDropdowns() {
@@ -1538,6 +1640,7 @@ function renderBulkTable(data, month, year) {
     tr.setAttribute('data-old-reading', oldReading);
     tr.setAttribute('data-status', room.status);
     tr.setAttribute('data-has-data', hasCurrentData ? '1' : '0');
+    tr.setAttribute('data-billing-day', String(room.billing_day || 30));
 
     // Row style
     if (isVacant) tr.className = 'bulk-row-vacant';
@@ -1696,19 +1799,129 @@ function updateBulkSummary() {
 
 function applyBulkFilter(filter) {
   const rows = document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]');
+  const activeBillingPill = document.querySelector('.bulk-billing-pill.active');
+  const activeBilling = activeBillingPill ? activeBillingPill.getAttribute('data-billing') : 'all';
+
   rows.forEach(tr => {
     const status = tr.getAttribute('data-status');
     const hasDone = tr.getAttribute('data-has-data') === '1';
     const isOccupied = status === 'occupied';
+    const billingDay = tr.getAttribute('data-billing-day');
 
-    let show = true;
-    if (filter === 'occupied') show = isOccupied;
-    else if (filter === 'missing') show = isOccupied && !hasDone;
-    else if (filter === 'done') show = hasDone;
+    let showByStatus = true;
+    if (filter === 'occupied') showByStatus = isOccupied;
+    else if (filter === 'missing') showByStatus = isOccupied && !hasDone;
+    else if (filter === 'done') showByStatus = hasDone;
 
-    tr.style.display = show ? '' : 'none';
+    let showByBilling = true;
+    if (activeBilling === '15') showByBilling = billingDay === '15';
+    else if (activeBilling === '30') showByBilling = billingDay === '30';
+
+    tr.style.display = (showByStatus && showByBilling) ? '' : 'none';
   });
 }
+
+function applyBulkBillingFilter(billing) {
+  const rows = document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]');
+  const activePill = document.querySelector('.bulk-pill.active');
+  const activeFilter = activePill ? activePill.getAttribute('data-filter') : 'all';
+
+  rows.forEach(tr => {
+    const status = tr.getAttribute('data-status');
+    const hasDone = tr.getAttribute('data-has-data') === '1';
+    const isOccupied = status === 'occupied';
+    const billingDay = tr.getAttribute('data-billing-day');
+
+    let showByStatus = true;
+    if (activeFilter === 'occupied') showByStatus = isOccupied;
+    else if (activeFilter === 'missing') showByStatus = isOccupied && !hasDone;
+    else if (activeFilter === 'done') showByStatus = hasDone;
+
+    let showByBilling = true;
+    if (billing === '15') showByBilling = billingDay === '15';
+    else if (billing === '30') showByBilling = billingDay === '30';
+
+    tr.style.display = (showByStatus && showByBilling) ? '' : 'none';
+  });
+}
+
+// ==========================================
+// PARSE SỐ ĐIỆN TỪ TIN NHẮN CHAT
+// ==========================================
+function parseChatReadings() {
+  const chatText = document.getElementById('bulk-chat-input').value;
+  const resultEl = document.getElementById('bulk-chat-result');
+
+  if (!chatText.trim()) {
+    resultEl.innerHTML = '<span style="color:var(--warning);">⚠️ Vui lòng dán nội dung tin nhắn vào ô trên.</span>';
+    return;
+  }
+
+  // Regex linh hoạt để nhận dạng: "A101: 2500", "A101 - 2500", "phòng A101 số 2500", "A101 2500", v.v.
+  // Hỗ trợ: Khu A, Khu B, dạng A101, B201, B301... và số điện là số nguyên >= 1
+  const patterns = [
+    // Dạng: A101: 2500 hoặc A101 - 2500 hoặc A101=2500
+    /(?:ph[oòó]ng\s*)?([A-Ba-b]\d{3})\s*[:\-=]\s*(\d+)/gi,
+    // Dạng: A101 số 2500 hoặc phòng A101 số điện 2500
+    /(?:ph[oòó]ng\s*)?([A-Ba-b]\d{3})\s+(?:s[oốố]\s*(?:\u0111i[eệ]n)?\s*)?(\d+)/gi,
+  ];
+
+  // Gom tất cả kết quả từ mọi pattern, ưu tiên lấy kết quả từ pattern trước
+  const foundMap = {}; // roomCode -> reading
+  for (const pattern of patterns) {
+    let match;
+    pattern.lastIndex = 0;
+    while ((match = pattern.exec(chatText)) !== null) {
+      const rawCode = match[1].toUpperCase();
+      const reading = parseInt(match[2], 10);
+      if (!foundMap[rawCode] && !isNaN(reading) && reading > 0) {
+        foundMap[rawCode] = reading;
+      }
+    }
+  }
+
+  if (Object.keys(foundMap).length === 0) {
+    resultEl.innerHTML = '<span style="color:var(--danger);">❌ Không tìm thấy mã phòng và số điện nào trong đoạn text này.</span>';
+    return;
+  }
+
+  // Tìm các input trong bảng và điền vào
+  let filled = 0;
+  let notFound = [];
+
+  for (const [roomCode, newReading] of Object.entries(foundMap)) {
+    // Tìm hàng tr có data-room-id tương ứng với mã phòng
+    const allRows = document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]');
+    let matched = false;
+    allRows.forEach(tr => {
+      const codeCell = tr.querySelector('td:first-child strong');
+      if (codeCell && codeCell.textContent.trim().toUpperCase() === roomCode) {
+        const newInput = tr.querySelector('.bulk-new-reading');
+        const oldInput = tr.querySelector('.bulk-old-reading');
+        if (newInput && !newInput.disabled) {
+          newInput.value = newReading;
+          // Kích hoạt sự kiện input để tự động tính toán
+          newInput.dispatchEvent(new Event('input', { bubbles: true }));
+          // Focus + highlight
+          newInput.classList.add('input-valid');
+          matched = true;
+          filled++;
+        }
+      }
+    });
+    if (!matched) notFound.push(roomCode);
+  }
+
+  let html = '';
+  if (filled > 0) {
+    html += `<div style="color:var(--success);font-weight:600;">✅ Đã điền số điện cho ${filled} phòng thành công!</div>`;
+  }
+  if (notFound.length > 0) {
+    html += `<div style="color:var(--warning);margin-top:4px;">⚠️ Không tìm thấy trong bảng: <strong>${notFound.join(', ')}</strong> (có thể phòng trống hoặc mã phòng khác)</div>`;
+  }
+  resultEl.innerHTML = html;
+}
+
 
 async function saveBulkReadings() {
   const month = document.getElementById('bulk-month').value;
@@ -1981,6 +2194,17 @@ function renderInvoiceDocument(data, note) {
     `;
   }
 
+  // Hiển thị chỉ số điện ban đầu (số điện bàn giao) nếu ở tháng cọc đầu tiên
+  if (summary.isDepositMonth) {
+    tbody.innerHTML += `
+      <tr style="border-top: 1px dashed var(--border-color);">
+        <td>🔌 Chỉ số điện bàn giao</td>
+        <td><small style="color:var(--success)">Số điện hiện tại khi nhận phòng (Không tính phí)</small></td>
+        <td class="text-right" style="color:var(--neutral-gray)">${summary.currentElecIndex || 0} kWh</td>
+      </tr>
+    `;
+  }
+
   // Reset và hiển thị Grand total
   const tfoot = document.querySelector('.inv-charges-table tfoot');
   tfoot.innerHTML = `
@@ -2233,14 +2457,23 @@ async function loadNotifications() {
     const unpaid = payments.filter(p => !p.is_paid && p.room_status === 'occupied');
 
     // Ánh xạ tính toán ngày hạn thanh toán riêng cho mỗi phòng
-    const unpaidWithDue = unpaid.map(p => {
-      let dueDay = currentState.paymentDueDay || 5;
+    const unpaidWithDue = [];
+    unpaid.forEach(p => {
+      let dueDay = 5;
+      let isDepositMonth = false;
       if (p.lease_start_date) {
         const d = new Date(p.lease_start_date);
         if (!isNaN(d.getTime())) {
           dueDay = d.getDate(); // Ngày thuê hàng tháng chính là ngày hạn đóng
+          const diffMonths = (year - d.getFullYear()) * 12 + (month - (d.getMonth() + 1));
+          if (diffMonths === 0) {
+            isDepositMonth = true;
+          }
         }
       }
+
+      // Bỏ qua không thông báo đóng tiền phòng ở tháng cọc đầu tiên
+      if (isDepositMonth) return;
 
       // Giới hạn ngày trong tháng hiện tại
       const lastDay = new Date(year, month, 0).getDate();
@@ -2250,15 +2483,15 @@ async function loadNotifications() {
       const diffTime = dueDate - todayStart;
       const daysUntilDue = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-      return {
+      unpaidWithDue.push({
         ...p,
         dueDate,
         daysUntilDue
-      };
+      });
     });
 
-    // Chỉ thông báo các phòng còn ≤ 3 ngày đến hạn hoặc đã quá hạn
-    const filtered = unpaidWithDue.filter(p => p.daysUntilDue <= 3);
+    // Chỉ thông báo các phòng còn ≤ 15 ngày đến hạn hoặc đã quá hạn
+    const filtered = unpaidWithDue.filter(p => p.daysUntilDue <= 15);
 
     // Sắp xếp: Quá hạn nhiều nhất (ngày âm nhiều nhất) lên đầu, dần dần đến chưa quá hạn
     filtered.sort((a, b) => a.daysUntilDue - b.daysUntilDue);
@@ -2577,5 +2810,138 @@ function initPushNotifications() {
   // Tự động xin quyền khi lần đầu mở app (nếu chưa có quyết định)
   if ('Notification' in window && Notification.permission === 'default') {
     // Không xin ngay, để người dùng chủ động bấm nút
+  }
+}
+
+// ==========================================
+// TELEGRAM BOT
+// ==========================================
+
+/**
+ * Cập nhật giao diện status badge Telegram
+ */
+function updateTelegramUI(running, tokenPreview, adminChatId) {
+  const dot  = document.getElementById('tg-status-dot');
+  const text = document.getElementById('tg-status-text');
+  const badge = document.getElementById('tg-status-badge');
+  const btnConnect    = document.getElementById('btn-tg-connect');
+  const btnDisconnect = document.getElementById('btn-tg-disconnect');
+  const commandsPanel = document.getElementById('tg-commands-panel');
+  const tokenPreviewEl = document.getElementById('tg-token-preview');
+
+  if (!dot) return;
+
+  if (running) {
+    dot.textContent  = '🟢';
+    text.textContent = 'Đang hoạt động';
+    badge.style.color = 'var(--success)';
+    badge.style.borderColor = 'var(--success)';
+    badge.style.background = 'var(--success-bg)';
+    if (btnConnect)    btnConnect.style.display    = 'none';
+    if (btnDisconnect) btnDisconnect.style.display = 'inline-flex';
+    if (commandsPanel) commandsPanel.style.display = 'block';
+  } else {
+    dot.textContent  = '⚫';
+    text.textContent = 'Chưa kết nối';
+    badge.style.color = 'var(--neutral-gray)';
+    badge.style.borderColor = 'var(--border-color)';
+    badge.style.background = 'var(--neutral-light)';
+    if (btnConnect)    btnConnect.style.display    = 'inline-flex';
+    if (btnDisconnect) btnDisconnect.style.display = 'none';
+    if (commandsPanel) commandsPanel.style.display = 'none';
+  }
+
+  // Hiện preview token đã lưu (ẩn bớt)
+  if (tokenPreviewEl && tokenPreview) {
+    tokenPreviewEl.textContent = `Token đã lưu: ${tokenPreview}`;
+  }
+
+  // Điền lại Admin Chat ID nếu có
+  const chatIdInput = document.getElementById('tg-admin-chat-id');
+  if (chatIdInput && adminChatId) {
+    chatIdInput.value = adminChatId;
+  }
+}
+
+/**
+ * Load trạng thái Telegram Bot từ server
+ */
+async function loadTelegramStatus() {
+  try {
+    const res = await fetch('/api/telegram/status');
+    if (!res.ok) return;
+    const data = await res.json();
+    updateTelegramUI(data.running, data.tokenPreview, data.adminChatId);
+  } catch (e) {
+    // Server chưa có endpoint → bỏ qua
+  }
+}
+
+/**
+ * Kết nối bot với token và chat ID nhập vào
+ */
+async function connectTelegramBot() {
+  const token      = document.getElementById('tg-bot-token')?.value?.trim();
+  const adminChatId = document.getElementById('tg-admin-chat-id')?.value?.trim();
+  const msgEl      = document.getElementById('tg-connect-msg');
+  const btn        = document.getElementById('btn-tg-connect');
+
+  if (!token) {
+    showToast('⚠️ Vui lòng nhập Bot Token', 'error');
+    return;
+  }
+  if (!adminChatId) {
+    showToast('⚠️ Vui lòng nhập Admin Chat ID', 'error');
+    return;
+  }
+
+  // Hiện loading
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang kết nối...'; }
+  if (msgEl) msgEl.textContent = '';
+
+  try {
+    const res = await fetch('/api/telegram/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, adminChatId })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      showToast(data.message, 'success');
+      if (msgEl) { msgEl.style.color = 'var(--success)'; msgEl.textContent = data.message; }
+      // Xóa input token sau khi lưu (bảo mật)
+      const tokenInput = document.getElementById('tg-bot-token');
+      if (tokenInput) tokenInput.value = '';
+      updateTelegramUI(true, token.substring(0, 12) + '...', adminChatId);
+    } else {
+      showToast('❌ ' + (data.error || 'Kết nối thất bại'), 'error');
+      if (msgEl) { msgEl.style.color = 'var(--danger)'; msgEl.textContent = '❌ ' + (data.error || 'Kết nối thất bại'); }
+    }
+  } catch (err) {
+    showToast('❌ Lỗi kết nối server', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✈️ Kết nối Bot'; }
+  }
+}
+
+/**
+ * Ngắt kết nối Telegram Bot
+ */
+async function disconnectTelegramBot() {
+  if (!confirm('Bạn có chắc muốn ngắt kết nối Telegram Bot không?')) return;
+
+  const btn = document.getElementById('btn-tg-disconnect');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang ngắt...'; }
+
+  try {
+    const res = await fetch('/api/telegram/disconnect', { method: 'POST' });
+    const data = await res.json();
+    showToast(data.message || '🔴 Bot đã ngắt kết nối', 'info');
+    updateTelegramUI(false, null, null);
+  } catch (err) {
+    showToast('❌ Lỗi khi ngắt kết nối', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔴 Ngắt kết nối'; }
   }
 }

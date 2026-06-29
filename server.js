@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const db = require('./database');
+const telegramBot = require('./telegramBot');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -204,7 +205,7 @@ app.get('/api/rooms/:id', async (req, res) => {
 
 app.put('/api/rooms/:id', async (req, res) => {
   try {
-    const { rent_price, deposit, status, member_count } = req.body;
+    const { rent_price, deposit, status, member_count, billing_day } = req.body;
     
     // Nếu chuyển trạng thái thành trống (vacant), tự động xóa sạch người thuê trong phòng
     if (status === 'vacant') {
@@ -229,10 +230,11 @@ app.put('/api/rooms/:id', async (req, res) => {
     }
 
     const finalStatus = finalMemberCount > 0 ? 'occupied' : status;
+    const finalBillingDay = billing_day === 15 ? 15 : 30; // Chỉ chấp nhận 15 hoặc 30
 
     const info = await db.prepare(
-      'UPDATE rooms SET rent_price = ?, deposit = ?, status = ?, member_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(rent_price, deposit, finalStatus, finalMemberCount, req.params.id);
+      'UPDATE rooms SET rent_price = ?, deposit = ?, status = ?, member_count = ?, billing_day = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(rent_price, deposit, finalStatus, finalMemberCount, finalBillingDay, req.params.id);
     
     if (info.changes === 0) return res.status(404).json({ error: 'Không tìm thấy phòng' });
     res.json({ message: 'Cập nhật phòng thành công' });
@@ -379,9 +381,9 @@ app.get('/api/electricity/bulk-data', async (req, res) => {
     const prevM = m === 1 ? 12 : m - 1;
     const prevY = m === 1 ? y - 1 : y;
 
-    // Lấy tất cả phòng
+    // Lấy tất cả phòng (bao gồm billing_day để biết đợt thu tiền)
     const rooms = await db.prepare(
-      "SELECT r.*, (SELECT COUNT(*) FROM tenants t WHERE t.room_id = r.id) as tenant_count FROM rooms r ORDER BY r.zone ASC, r.room_code ASC"
+      "SELECT r.*, r.billing_day, (SELECT COUNT(*) FROM tenants t WHERE t.room_id = r.id) as tenant_count FROM rooms r ORDER BY r.zone ASC, r.room_code ASC"
     ).all();
 
     // Lấy chỉ số điện tháng hiện tại (nếu đã nhập)
@@ -412,6 +414,7 @@ app.get('/api/electricity/bulk-data', async (req, res) => {
       zone: room.zone,
       status: room.status,
       tenant_count: room.tenant_count,
+      billing_day: room.billing_day || 30,
       last_reading: lastMap[room.id] !== undefined ? lastMap[room.id] : 0,
       current: currentMap[room.id] || null
     }));
@@ -497,6 +500,7 @@ app.get('/api/payments', async (req, res) => {
         r.id as room_id,
         r.room_code,
         r.zone,
+        r.billing_day,
         COALESCE(p.rent_amount, r.rent_price) as rent_price,
         r.status as room_status,
         r.member_count,
@@ -536,8 +540,8 @@ app.get('/api/payments', async (req, res) => {
           const leaseMonth = leaseDate.getMonth() + 1;
           const billingYear = parseInt(year);
           const billingMonth = parseInt(month);
-          // Nếu thuê bắt đầu từ tương lai, và chưa thanh toán, thì không tính tiền tháng này
-          if ((leaseYear > billingYear || (leaseYear === billingYear && leaseMonth > billingMonth)) && row.is_paid !== 1) {
+          // Nếu thuê bắt đầu từ tháng này hoặc tương lai, thì không hiển thị trong danh sách thu tiền tháng này
+          if (leaseYear > billingYear || (leaseYear === billingYear && leaseMonth >= billingMonth)) {
             return false;
           }
         }
@@ -611,7 +615,7 @@ app.post('/api/payments/mark', async (req, res) => {
     if (!room_id || !year || !month)
       return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
 
-    const room = await db.prepare('SELECT rent_price, deposit, member_count FROM rooms WHERE id = ?').get(room_id);
+    const room = await db.prepare('SELECT rent_price, deposit, member_count, billing_day FROM rooms WHERE id = ?').get(room_id);
     if (!room) return res.status(404).json({ error: 'Không tìm thấy phòng' });
 
     const elec = await db.prepare(
@@ -658,6 +662,7 @@ app.post('/api/payments/mark', async (req, res) => {
     const depositAmount = isDepositMonth ? (room.deposit || 0) : 0;
     const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
     const paidAt = is_paid ? new Date().toISOString() : null;
+    const finalBillingDay = room.billing_day || 30;
 
     await db.prepare(`
       INSERT INTO rent_payments (room_id, year, month, rent_amount, electricity_amount, water_amount, trash_amount, residence_amount, deposit_amount, total_amount, is_paid, paid_at, note, tenant_name)
@@ -805,6 +810,11 @@ app.get('/api/invoice', async (req, res) => {
     const depositAmount = isExcludedMonth && (!payment || payment.is_paid !== 1) ? 0 : (payment ? (payment.deposit_amount || 0) : (isDepositMonth ? (room.deposit || 0) : 0));
     const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
 
+    // Lấy chỉ số điện mới nhất của phòng
+    const latestElec = await db.prepare(
+      'SELECT new_reading FROM electricity_readings WHERE room_id = ? ORDER BY year DESC, month DESC LIMIT 1'
+    ).get(room_id);
+
     res.json({
       room,
       tenants,
@@ -827,7 +837,8 @@ app.get('/api/invoice', async (req, res) => {
         month: parseInt(month),
         year: parseInt(year),
         isFirstMonth,
-        isDepositMonth
+        isDepositMonth,
+        currentElecIndex: latestElec ? latestElec.new_reading : 0
       }
     });
   } catch (err) {
@@ -913,6 +924,7 @@ async function sendDailyEmailNotification(force = false) {
         r.id as room_id,
         r.room_code,
         r.deposit,
+        r.billing_day,
         COALESCE(p.rent_amount, r.rent_price) as rent_price,
         r.status as room_status,
         r.member_count,
@@ -939,6 +951,7 @@ async function sendDailyEmailNotification(force = false) {
       if (row.is_paid === 1 || row.room_status !== 'occupied') continue;
 
       let isFirstMonth = false;
+      let isDepositMonth = false;
       let isExcludedMonth = false;
       if (row.lease_start_date) {
         const leaseDate = new Date(row.lease_start_date);
@@ -946,38 +959,37 @@ async function sendDailyEmailNotification(force = false) {
           const leaseYear = leaseDate.getFullYear();
           const leaseMonth = leaseDate.getMonth() + 1;
           const diffMonths = (currentYear - leaseYear) * 12 + (currentMonth - leaseMonth);
-          if (diffMonths === 0) {
+          if (diffMonths === 1) {
             isFirstMonth = true;
+          } else if (diffMonths === 0) {
+            isDepositMonth = true;
           } else if (diffMonths < 0) {
             isExcludedMonth = true;
           }
         }
       }
 
-      const rentAmt = isExcludedMonth ? 0 : (row.rent_price || 0);
-      const elecAmt = isExcludedMonth ? 0 : (row.electricity_amount || 0);
+      // Không gửi email thông báo nợ đối với phòng ở tháng cọc đầu tiên hoặc chưa dời vào
+      if (isDepositMonth || isExcludedMonth) continue;
+
+      const rentAmt = row.rent_price || 0;
+      const elecAmt = row.electricity_amount || 0;
       const memberCount = row.member_count || 0;
-      const waterAmt = isExcludedMonth ? 0 : (row.water_amount !== null && row.water_amount !== undefined ? row.water_amount : waterPrice * memberCount);
-      const trashAmt = isExcludedMonth ? 0 : (row.trash_amount !== null && row.trash_amount !== undefined ? row.trash_amount : trashPrice * memberCount);
-      const residenceAmt = isExcludedMonth ? 0 : (row.residence_amount !== null && row.residence_amount !== undefined ? row.residence_amount : (isFirstMonth ? residencePrice * memberCount : 0));
-      const depositAmt = isExcludedMonth ? 0 : (row.deposit_amount !== null && row.deposit_amount !== undefined ? row.deposit_amount : (isFirstMonth ? (row.deposit || 0) : 0));
+      const waterAmt = row.water_amount !== null && row.water_amount !== undefined ? row.water_amount : waterPrice * memberCount;
+      const trashAmt = row.trash_amount !== null && row.trash_amount !== undefined ? row.trash_amount : trashPrice * memberCount;
+      const residenceAmt = row.residence_amount !== null && row.residence_amount !== undefined ? row.residence_amount : (isFirstMonth ? residencePrice * memberCount : 0);
+      const depositAmt = row.deposit_amount !== null && row.deposit_amount !== undefined ? row.deposit_amount : 0;
       const totalAmt = rentAmt + elecAmt + waterAmt + trashAmt + residenceAmt + depositAmt;
 
-      // Tính ngày hạn
-      let dueDay = parseInt(settings['payment_due_day']) || 5;
-      if (row.lease_start_date) {
-        const d = new Date(row.lease_start_date);
-        if (!isNaN(d.getTime())) {
-          dueDay = d.getDate();
-        }
-      }
+      // Tính ngày hạn dựa vào billing_day của phòng (15 hoặc 30)
+      let dueDay = row.billing_day || 30;
       const lastDay = new Date(currentYear, currentMonth, 0).getDate();
       const finalDay = Math.min(dueDay, lastDay);
       const dueDate = new Date(currentYear, currentMonth - 1, finalDay);
       const diffTime = dueDate - todayStart;
       const daysUntilDue = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-      if (daysUntilDue <= 3) {
+      if (daysUntilDue <= 15) {
         dueRooms.push({
           room_code: row.room_code,
           tenant_name: row.tenant_names || 'Chưa có người thuê',
@@ -1081,6 +1093,63 @@ async function sendDailyEmailNotification(force = false) {
   }
 }
 
+// ==========================================
+// TELEGRAM BOT API
+// ==========================================
+
+// Lấy cấu hình bot hiện tại
+app.get('/api/telegram/status', async (req, res) => {
+  try {
+    const tokenRow = await db.prepare("SELECT value FROM settings WHERE key = 'telegram_bot_token'").get();
+    const chatIdRow = await db.prepare("SELECT value FROM settings WHERE key = 'telegram_admin_chat_id'").get();
+    const status = telegramBot.getBotStatus();
+    res.json({
+      hasToken: !!(tokenRow && tokenRow.value),
+      hasChatId: !!(chatIdRow && chatIdRow.value),
+      running: status.running,
+      // Mà hoá token để hiển thị an toàn (chỉ hiện 10 ký tự đầu)
+      tokenPreview: tokenRow?.value ? tokenRow.value.substring(0, 12) + '...' : null,
+      adminChatId: chatIdRow?.value || null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lưu cấu hình và khởi động bot
+app.post('/api/telegram/connect', async (req, res) => {
+  try {
+    const { token, adminChatId } = req.body;
+    if (!token || !adminChatId) {
+      return res.status(400).json({ error: 'Cần có Bot Token và Admin Chat ID' });
+    }
+
+    // Lưu vào settings
+    await db.prepare("INSERT INTO settings (key, value) VALUES ('telegram_bot_token', ?) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP").run(token.trim());
+    await db.prepare("INSERT INTO settings (key, value) VALUES ('telegram_admin_chat_id', ?) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP").run(String(adminChatId).trim());
+
+    // Khởi động bot
+    const result = await telegramBot.startBot(token.trim(), String(adminChatId).trim(), db);
+    if (result.ok) {
+      res.json({ message: `✅ Bot @${result.botName} đã kết nối thành công!`, botName: result.botName });
+    } else {
+      res.status(400).json({ error: result.error });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Ngắt kết nối bot
+app.post('/api/telegram/disconnect', async (req, res) => {
+  try {
+    await telegramBot.stopBot();
+    res.json({ message: '🔴 Bot đã ngắt kết nối' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Endpoint gửi thử Gmail test
 app.post('/api/settings/test-email', async (req, res) => {
   try {
@@ -1091,15 +1160,32 @@ app.post('/api/settings/test-email', async (req, res) => {
   }
 });
 
-// Lập trình kiểm tra gửi email tự động (Cứ mỗi giờ chạy 1 lần để check lúc 8h sáng)
+// Lập trình kiểm tra gửi email tự động (Cứ mỗi 15 phút chạy 1 lần để check lúc 8h sáng)
 setTimeout(() => {
   sendDailyEmailNotification().catch(console.error);
 }, 10000); // Chạy thử lần đầu 10 giây sau khi khởi động
 
 setInterval(() => {
   sendDailyEmailNotification().catch(console.error);
-}, 60 * 60 * 1000); // Kiểm tra lại sau mỗi 60 phút
+}, 15 * 60 * 1000); // Kiểm tra lại sau mỗi 15 phút
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`✅ Server đang chạy tại http://localhost:${PORT}`);
+
+  // Tự động khởi động Telegram Bot nếu đã có token trong cài đặt
+  try {
+    const tokenRow = await db.prepare("SELECT value FROM settings WHERE key = 'telegram_bot_token'").get();
+    const chatIdRow = await db.prepare("SELECT value FROM settings WHERE key = 'telegram_admin_chat_id'").get();
+    if (tokenRow?.value && chatIdRow?.value) {
+      const result = await telegramBot.startBot(tokenRow.value, chatIdRow.value, db);
+      if (result.ok) {
+        console.log(`✅ Telegram Bot @${result.botName} đã tự động kết nối!`);
+      } else {
+        console.warn(`⚠️ Không thể kết nối Telegram Bot: ${result.error}`);
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Telegram Bot không khởi động được:', e.message);
+  }
 });
+

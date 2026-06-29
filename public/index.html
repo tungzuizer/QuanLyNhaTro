@@ -341,6 +341,14 @@
                   <button class="bulk-pill" data-filter="missing">⚠️ Chưa nhập</button>
                   <button class="bulk-pill" data-filter="done">✅ Đã nhập</button>
                 </div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
+                  <label style="font-size:12px;font-weight:600;white-space:nowrap;">Đợt thu:</label>
+                  <div class="bulk-filter-pills">
+                    <button class="bulk-billing-pill active" data-billing="all">Tất cả</button>
+                    <button class="bulk-billing-pill" data-billing="15">📅 Đợt 15</button>
+                    <button class="bulk-billing-pill" data-billing="30">📅 Đợt 30</button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -408,6 +416,23 @@
               </div>
             </div>
 
+            <!-- === KHU VỰC DÁN TIN NHẮN CHAT NHẬP SỐ ĐIỆN === -->
+            <div id="bulk-chat-panel" class="card" style="display:none; margin-bottom: 0; padding: 16px 20px; border: 2px dashed var(--primary); background: var(--primary-soft, #f0f4ff);">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <span style="font-size:18px;">💬</span>
+                <h4 style="margin:0;font-size:14px;font-weight:600;color:var(--primary);">Nhập số điện từ tin nhắn chat</h4>
+                <button id="btn-close-chat-panel" style="margin-left:auto;background:none;border:none;font-size:18px;cursor:pointer;color:var(--neutral-gray);" title="Đóng">✕</button>
+              </div>
+              <p style="font-size:12px;color:var(--neutral-gray);margin-bottom:8px;">Dán nội dung tin nhắn vào ô bên dưới. Hệ thống sẽ tự động tìm mã phòng và chỉ số điện để điền vào bảng.</p>
+              <p style="font-size:12px;color:var(--neutral-gray);margin-bottom:10px;">📌 Ví dụ: <em>A101: 2500, A102 - 2640, phòng B101 số 905</em></p>
+              <textarea id="bulk-chat-input" class="form-control" rows="5" placeholder="Dán tin nhắn chat vào đây..."></textarea>
+              <div style="display:flex;gap:8px;margin-top:10px;">
+                <button id="btn-parse-chat" class="btn btn-primary">⚡ Tự động điền số điện</button>
+                <button id="btn-clear-chat" class="btn btn-secondary">🗑️ Xóa</button>
+              </div>
+              <div id="bulk-chat-result" style="margin-top:10px;font-size:13px;"></div>
+            </div>
+
           </div>
 
         </section>
@@ -426,9 +451,17 @@
               <select id="pay-year-select" class="form-control"></select>
               <button class="btn btn-primary" id="btn-load-payments">Xem danh sách</button>
             </div>
-            <div class="payments-legend">
-              <span class="legend-item legend-paid">✅ Đã thu</span>
-              <span class="legend-item legend-unpaid">⏳ Chưa thu</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <div class="payments-legend">
+                <span class="legend-item legend-paid">✅ Đã thu</span>
+                <span class="legend-item legend-unpaid">⏳ Chưa thu</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <label style="font-size:12px;font-weight:600;white-space:nowrap;">Đợt thu:</label>
+                <button class="btn btn-sm pay-billing-pill active" data-billing="all">Tất cả</button>
+                <button class="btn btn-sm pay-billing-pill" data-billing="15">📅 Đợt 15</button>
+                <button class="btn btn-sm pay-billing-pill" data-billing="30">📅 Đợt 30</button>
+              </div>
             </div>
           </div>
 
@@ -692,11 +725,6 @@
                   <input type="number" id="setting-residence-price" class="form-control" min="0" placeholder="VD: 50000">
                   <span class="help-text">Chỉ tự động tính trong tháng đầu tiên khách dời vào.</span>
                 </div>
-                <div class="form-group col">
-                  <label for="setting-due-day">📅 Ngày thu tiền hàng tháng (ngày bao nhiêu)</label>
-                  <input type="number" id="setting-due-day" class="form-control" min="1" max="28" placeholder="VD: 5">
-                  <span class="help-text">Hệ thống sẽ nhắc nhở trước 3 ngày và khi đến hạn.</span>
-                </div>
               </div>
               <hr style="margin: 20px 0; border-color: var(--border-color);">
               <h4 style="margin-bottom: 14px; font-size: 14px;">&#x1f3e6; Thông tin ngân hàng (dùng trong hóa đơn)</h4>
@@ -727,7 +755,8 @@
               <div class="form-row" style="align-items: flex-end;">
                 <div class="form-group col">
                   <label for="setting-email-receiver">Gmail nhận thông báo (Receiver)</label>
-                  <input type="email" id="setting-email-receiver" class="form-control" placeholder="VD: gmail.cuaban@gmail.com">
+                  <input type="text" id="setting-email-receiver" class="form-control" placeholder="VD: email1@gmail.com, email2@gmail.com">
+                  <span class="help-text">Hỗ trợ nhiều email (phân tách bằng dấu phẩy).</span>
                 </div>
                 <div class="form-group col">
                   <label for="setting-email-enabled">Trạng thái gửi email ngầm</label>
@@ -763,6 +792,73 @@
                 </button>
               </div>
             </div>
+
+            <!-- === TELEGRAM BOT SECTION === -->
+            <hr style="margin: 28px 0; border-color: var(--border-color);">
+            <div id="telegram-bot-section">
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+                <span style="font-size:22px;">✈️</span>
+                <h4 style="font-size:14px; font-weight:700; margin:0;">Telegram Bot — Nhập điện &amp; Hỏi thông tin</h4>
+                <span id="tg-status-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--neutral-light);border:1px solid var(--border-color);color:var(--neutral-gray);margin-left:auto;">
+                  <span id="tg-status-dot">⚫</span>
+                  <span id="tg-status-text">Chưa kết nối</span>
+                </span>
+              </div>
+              <p class="help-text" style="margin-bottom:16px;">
+                Bot cho phép nhắn số điện (<code>A101: 2500</code>) và hỏi thông tin phòng ngay trên Telegram mà không cần mở app.
+              </p>
+
+              <div style="background:var(--primary-light);border:1px solid hsl(221,85%,85%);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:18px;font-size:13px;">
+                <strong>📋 Hướng dẫn lấy thông tin:</strong>
+                <ol style="margin:8px 0 0 16px; line-height:1.8;">
+                  <li>Mở Telegram → tìm <strong>@BotFather</strong> → gõ <code>/newbot</code> → lấy <strong>Bot Token</strong></li>
+                  <li>Tìm <strong>@userinfobot</strong> → gõ <code>/start</code> → lấy <strong>Chat ID của bạn</strong></li>
+                  <li>Dán vào ô bên dưới và nhấn <strong>Kết nối Bot</strong></li>
+                </ol>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col">
+                  <label for="tg-bot-token">🔑 Bot Token</label>
+                  <input type="password" id="tg-bot-token" class="form-control" placeholder="Dạng: 123456789:ABCdef-xyz..." autocomplete="off">
+                  <span class="help-text" id="tg-token-preview"></span>
+                </div>
+                <div class="form-group col">
+                  <label for="tg-admin-chat-id">👤 Admin Chat ID của bạn</label>
+                  <input type="text" id="tg-admin-chat-id" class="form-control" placeholder="Dạng: 987654321" autocomplete="off">
+                  <span class="help-text">Chỉ tin nhắn từ Chat ID này mới được bot phản hồi.</span>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+                <button type="button" id="btn-tg-connect" class="btn btn-primary" onclick="connectTelegramBot()">✈️ Kết nối Bot</button>
+                <button type="button" id="btn-tg-disconnect" class="btn btn-danger" onclick="disconnectTelegramBot()" style="display:none;">🔴 Ngắt kết nối</button>
+                <span id="tg-connect-msg" style="font-size:13px;"></span>
+              </div>
+
+              <div id="tg-commands-panel" style="display:none;margin-top:20px;background:var(--neutral-light);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:16px;">
+                <h5 style="font-size:13px;font-weight:700;margin-bottom:10px;">📱 Các lệnh bot hỗ trợ:</h5>
+                <div style="overflow-x:auto;">
+                  <table style="font-size:12px;border-collapse:collapse;width:100%;min-width:400px;">
+                    <thead><tr style="background:hsl(220,14%,94%);">
+                      <th style="padding:7px 12px;text-align:left;white-space:nowrap;">Lệnh / Tin nhắn</th>
+                      <th style="padding:7px 12px;text-align:left;">Tác dụng</th>
+                    </tr></thead>
+                    <tbody>
+                      <tr><td style="padding:6px 12px;"><code>A101: 2500</code></td><td style="padding:6px 12px;">Nhập số điện phòng A101 = 2500 kWh</td></tr>
+                      <tr style="background:var(--white);"><td style="padding:6px 12px;"><code>/phong A101</code></td><td style="padding:6px 12px;">Xem thông tin phòng + người thuê</td></tr>
+                      <tr><td style="padding:6px 12px;"><code>/tienphong A101</code></td><td style="padding:6px 12px;">Tiền thuê phải đóng tháng này</td></tr>
+                      <tr style="background:var(--white);"><td style="padding:6px 12px;"><code>/chuathu</code></td><td style="padding:6px 12px;">DS phòng chưa đóng tiền tháng này</td></tr>
+                      <tr><td style="padding:6px 12px;"><code>/dien</code></td><td style="padding:6px 12px;">DS phòng chưa nhập số điện</td></tr>
+                      <tr style="background:var(--white);"><td style="padding:6px 12px;"><code>/sodien</code></td><td style="padding:6px 12px;">Xem số điện các phòng tháng này</td></tr>
+                      <tr><td style="padding:6px 12px;"><code>/baocao</code></td><td style="padding:6px 12px;">Tóm tắt tài chính tháng này</td></tr>
+                      <tr style="background:var(--white);"><td style="padding:6px 12px;"><code>/help</code></td><td style="padding:6px 12px;">Xem hướng dẫn sử dụng bot</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
           </div>
         </section>
 
@@ -803,6 +899,10 @@
             <span>Số người ở:</span>
             <strong id="modal-room-members">0 người</strong>
           </div>
+          <div class="info-row">
+            <span>Đợt thu tiền:</span>
+            <strong id="modal-room-billing-day">Ngày 30</strong>
+          </div>
           <button class="btn btn-sm btn-outline-secondary btn-edit-room" id="btn-edit-room-trigger">⚙️ Chỉnh sửa thông
             tin phòng</button>
         </div>
@@ -832,6 +932,16 @@
             <div class="form-group col">
               <label for="edit-member-count">Số người ở thực tế (tính nước/rác)</label>
               <input type="number" id="edit-member-count" class="form-control" min="0" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col">
+              <label for="edit-billing-day">📅 Đợt thu tiền</label>
+              <select id="edit-billing-day" class="form-control">
+                <option value="30">Ngày 30 (Đợt cuối tháng)</option>
+                <option value="15">Ngày 15 (Đợt giữa tháng)</option>
+              </select>
+              <span class="help-text">Tiền điện và tiền phòng sẽ thu vào ngày này.</span>
             </div>
           </div>
           <div class="form-actions">
@@ -962,6 +1072,30 @@
       </form>
     </div>
   </div>
+
+  <!-- Bottom Navigation for Mobile -->
+  <nav class="bottom-nav mobile-only-flex">
+    <a href="#" class="bottom-nav-item active" data-tab="dashboard">
+      <span class="bottom-nav-icon">📊</span>
+      <span class="bottom-nav-text">Dashboard</span>
+    </a>
+    <a href="#" class="bottom-nav-item" data-tab="rooms">
+      <span class="bottom-nav-icon">🔑</span>
+      <span class="bottom-nav-text">Phòng</span>
+    </a>
+    <a href="#" class="bottom-nav-item" data-tab="electricity">
+      <span class="bottom-nav-icon">⚡</span>
+      <span class="bottom-nav-text">Số Điện</span>
+    </a>
+    <a href="#" class="bottom-nav-item" data-tab="payments">
+      <span class="bottom-nav-icon">💰</span>
+      <span class="bottom-nav-text">Thu Tiền</span>
+    </a>
+    <a href="#" class="bottom-nav-item" data-tab="settings">
+      <span class="bottom-nav-icon">⚙️</span>
+      <span class="bottom-nav-text">Cài đặt</span>
+    </a>
+  </nav>
 
   <!-- Sidebar Overlay for mobile -->
   <div id="sidebar-overlay" class="sidebar-overlay-bg"></div>

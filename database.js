@@ -25,6 +25,7 @@ async function initDatabase() {
         deposit REAL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'vacant', -- 'vacant', 'occupied', 'maintenance'
         member_count INTEGER DEFAULT 0,
+        billing_day INTEGER DEFAULT 30, -- ngày thu tiền: 15 hoặc 30
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -100,6 +101,12 @@ async function initDatabase() {
       await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS residence_amount REAL NOT NULL DEFAULT 0`);
       await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS deposit_amount REAL NOT NULL DEFAULT 0`);
     } catch(e) { /* columns already exist */ }
+
+    // Migration: thêm cột billing_day (ngày thu tiền: 15 hoặc 30) nếu chưa có
+    try {
+      await client.query(`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS billing_day INTEGER DEFAULT 30`);
+      console.log('✅ Migration: Đã đảm bảo cột billing_day tồn tại trong bảng rooms.');
+    } catch(e) { /* column already exists */ }
 
     // Migration: Đổi tên các phòng Khu B cũ (B01 - B15) sang định dạng tầng mới (B101 - B305) để giữ dữ liệu
     try {
