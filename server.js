@@ -821,19 +821,17 @@ app.get('/api/invoice', async (req, res) => {
     // Xá»­ lĂ½ tĂ¹y chá»n phĂ­ táº¡m trĂº
     const includeResidenceParam = req.query.include_residence; // 'force' | 'none' | 'auto' | undefined
     let residenceAmount;
-    if ((isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1)) {
+    if (includeResidenceParam === 'none') {
       residenceAmount = 0;
-    } else if (payment && payment.is_paid === 1 && payment.residence_amount !== null && payment.residence_amount !== undefined) {
-      // ÄĂ£ thu tiá»n rá»“i: dĂ¹ng giĂ¡ trá»‹ thá»±c táº¿
-      residenceAmount = payment.residence_amount;
     } else if (includeResidenceParam === 'force') {
-      // Báº¯t buá»™c thĂªm phĂ­ táº¡m trĂº
       residenceAmount = residencePrice * memberCount;
-    } else if (includeResidenceParam === 'none') {
-      // KhĂ´ng tĂ­nh phĂ­ táº¡m trĂº
+    } else if (payment && payment.is_paid === 1 && payment.residence_amount !== null && payment.residence_amount !== undefined) {
+      // Đã thu tiền rồi: dùng giá trị thực tế
+      residenceAmount = payment.residence_amount;
+    } else if ((isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1)) {
       residenceAmount = 0;
     } else {
-      // Tá»± Ä‘á»™ng: chá»‰ tĂ­nh thĂ¡ng Ä‘áº§u tiĂªn
+      // Tự động: chỉ tính tháng đầu tiên
       residenceAmount = isFirstMonth ? residencePrice * memberCount : 0;
     }
     const depositAmount = isExcludedMonth && (!payment || payment.is_paid !== 1) ? 0 : (payment && payment.is_paid === 1 ? (payment.deposit_amount || 0) : (isDepositMonth ? (room.deposit || 0) : 0));
