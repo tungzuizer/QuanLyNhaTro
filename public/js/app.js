@@ -1947,8 +1947,10 @@ async function initInvoiceTab() {
       // Reset chỉ số điện để tải lại cho tháng mới
       const oldInput = document.getElementById('inv-elec-old');
       const newInput = document.getElementById('inv-elec-new');
+      const handoverInput = document.getElementById('inv-elec-handover');
       if (oldInput) oldInput.value = '';
       if (newInput) newInput.value = '';
+      if (handoverInput) handoverInput.value = '';
       fetchInvoiceElectricityDefault();
     });
     ySelect.addEventListener('change', () => {
@@ -1956,8 +1958,10 @@ async function initInvoiceTab() {
       // Reset chỉ số điện để tải lại cho năm mới
       const oldInput = document.getElementById('inv-elec-old');
       const newInput = document.getElementById('inv-elec-new');
+      const handoverInput = document.getElementById('inv-elec-handover');
       if (oldInput) oldInput.value = '';
       if (newInput) newInput.value = '';
+      if (handoverInput) handoverInput.value = '';
       fetchInvoiceElectricityDefault();
     });
 
@@ -1986,11 +1990,15 @@ async function fetchInvoiceElectricityDefault() {
 
   const oldInput = document.getElementById('inv-elec-old');
   const newInput = document.getElementById('inv-elec-new');
+  const handoverGroup = document.getElementById('inv-elec-handover-group');
+  const handoverInput = document.getElementById('inv-elec-handover');
 
   if (!oldInput || !newInput) return;
   if (!roomId || !month || !year) {
     oldInput.value = '';
     newInput.value = '';
+    if (handoverGroup) handoverGroup.style.display = 'none';
+    if (handoverInput) handoverInput.value = '';
     return;
   }
 
@@ -2014,6 +2022,17 @@ async function fetchInvoiceElectricityDefault() {
       newVal = data.electricity.new_reading;
     }
     newInput.value = newVal;
+
+    // Quản lý hiển thị ô Chỉ số điện bàn giao
+    if (data.summary && data.summary.isDepositMonth) {
+      if (handoverGroup) handoverGroup.style.display = 'block';
+      if (handoverInput) {
+        handoverInput.value = data.summary.currentElecIndex !== null && data.summary.currentElecIndex !== undefined ? data.summary.currentElecIndex : 0;
+      }
+    } else {
+      if (handoverGroup) handoverGroup.style.display = 'none';
+      if (handoverInput) handoverInput.value = '';
+    }
   } catch (err) {
     console.error('Lỗi khi tải số điện mặc định:', err);
   }
@@ -2062,6 +2081,10 @@ async function generateInvoicePreview() {
   const elecOld = elecOldInput && elecOldInput.value !== '' ? parseFloat(elecOldInput.value) : null;
   const elecNew = elecNewInput && elecNewInput.value !== '' ? parseFloat(elecNewInput.value) : null;
 
+  // Đọc chỉ số điện bàn giao
+  const elecHandoverInput = document.getElementById('inv-elec-handover');
+  const elecHandover = elecHandoverInput && elecHandoverInput.value !== '' ? parseFloat(elecHandoverInput.value) : null;
+
   if (!roomId) {
     showToast('Vui lòng chọn phòng trước', 'error');
     return;
@@ -2073,7 +2096,7 @@ async function generateInvoicePreview() {
 
   try {
     const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}&include_residence=${residenceOption}`);
-    renderInvoiceDocument(data, note, { rentFrom, rentTo, elecOld, elecNew });
+    renderInvoiceDocument(data, note, { rentFrom, rentTo, elecOld, elecNew, elecHandover });
 
     document.getElementById('invoice-empty-state').style.display = 'none';
     document.getElementById('invoice-preview-container').style.display = 'block';
@@ -2090,7 +2113,7 @@ async function generateInvoicePreview() {
 
 function renderInvoiceDocument(data, note, options = {}) {
   const { room, tenants, electricity, payment, settings, summary } = data;
-  const { rentFrom, rentTo, elecOld, elecNew } = options;
+  const { rentFrom, rentTo, elecOld, elecNew, elecHandover } = options;
 
   // Period label
   document.getElementById('inv-period-label').textContent = `Tháng ${summary.month}/${summary.year}`;
@@ -2251,11 +2274,12 @@ function renderInvoiceDocument(data, note, options = {}) {
 
   // Hiển thị chỉ số điện ban đầu (số điện bàn giao) nếu ở tháng cọc đầu tiên
   if (summary.isDepositMonth) {
+    const handoverVal = elecHandover !== null ? elecHandover : (summary.currentElecIndex || 0);
     tbody.innerHTML += `
       <tr style="border-top: 1px dashed var(--border-color);">
         <td>🔌 Chỉ số điện bàn giao</td>
         <td><small style="color:var(--success)">Số điện hiện tại khi nhận phòng (Không tính phí)</small></td>
-        <td class="text-right" style="color:var(--neutral-gray)">${summary.currentElecIndex || 0} kWh</td>
+        <td class="text-right" style="color:var(--neutral-gray)">${handoverVal} kWh</td>
       </tr>
     `;
   }

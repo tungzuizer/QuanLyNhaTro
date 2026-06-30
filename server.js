@@ -815,15 +815,15 @@ app.get('/api/invoice', async (req, res) => {
     const residencePrice = parseFloat(settings['residence_price']) || 50000;
     const memberCount = room.member_count || 0;
 
-    const waterAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (payment ? (payment.water_amount || 0) : waterPrice * memberCount);
-    const trashAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (payment ? (payment.trash_amount || 0) : trashPrice * memberCount);
+    const waterAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (payment && payment.is_paid === 1 ? (payment.water_amount || 0) : waterPrice * memberCount);
+    const trashAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (payment && payment.is_paid === 1 ? (payment.trash_amount || 0) : trashPrice * memberCount);
 
     // Xá»­ lĂ½ tĂ¹y chá»n phĂ­ táº¡m trĂº
     const includeResidenceParam = req.query.include_residence; // 'force' | 'none' | 'auto' | undefined
     let residenceAmount;
     if ((isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1)) {
       residenceAmount = 0;
-    } else if (payment && payment.residence_amount !== null && payment.residence_amount !== undefined) {
+    } else if (payment && payment.is_paid === 1 && payment.residence_amount !== null && payment.residence_amount !== undefined) {
       // ÄĂ£ thu tiá»n rá»“i: dĂ¹ng giĂ¡ trá»‹ thá»±c táº¿
       residenceAmount = payment.residence_amount;
     } else if (includeResidenceParam === 'force') {
@@ -836,7 +836,7 @@ app.get('/api/invoice', async (req, res) => {
       // Tá»± Ä‘á»™ng: chá»‰ tĂ­nh thĂ¡ng Ä‘áº§u tiĂªn
       residenceAmount = isFirstMonth ? residencePrice * memberCount : 0;
     }
-    const depositAmount = isExcludedMonth && (!payment || payment.is_paid !== 1) ? 0 : (payment ? (payment.deposit_amount || 0) : (isDepositMonth ? (room.deposit || 0) : 0));
+    const depositAmount = isExcludedMonth && (!payment || payment.is_paid !== 1) ? 0 : (payment && payment.is_paid === 1 ? (payment.deposit_amount || 0) : (isDepositMonth ? (room.deposit || 0) : 0));
     const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
 
     // Láº¥y chá»‰ sá»‘ Ä‘iá»‡n má»›i nháº¥t cá»§a phĂ²ng
