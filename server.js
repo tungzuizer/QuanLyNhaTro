@@ -1015,27 +1015,27 @@ async function sendDailyTelegramNotification(force = false) {
       return;
     }
 
-    // 3. XĂ¢y dá»±ng tin nháº¯n Telegram
-    let msg = `đŸ”” *BĂ¡o cĂ¡o nháº¯c ná»£ ngĂ y ${todayDisplay}*\n\n`;
+    // 3. Build Telegram message
+    let msg = '🔔 *Bao cao nhac no ngay ' + todayDisplay + '*\n\n';
 
     if (dueRooms.length > 0) {
-      msg += `đŸ  CĂ³ *${dueRooms.length}* phĂ²ng chÆ°a Ä‘Ă³ng tiá»n sáº¯p Ä‘áº¿n háº¡n hoáº·c quĂ¡ háº¡n:\n\n`;
+      msg += '🏠 Co *' + dueRooms.length + '* phong chua dong tien sap den han hoac qua han:\n\n';
       for (const room of dueRooms) {
-        let statusIcon = 'â³';
-        let statusText = `CĂ²n ${room.daysUntilDue} ngĂ y`;
-        if (room.daysUntilDue === 0) { statusIcon = 'đŸ¨'; statusText = 'Äáº¿n háº¡n hĂ´m nay'; }
-        else if (room.daysUntilDue < 0) { statusIcon = 'â ï¸'; statusText = `QuĂ¡ háº¡n ${Math.abs(room.daysUntilDue)} ngĂ y`; }
-        msg += `đŸ”‘ PhĂ²ng *${room.room_code}* â€” ${room.tenant_name}\n`;
-        msg += `   đŸ’° ${room.total_amount.toLocaleString('vi-VN')}Ä‘ â€¢ Háº¡n: ${room.dueDateStr}\n`;
-        msg += `   ${statusIcon} ${statusText}\n\n`;
+        let statusIcon = '\u23F3';
+        let statusText = 'Con ' + room.daysUntilDue + ' ngay';
+        if (room.daysUntilDue === 0) { statusIcon = '\uD83D\uDEA8'; statusText = 'Den han hom nay'; }
+        else if (room.daysUntilDue < 0) { statusIcon = '\u26A0\uFE0F'; statusText = 'Qua han ' + Math.abs(room.daysUntilDue) + ' ngay'; }
+        msg += '\uD83D\uDD11 Phong *' + room.room_code + '* \u2014 ' + room.tenant_name + '\n';
+        msg += '   \uD83D\uDCB0 ' + room.total_amount.toLocaleString('vi-VN') + 'd \u2022 Han: ' + room.dueDateStr + '\n';
+        msg += '   ' + statusIcon + ' ' + statusText + '\n\n';
       }
     } else {
-      msg += `âœ… KhĂ´ng cĂ³ phĂ²ng nĂ o sáº¯p Ä‘áº¿n háº¡n hay quĂ¡ háº¡n trong hĂ´m nay.\n`;
+      msg += '\u2705 Khong co phong nao sap den han hay qua han trong hom nay.\n';
     }
 
-    msg += `\nâ€”â€”â€”â€”â€”â€”â€”â€”â€”â€”\n_Há»‡ thá»‘ng quáº£n lĂ½ nhĂ  trá» LISO gá»­i tá»± Ä‘á»™ng_`;
+    msg += '\n\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\nHe thong quan ly nha tro LISO gui tu dong';
 
-    await telegramBot.sendDirectMessage(adminChatId, msg, { parse_mode: 'Markdown' });
+        await telegramBot.sendDirectMessage(adminChatId, msg, { parse_mode: 'Markdown' });
 
     // 4. Cáº­p nháº­t ngĂ y gá»­i thĂ nh cĂ´ng
     await db.prepare(
