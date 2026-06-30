@@ -93,6 +93,10 @@ async function handleMessage(msg, adminChatId) {
     await handleChuaThu(chatId);
   } else if (text === '/dien') {
     await handleChuaNhapDien(chatId);
+  } else if (text === '/dien15' || text === '/dien 15') {
+    await handleChuaNhapDienByBillingDay(chatId, 15);
+  } else if (text === '/dien30' || text === '/dien 30') {
+    await handleChuaNhapDienByBillingDay(chatId, 30);
   } else if (text === '/baocao') {
     await handleBaoCao(chatId);
   } else if (text === '/sodien') {
@@ -137,6 +141,8 @@ Gửi trực tiếp tin nhắn theo định dạng:
 /tienphong A101 \\- Tiền phải đóng tháng này
 /chuathu \\- Danh sách phòng chưa đóng tiền
 /dien \\- Phòng chưa nhập số điện
+/dien15 \\- Phòng chưa nhập điện đợt 15 (Giữa tháng)
+/dien30 \\- Phòng chưa nhập điện đợt 30 (Cuối tháng)
 /sodien \\- Xem số điện các phòng tháng này
 /baocao \\- Tóm tắt tài chính tháng này
 /help \\- Hướng dẫn này`;
@@ -405,6 +411,12 @@ async function handleChuaNhapDien(chatId) {
     const month = vnNow.getUTCMonth() + 1;
     const year = vnNow.getUTCFullYear();
 
+    // Lấy tổng số phòng đang thuê
+    const totalRow = await dbRef.prepare(`
+      SELECT COUNT(*) as cnt FROM rooms WHERE status = 'occupied'
+    `).get();
+    const totalRooms = totalRow ? totalRow.cnt : 0;
+
     const rows = await dbRef.prepare(`
       SELECT r.room_code
       FROM rooms r
@@ -415,17 +427,17 @@ async function handleChuaNhapDien(chatId) {
       ORDER BY r.zone ASC, r.room_code ASC
     `).all(year, month);
 
+    let reply = `⚡ *Chưa nhập điện tháng ${month}/${year}*\n`;
+    reply += `🏠 Tổng số phòng đang thuê: *${totalRooms}* phòng\n`;
+
     if (rows.length === 0) {
-      await botInstance.sendMessage(chatId,
-        `✅ Đã nhập số điện cho tất cả phòng tháng ${month}/${year}\\.`,
-        { parse_mode: 'MarkdownV2' }
-      );
+      reply += `✅ Đã nhập số điện cho tất cả phòng tháng ${month}/${year}\\.`;
+      await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
       return;
     }
 
     const codes = rows.map(r => r.room_code).join(', ');
-    let reply = `⚡ *Chưa nhập điện tháng ${month}/${year}*\n`;
-    reply += `_${rows.length} phòng còn thiếu:_\n\n`;
+    reply += `⚠️ Chưa nhập điện: *${rows.length}/${totalRooms}* phòng còn thiếu:\n\n`;
     reply += escMd(codes);
     reply += `\n\n💡 _Gửi theo dạng: \`A101: 2500\` để nhập_`;
 
@@ -433,6 +445,57 @@ async function handleChuaNhapDien(chatId) {
   } catch (err) {
     console.error(err);
     await botInstance.sendMessage(chatId, '❌ Lỗi khi lấy danh sách điện');
+  }
+}
+
+// ==========================================
+// LỆNH /dien15 hoặc /dien30 - Phòng chưa nhập số điện theo đợt
+// ==========================================
+async function handleChuaNhapDienByBillingDay(chatId, billingDay) {
+  try {
+    const now = new Date();
+    const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const month = vnNow.getUTCMonth() + 1;
+    const year = vnNow.getUTCFullYear();
+
+    // Lấy tổng số phòng đang thuê của đợt này
+    const totalRow = await dbRef.prepare(`
+      SELECT COUNT(*) as cnt 
+      FROM rooms 
+      WHERE status = 'occupied' AND COALESCE(billing_day, 30) = ?
+    `).get(billingDay);
+    const totalRooms = totalRow ? totalRow.cnt : 0;
+
+    // Lấy danh sách phòng chưa nhập điện của đợt này
+    const rows = await dbRef.prepare(`
+      SELECT r.room_code
+      FROM rooms r
+      WHERE r.status = 'occupied'
+        AND COALESCE(r.billing_day, 30) = ?
+        AND r.id NOT IN (
+          SELECT room_id FROM electricity_readings WHERE year = ? AND month = ?
+        )
+      ORDER BY r.zone ASC, r.room_code ASC
+    `).all(billingDay, year, month);
+
+    let reply = `⚡ *Chưa nhập điện đợt ${billingDay} tháng ${month}/${year}*\n`;
+    reply += `🏠 Tổng số phòng đang thuê đợt này: *${totalRooms}* phòng\n`;
+
+    if (rows.length === 0) {
+      reply += `✅ Đã nhập số điện cho tất cả phòng đợt ${billingDay} tháng ${month}/${year}\\.`;
+      await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    const codes = rows.map(r => r.room_code).join(', ');
+    reply += `⚠️ Chưa nhập điện: *${rows.length}/${totalRooms}* phòng còn thiếu:\n\n`;
+    reply += escMd(codes);
+    reply += `\n\n💡 _Gửi theo dạng: \`A101: 2500\` để nhập_`;
+
+    await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+  } catch (err) {
+    console.error(err);
+    await botInstance.sendMessage(chatId, `❌ Lỗi khi lấy danh sách điện đợt ${billingDay}`);
   }
 }
 
@@ -530,4 +593,11 @@ async function handleSoDien(chatId) {
   }
 }
 
-module.exports = { startBot, stopBot, getBotStatus };
+async function sendDirectMessage(chatId, message, options = {}) {
+  if (!botInstance) {
+    throw new Error('Telegram Bot chưa kết nối.');
+  }
+  return await botInstance.sendMessage(chatId, message, options);
+}
+
+module.exports = { startBot, stopBot, getBotStatus, sendDirectMessage, escMd };

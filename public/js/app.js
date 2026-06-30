@@ -2459,12 +2459,11 @@ async function loadNotifications() {
     // Ánh xạ tính toán ngày hạn thanh toán riêng cho mỗi phòng
     const unpaidWithDue = [];
     unpaid.forEach(p => {
-      let dueDay = 5;
+      let dueDay = parseInt(p.billing_day) || 30; // Hạn đóng tiền theo ngày đợt thu (15 hoặc 30)
       let isDepositMonth = false;
       if (p.lease_start_date) {
         const d = new Date(p.lease_start_date);
         if (!isNaN(d.getTime())) {
-          dueDay = d.getDate(); // Ngày thuê hàng tháng chính là ngày hạn đóng
           const diffMonths = (year - d.getFullYear()) * 12 + (month - (d.getMonth() + 1));
           if (diffMonths === 0) {
             isDepositMonth = true;
