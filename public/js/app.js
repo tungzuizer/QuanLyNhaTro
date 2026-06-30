@@ -2303,14 +2303,10 @@ function renderInvoiceDocument(data, note, options = {}) {
     `;
   }
 
-  // Payment status
+  // Payment status (Hidden as requested)
   const statusBox = document.getElementById('inv-payment-status-box');
-  if (payment && payment.is_paid === 1) {
-    statusBox.className = 'inv-payment-status inv-status-paid';
-    statusBox.innerHTML = `✅ Đã thanh toán${payment.paid_at ? ' lúc ' + formatDateTime(payment.paid_at) : ''}`;
-  } else {
-    statusBox.className = 'inv-payment-status inv-status-unpaid';
-    statusBox.innerHTML = '⏳ Chưa thanh toán — Vui lòng thanh toán đúng hạn';
+  if (statusBox) {
+    statusBox.style.display = 'none';
   }
 
   // Bank info
