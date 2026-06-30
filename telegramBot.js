@@ -14,6 +14,11 @@ let botInstance = null;
 
 let dbRef = null;
 
+// Cho phép inject db mà không cần khởi động Telegram Bot
+function setDb(db) {
+  dbRef = db;
+}
+
 // ==========================================
 // KHỞI ĐỘNG / TẮT BOT
 // ==========================================
@@ -600,4 +605,38 @@ async function sendDirectMessage(chatId, message, options = {}) {
   return await botInstance.sendMessage(chatId, message, options);
 }
 
-module.exports = { startBot, stopBot, getBotStatus, sendDirectMessage, escMd };
+async function executeCommand(text) {
+  if (!dbRef) {
+    return { replyText: '❌ Hệ thống chưa kết nối cơ sở dữ liệu. Vui lòng thử lại sau vài giây.', parseMode: '' };
+  }
+
+  let replyText = '';
+  let parseMode = '';
+
+  const originalBotInstance = botInstance;
+  const mockBotInstance = {
+    sendMessage: async (chatId, message, options) => {
+      replyText = message;
+      parseMode = options?.parse_mode || '';
+      return { message_id: 0 };
+    }
+  };
+
+  botInstance = mockBotInstance;
+  try {
+    const fakeMsg = {
+      chat: { id: 'admin_web' },
+      text: text
+    };
+    await handleMessage(fakeMsg, 'admin_web');
+  } catch (err) {
+    console.error('Lỗi khi giả lập chạy lệnh bot:', err);
+    replyText = '❌ Lỗi hệ thống: ' + err.message;
+  } finally {
+    botInstance = originalBotInstance;
+  }
+
+  return { replyText, parseMode };
+}
+
+module.exports = { startBot, stopBot, getBotStatus, sendDirectMessage, escMd, executeCommand, setDb };

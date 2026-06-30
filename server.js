@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const nodemailer = require('nodemailer');
@@ -256,11 +256,17 @@ app.post('/api/tenants', async (req, res) => {
       'INSERT INTO tenants (room_id, full_name, phone, cccd, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id'
     ).run(room_id, full_name, phone || null, cccd || null, start_date, end_date || null, notes || null);
     
-    // Khi thĂªm ngÆ°á»i thuĂª má»›i: Äáº£m báº£o tráº¡ng thĂ¡i phĂ²ng chuyá»ƒn thĂ nh 'occupied'.
-    // Báº£o lÆ°u sá»‘ ngÆ°á»i hiá»‡n cĂ³ náº¿u Ä‘ang > 0. Náº¿u Ä‘ang lĂ  0 thĂ¬ Ä‘áº·t tá»‘i thiá»ƒu lĂ  1.
+    
+    // Khi them nguoi thue moi: Dam bao trang thai phong chuyen thanh 'occupied'.
+    // Dem so nguoi thue thuc te dang ky trong DB sau khi them.
+    // Tang member_count len 1 so voi truoc (bao luu do lech neu chu nha nhap thu cong cao hon),
+    // nhung khong thap hon so nguoi dang ky thuc te.
     const room = await db.prepare('SELECT member_count FROM rooms WHERE id = ?').get(room_id);
     const currentMembers = room ? room.member_count : 0;
-    const newMembers = currentMembers === 0 ? 1 : currentMembers;
+    const countAfterAdd = await db.prepare('SELECT COUNT(*) as count FROM tenants WHERE room_id = ?').get(room_id);
+    const actualCountAfterAdd = countAfterAdd ? countAfterAdd.count : 1;
+    // Tang member_count len 1, nhung dam bao khong thap hon so nguoi dang ky thuc te
+    const newMembers = Math.max(currentMembers + 1, actualCountAfterAdd);
     
     await db.prepare(
       "UPDATE rooms SET member_count = ?, status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
@@ -304,10 +310,15 @@ app.delete('/api/tenants/:id', async (req, res) => {
         "UPDATE rooms SET member_count = 0, status = 'vacant', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       ).run(tenant.room_id);
     } else {
-      // Náº¿u váº«n cĂ²n ngÆ°á»i thuĂª khĂ¡c, giá»¯ nguyĂªn tráº¡ng thĂ¡i occupied vĂ  báº£o lÆ°u sá»‘ ngÆ°á»i á»Ÿ thá»±c táº¿ hiá»‡n táº¡i
+      // Neu van con nguoi thue khac:
+      // Giam member_count xuong 1 (bao luu do lech neu chu nha nhap thu cong cao hon),
+      // nhung khong thap hon so nguoi dang ky thuc te con lai.
+      const roomData = await db.prepare('SELECT member_count FROM rooms WHERE id = ?').get(tenant.room_id);
+      const currentMembers = roomData ? roomData.member_count : actualCount;
+      const newMembers = Math.max(currentMembers - 1, actualCount);
       await db.prepare(
-        "UPDATE rooms SET status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-      ).run(tenant.room_id);
+        "UPDATE rooms SET member_count = ?, status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+      ).run(newMembers, tenant.room_id);
     }
     
     res.json({ message: 'XĂ³a ngÆ°á»i thuĂª thĂ nh cĂ´ng' });
@@ -1111,6 +1122,20 @@ app.post('/api/settings/test-report', async (req, res) => {
   try {
     await sendDailyTelegramNotification(true);
     res.json({ message: 'âœ… ÄĂ£ gá»­i bĂ¡o cĂ¡o thá»­ qua Telegram thĂ nh cĂ´ng! Vui lĂ²ng kiá»ƒm tra Telegram cá»§a báº¡n.' });
+
+// Endpoint chat với Trợ lý LISO trực tiếp trên Web
+app.post('/api/assistant/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'Nội dung tin nhắn không được để trống' });
+    }
+    const result = await telegramBot.executeCommand(message.trim());
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
   } catch (err) {
     res.status(500).json({ error: `Gá»­i bĂ¡o cĂ¡o Telegram tháº¥t báº¡i: ${err.message}` });
   }
@@ -1127,6 +1152,9 @@ setInterval(() => {
 
 app.listen(PORT, async () => {
   console.log(`âœ… Server Ä‘ang cháº¡y táº¡i http://localhost:${PORT}`);
+
+  // Inject db vao Tro ly LISO de web chat hoat dong khong can Telegram Bot
+  telegramBot.setDb(db);
 
   // Tá»± Ä‘á»™ng khá»Ÿi Ä‘á»™ng Telegram Bot náº¿u Ä‘Ă£ cĂ³ token trong cĂ i Ä‘áº·t
   try {

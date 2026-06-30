@@ -137,10 +137,10 @@ async function initDatabase() {
     const resTenants = await client.query('SELECT COUNT(*) as count FROM tenants');
     const tenantCount = parseInt(resTenants.rows[0].count, 10);
 
-    if (roomCount === 0 || tenantCount === 0) {
+    if (roomCount === 0) {
       console.log('Đang khởi tạo/cập nhật lại danh sách phòng chuẩn mới...');
       
-      // Xóa sạch phòng cũ nếu chưa có người thuê để nạp lại danh sách mới
+      // Xóa sạch phòng cũ nếu trống để nạp lại danh sách mới
       await client.query('TRUNCATE TABLE rooms RESTART IDENTITY CASCADE');
       
       // 1. Khu A:

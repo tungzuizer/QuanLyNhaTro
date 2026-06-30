@@ -580,6 +580,38 @@
                 </div>
               </div>
 
+              <!-- Kỳ thu tiền phòng -->
+              <div class="form-group">
+                <label style="font-weight:600; color:var(--primary);">📅 Kỳ thu tiền phòng</label>
+                <div class="form-row" style="margin-top:6px;">
+                  <div class="form-group col" style="margin-bottom:0;">
+                    <label for="inv-rent-from" style="font-size:12px;">Từ ngày</label>
+                    <input type="date" id="inv-rent-from" class="form-control">
+                  </div>
+                  <div class="form-group col" style="margin-bottom:0;">
+                    <label for="inv-rent-to" style="font-size:12px;">Đến ngày</label>
+                    <input type="date" id="inv-rent-to" class="form-control">
+                  </div>
+                </div>
+                <span class="help-text">Hiển thị kỳ thu trên hóa đơn (tuỳ chọn).</span>
+              </div>
+
+              <!-- Kỳ tính điện -->
+              <div class="form-group">
+                <label style="font-weight:600; color:var(--primary);">⚡ Kỳ tính tiền điện</label>
+                <div class="form-row" style="margin-top:6px;">
+                  <div class="form-group col" style="margin-bottom:0;">
+                    <label for="inv-elec-from" style="font-size:12px;">Từ ngày</label>
+                    <input type="date" id="inv-elec-from" class="form-control">
+                  </div>
+                  <div class="form-group col" style="margin-bottom:0;">
+                    <label for="inv-elec-to" style="font-size:12px;">Đến ngày</label>
+                    <input type="date" id="inv-elec-to" class="form-control">
+                  </div>
+                </div>
+                <span class="help-text">Hiển thị kỳ điện trên hóa đơn (tuỳ chọn).</span>
+              </div>
+
               <div class="form-group">
                 <label for="inv-residence-option">🛂 Phí tạm trú</label>
                 <select id="inv-residence-option" class="form-control">
@@ -633,6 +665,7 @@
                     <div class="inv-title-box">
                       <h1>HÓA ĐƠN TIỀN TRỌ</h1>
                       <p id="inv-period-label">Tháng --/----</p>
+                      <p id="inv-rent-period-display" style="display:none; font-size:12px; color:var(--neutral-gray); margin-top:2px;"></p>
                     </div>
                   </div>
 
@@ -1104,6 +1137,55 @@
 
   <!-- html2canvas for downloading invoice as image -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- Floating LISO Assistant Widget -->
+  <div id="liso-assistant-widget" class="assistant-widget">
+    <!-- Bubble Button -->
+    <button id="btn-assistant-toggle" class="assistant-bubble-btn" title="Trò chuyện với Trợ lý LISO">
+      <span class="bubble-icon">💬</span>
+      <span class="bubble-tooltip">Trợ lý LISO</span>
+    </button>
+
+    <!-- Chat Box Window -->
+    <div id="assistant-chat-box" class="assistant-chat-box" style="display: none;">
+      <div class="chat-box-header">
+        <div class="chat-box-title">
+          <span class="chat-avatar">🤖</span>
+          <div>
+            <h4>Trợ lý LISO</h4>
+            <span class="chat-status">🟢 Đang trực tuyến</span>
+          </div>
+        </div>
+        <button id="btn-assistant-close" class="chat-close-btn">&times;</button>
+      </div>
+
+      <div id="assistant-chat-messages" class="chat-box-body">
+        <div class="chat-message bot">
+          <div class="message-bubble">
+            Xin chào! Tôi là <strong>Trợ lý LISO</strong>. Tôi có thể giúp bạn quản lý nhà trọ một cách nhanh chóng.
+            <br><br>
+            Bạn có thể gõ các câu lệnh hoặc click chọn nhanh các gợi ý bên dưới:
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Commands Chips -->
+      <div class="chat-quick-chips">
+        <button class="chip-btn" data-cmd="/help">❓ Hướng dẫn</button>
+        <button class="chip-btn" data-cmd="/dien">⚡ Chưa nhập điện</button>
+        <button class="chip-btn" data-cmd="/dien15">📅 Lệnh điện đợt 15</button>
+        <button class="chip-btn" data-cmd="/dien30">📅 Lệnh điện đợt 30</button>
+        <button class="chip-btn" data-cmd="/sodien">💡 Xem số điện</button>
+        <button class="chip-btn" data-cmd="/chuathu">💰 Chưa đóng tiền</button>
+        <button class="chip-btn" data-cmd="/baocao">📊 Báo cáo tháng</button>
+      </div>
+
+      <form id="assistant-chat-form" class="chat-box-footer">
+        <input type="text" id="assistant-chat-input" placeholder="Nhập câu lệnh (VD: A101: 2500)..." autocomplete="off" required>
+        <button type="submit" class="chat-send-btn">✈️</button>
+      </form>
+    </div>
+  </div>
+
   <!-- App Script JS -->
   <script src="js/app.js"></script>
 </body>

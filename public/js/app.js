@@ -2026,6 +2026,35 @@ async function initInvoiceTab() {
     // Download image button
     document.getElementById('btn-download-invoice-img').addEventListener('click', downloadInvoiceAsImage);
 
+    // Đăng ký sự kiện tự động điền ngày khi thay đổi tháng/năm
+    function autoFillInvoiceDates() {
+      const m = parseInt(document.getElementById('inv-month').value);
+      const y = parseInt(document.getElementById('inv-year').value);
+      if (!m || !y) return;
+
+      // Ngày đầu tháng và ngày cuối tháng
+      const firstDay = `${y}-${String(m).padStart(2, '0')}-01`;
+      const lastDayDate = new Date(y, m, 0); // ngày 0 của tháng sau = ngày cuối tháng này
+      const lastDay = `${y}-${String(m).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`;
+
+      // Chỉ tự điền nếu đang trống (không ghi đè nếu user đã nhập)
+      const rentFrom = document.getElementById('inv-rent-from');
+      const rentTo = document.getElementById('inv-rent-to');
+      const elecFrom = document.getElementById('inv-elec-from');
+      const elecTo = document.getElementById('inv-elec-to');
+
+      if (!rentFrom.value) rentFrom.value = firstDay;
+      if (!rentTo.value) rentTo.value = lastDay;
+      if (!elecFrom.value) elecFrom.value = firstDay;
+      if (!elecTo.value) elecTo.value = lastDay;
+    }
+
+    mSelect.addEventListener('change', autoFillInvoiceDates);
+    ySelect.addEventListener('change', autoFillInvoiceDates);
+
+    // Tự điền lần đầu khi mở tab
+    autoFillInvoiceDates();
+
     invoiceTabInited = true;
   }
 
@@ -2051,12 +2080,28 @@ async function loadInvoiceRoomsDropdown() {
   }
 }
 
+// Helper: format ngày dạng dd/mm/yyyy từ input date (yyyy-mm-dd)
+function formatInvoiceDate(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
 async function generateInvoicePreview() {
   const roomId = document.getElementById('inv-room-select').value;
   const month = document.getElementById('inv-month').value;
   const year = document.getElementById('inv-year').value;
   const note = document.getElementById('inv-note').value.trim();
   const residenceOption = document.getElementById('inv-residence-option')?.value || 'auto';
+
+  // Đọc kỳ thu tiền phòng
+  const rentFrom = document.getElementById('inv-rent-from')?.value || '';
+  const rentTo = document.getElementById('inv-rent-to')?.value || '';
+
+  // Đọc kỳ tính điện
+  const elecFrom = document.getElementById('inv-elec-from')?.value || '';
+  const elecTo = document.getElementById('inv-elec-to')?.value || '';
 
   if (!roomId) {
     showToast('Vui lòng chọn phòng trước', 'error');
@@ -2069,7 +2114,7 @@ async function generateInvoicePreview() {
 
   try {
     const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}&include_residence=${residenceOption}`);
-    renderInvoiceDocument(data, note);
+    renderInvoiceDocument(data, note, { rentFrom, rentTo, elecFrom, elecTo });
 
     document.getElementById('invoice-empty-state').style.display = 'none';
     document.getElementById('invoice-preview-container').style.display = 'block';
@@ -2084,11 +2129,23 @@ async function generateInvoicePreview() {
   }
 }
 
-function renderInvoiceDocument(data, note) {
+function renderInvoiceDocument(data, note, dateRanges = {}) {
   const { room, tenants, electricity, payment, settings, summary } = data;
+  const { rentFrom, rentTo, elecFrom, elecTo } = dateRanges;
 
   // Period label
   document.getElementById('inv-period-label').textContent = `Tháng ${summary.month}/${summary.year}`;
+
+  // Hiển thị kỳ thu tiền phòng dưới tiêu đề hóa đơn (nếu có)
+  const rentPeriodDisplay = document.getElementById('inv-rent-period-display');
+  if (rentFrom || rentTo) {
+    const fromStr = rentFrom ? formatInvoiceDate(rentFrom) : '...';
+    const toStr = rentTo ? formatInvoiceDate(rentTo) : '...';
+    rentPeriodDisplay.textContent = `📅 Kỳ thu: ${fromStr} – ${toStr}`;
+    rentPeriodDisplay.style.display = 'block';
+  } else {
+    rentPeriodDisplay.style.display = 'none';
+  }
 
   // Room info
   document.getElementById('inv-room-code').textContent = `Phòng ${room.room_code}`;
@@ -2119,10 +2176,14 @@ function renderInvoiceDocument(data, note) {
 
   // Row: Tiền thuê phòng (chỉ hiện khi có phát sinh)
   if (summary.rentAmount > 0) {
+    // Tạo label kỳ thu: ưu tiên ngày người dùng nhập, fallback về Tháng mm/yyyy
+    const rentPeriodLabel = (rentFrom || rentTo)
+      ? `${rentFrom ? formatInvoiceDate(rentFrom) : '...'} – ${rentTo ? formatInvoiceDate(rentTo) : '...'}`
+      : `Tháng ${summary.month}/${summary.year}`;
     tbody.innerHTML += `
       <tr>
         <td>🏠 Tiền thuê phòng</td>
-        <td><small>Tháng ${summary.month}/${summary.year}</small></td>
+        <td><small>${rentPeriodLabel}</small></td>
         <td class="text-right">${formatVND(summary.rentAmount)}</td>
       </tr>
     `;
@@ -2131,12 +2192,17 @@ function renderInvoiceDocument(data, note) {
   // Row: Tiền điện (chỉ hiện khi có tiêu thụ, hoặc hiện cảnh báo chưa nhập ở các tháng sau tháng đầu)
   if (electricity && summary.elecAmount > 0) {
     const consumption = electricity.consumption || (electricity.new_reading - electricity.old_reading);
+    // Tạo label kỳ điện
+    const elecPeriodLabel = (elecFrom || elecTo)
+      ? `<br><small style="color:var(--neutral-gray)">📅 Kỳ: ${elecFrom ? formatInvoiceDate(elecFrom) : '...'} – ${elecTo ? formatInvoiceDate(elecTo) : '...'}</small>`
+      : '';
     tbody.innerHTML += `
       <tr>
         <td>⚡ Tiền điện</td>
         <td>
           ${electricity.old_reading} → ${electricity.new_reading} kWh
           <small>${consumption} kWh × ${formatVND(electricity.unit_price)}/kWh</small>
+          ${elecPeriodLabel}
         </td>
         <td class="text-right">${formatVND(summary.elecAmount)}</td>
       </tr>
@@ -2944,3 +3010,130 @@ async function disconnectTelegramBot() {
     if (btn) { btn.disabled = false; btn.textContent = '🔴 Ngắt kết nối'; }
   }
 }
+
+// ==========================================
+// 10. WIDGET TRỢ LÝ LISO INTERACTIVITY
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+  const toggleBtn = document.getElementById('btn-assistant-toggle');
+  const closeBtn = document.getElementById('btn-assistant-close');
+  const chatBox = document.getElementById('assistant-chat-box');
+  const chatForm = document.getElementById('assistant-chat-form');
+  const chatInput = document.getElementById('assistant-chat-input');
+  const messagesContainer = document.getElementById('assistant-chat-messages');
+
+  if (!toggleBtn || !chatBox) return;
+
+  // Toggle chat box visibility
+  toggleBtn.addEventListener('click', () => {
+    const isHidden = chatBox.style.display === 'none';
+    chatBox.style.display = isHidden ? 'flex' : 'none';
+    if (isHidden) {
+      chatInput.focus();
+      scrollToBottom();
+    }
+  });
+
+  // Close chat box
+  closeBtn?.addEventListener('click', () => {
+    chatBox.style.display = 'none';
+  });
+
+  // Handle Quick Chips click
+  const quickChips = document.querySelectorAll('.chip-btn');
+  quickChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const cmd = chip.getAttribute('data-cmd');
+      if (cmd) {
+        sendAssistantMessage(cmd);
+      }
+    });
+  });
+
+  // Form submit (User message)
+  chatForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const message = chatInput.value.trim();
+    if (!message) return;
+
+    chatInput.value = '';
+    sendAssistantMessage(message);
+  });
+
+  async function sendAssistantMessage(text) {
+    // Append user message to UI
+    appendMessage(text, 'user');
+
+    // Add thinking placeholder
+    const typingId = 'typing-' + Date.now();
+    appendMessage('⏳ Đang xử lý...', 'bot', typingId);
+    scrollToBottom();
+
+    try {
+      const res = await fetch('/api/assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+
+      const typingEl = document.getElementById(typingId);
+      if (typingEl) typingEl.remove();
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Lỗi xử lý tin nhắn');
+      }
+
+      const data = await res.json();
+      const reply = formatBotMessage(data.replyText);
+      appendMessage(reply, 'bot', null, true);
+    } catch (err) {
+      const typingEl = document.getElementById(typingId);
+      if (typingEl) typingEl.remove();
+      appendMessage('❌ Lỗi: ' + err.message, 'bot');
+    }
+    scrollToBottom();
+  }
+
+  function appendMessage(text, sender, id = null, isHTML = false) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `chat-message ${sender}`;
+    if (id) msgDiv.id = id;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    if (isHTML) {
+      bubble.innerHTML = text;
+    } else {
+      bubble.textContent = text;
+    }
+
+    msgDiv.appendChild(bubble);
+    messagesContainer.appendChild(msgDiv);
+  }
+
+  function formatBotMessage(text) {
+    if (!text) return 'Trợ lý không có phản hồi.';
+    
+    // Convert Telegram MarkdownV2 escapes: e.g. \- \. \! to normal
+    let formatted = text.replace(/\\([_\*\[\]\(\)~`>#\+\-=\|{}\.!\\])/g, '$1');
+
+    // Convert *bold* to <strong>
+    formatted = formatted.replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
+
+    // Convert _italic_ to <em>
+    formatted = formatted.replace(/_([^_]+)_/g, '<em>$1</em>');
+
+    // Convert \n to <br>
+    formatted = formatted.replace(/\n/g, '<br>');
+
+    // Convert simple inline code `code` to <code>
+    formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    return formatted;
+  }
+
+  function scrollToBottom() {
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+});
