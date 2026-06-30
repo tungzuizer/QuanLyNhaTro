@@ -69,17 +69,7 @@ function initApp() {
   const savedTab = localStorage.getItem('currentTab') || 'dashboard';
   switchTab(savedTab);
 
-  // Khôi phục giá trị tìm kiếm
-  const savedSearch = localStorage.getItem('searchQuery');
-  if (savedSearch) {
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-      searchInput.value = savedSearch;
-      if (savedTab === 'search') {
-        triggerGlobalSearch();
-      }
-    }
-  }
+
 
   const savedElecRoom = localStorage.getItem('selectedElecRoomId');
   if (savedElecRoom) {
@@ -130,16 +120,7 @@ function initTabs() {
     });
   });
 
-  // Hỗ trợ click vào ô tìm kiếm nhanh chuyển sang Tab Tìm Kiếm
-  const quickSearch = document.getElementById('quick-search-input');
-  if (quickSearch) {
-    quickSearch.addEventListener('click', () => {
-      switchTab('search');
-      setTimeout(() => {
-        document.getElementById('search-input').focus();
-      }, 100);
-    });
-  }
+
 }
 
 function initMobileMenu() {
@@ -197,7 +178,7 @@ function switchTab(tabId) {
     rooms: 'Quản Lý Phòng',
     electricity: 'Quản Lý Điện',
     payments: 'Thu Tiền Tháng',
-    search: 'Tìm Kiếm Dữ Liệu',
+
     invoice: 'Tạo Hóa Đơn',
     settings: 'Cài Đặt Hệ Thống'
   };
@@ -316,16 +297,7 @@ function registerEventListeners() {
   const settingsForm = document.getElementById('settings-form');
   settingsForm.addEventListener('submit', handleSettingsSubmit);
 
-  // --- TÌM KIẾM ---
-  const btnSearchTrigger = document.getElementById('btn-search-trigger');
-  const searchInput = document.getElementById('search-input');
 
-  btnSearchTrigger.addEventListener('click', triggerGlobalSearch);
-  searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      triggerGlobalSearch();
-    }
-  });
 
   // --- ZONE FILTER TABS ---
   const zoneBtns = document.querySelectorAll('.zone-tab-btn');
@@ -1075,85 +1047,9 @@ async function handleElectricitySubmit(e) {
 }
 
 // ==========================================
-// 6. TÌM KIẾM TOÀN CỤC (SEARCH TAB)
+// 6. THU TIỀN THÁNG TIẾP THEO (SECTION 7 RENUMBERED)
 // ==========================================
-async function triggerGlobalSearch() {
-  const q = document.getElementById('search-input').value.trim();
-  localStorage.setItem('searchQuery', q);
-  if (!q) {
-    document.getElementById('search-tenants-results').innerHTML = '<p class="text-muted text-center" style="padding: 20px;">Hãy nhập từ khóa tìm kiếm</p>';
-    document.getElementById('search-rooms-results').innerHTML = '';
-    document.getElementById('count-tenants').textContent = '0';
-    document.getElementById('count-rooms').textContent = '0';
-    return;
-  }
-
-  try {
-    const results = await fetchAPI(`/api/search?q=${encodeURIComponent(q)}`);
-
-    // Bind Tenants
-    const tenantsContainer = document.getElementById('search-tenants-results');
-    tenantsContainer.innerHTML = '';
-    document.getElementById('count-tenants').textContent = results.tenants.length;
-
-    if (results.tenants.length === 0) {
-      tenantsContainer.innerHTML = '<p class="text-muted">Không tìm thấy người thuê nào</p>';
-    } else {
-      results.tenants.forEach(t => {
-        const item = document.createElement('div');
-        item.className = 'tenant-item';
-        const start = t.start_date ? formatDate(t.start_date) : '--';
-        const end = t.end_date ? formatDate(t.end_date) : 'Dài hạn';
-
-        item.innerHTML = `
-          <div class="tenant-main-info">
-            <h4>${t.full_name} <span class="badge badge-occupied" style="cursor: pointer;" onclick="openRoomDetailModal(${t.room_id})">Phòng ${t.room_code} (Khu ${t.zone})</span></h4>
-            <div class="tenant-meta">
-              <span>📞 SĐT: <strong>${t.phone || 'Chưa nhập'}</strong></span>
-              <span>🪪 CCCD: <strong>${t.cccd || 'Chưa nhập'}</strong></span>
-              <span>📅 HĐ: ${start} ➔ ${end}</span>
-            </div>
-            ${t.notes ? `<div class="tenant-notes">📝 ${t.notes}</div>` : ''}
-          </div>
-        `;
-        tenantsContainer.appendChild(item);
-      });
-    }
-
-    // Bind Rooms
-    const roomsContainer = document.getElementById('search-rooms-results');
-    roomsContainer.innerHTML = '';
-    document.getElementById('count-rooms').textContent = results.rooms.length;
-
-    if (results.rooms.length === 0) {
-      roomsContainer.innerHTML = '<p class="text-muted" style="grid-column: 1/-1;">Không tìm thấy phòng nào</p>';
-    } else {
-      results.rooms.forEach(room => {
-        const card = document.createElement('div');
-        card.className = `room-card status-${room.status}`;
-
-        let statusText = 'Trống';
-        if (room.status === 'occupied') statusText = 'Đang thuê';
-        if (room.status === 'maintenance') statusText = 'Sửa chữa';
-
-        const priceLabel = room.rent_price > 0 ? formatVND(room.rent_price) : 'Chưa đặt giá';
-
-        card.innerHTML = `
-          <div class="room-code">${room.room_code}</div>
-          <div class="room-status">${statusText}</div>
-          <div class="room-price">${priceLabel}</div>
-          <div class="room-members">${room.member_count > 0 ? `👥 ${room.member_count} người` : 'Trống'}</div>
-        `;
-
-        card.addEventListener('click', () => openRoomDetailModal(room.id));
-        roomsContainer.appendChild(card);
-      });
-    }
-
-  } catch (err) {
-    console.error(err);
-  }
-}
+// (Search tab removed)
 
 // ==========================================
 // 7. THU TIỀN THÁNG (PAYMENTS TAB)  💰
@@ -2027,7 +1923,7 @@ async function initInvoiceTab() {
     document.getElementById('btn-download-invoice-img').addEventListener('click', downloadInvoiceAsImage);
 
     // Đăng ký sự kiện tự động điền ngày khi thay đổi tháng/năm
-    function autoFillInvoiceDates() {
+    function autoFillInvoiceDates(forceUpdate = false) {
       const m = parseInt(document.getElementById('inv-month').value);
       const y = parseInt(document.getElementById('inv-year').value);
       if (!m || !y) return;
@@ -2037,29 +1933,90 @@ async function initInvoiceTab() {
       const lastDayDate = new Date(y, m, 0); // ngày 0 của tháng sau = ngày cuối tháng này
       const lastDay = `${y}-${String(m).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`;
 
-      // Chỉ tự điền nếu đang trống (không ghi đè nếu user đã nhập)
       const rentFrom = document.getElementById('inv-rent-from');
       const rentTo = document.getElementById('inv-rent-to');
-      const elecFrom = document.getElementById('inv-elec-from');
-      const elecTo = document.getElementById('inv-elec-to');
 
-      if (!rentFrom.value) rentFrom.value = firstDay;
-      if (!rentTo.value) rentTo.value = lastDay;
-      if (!elecFrom.value) elecFrom.value = firstDay;
-      if (!elecTo.value) elecTo.value = lastDay;
+      // Nếu forceUpdate (khi đổi tháng/năm) thì luôn ghi đè
+      // Nếu là lần đầu mở thì chỉ điền khi đang trống
+      if (forceUpdate || !rentFrom.value) rentFrom.value = firstDay;
+      if (forceUpdate || !rentTo.value) rentTo.value = lastDay;
     }
 
-    mSelect.addEventListener('change', autoFillInvoiceDates);
-    ySelect.addEventListener('change', autoFillInvoiceDates);
+    mSelect.addEventListener('change', () => {
+      autoFillInvoiceDates(true);  // force cập nhật ngày khi đổi tháng
+      // Reset chỉ số điện để tải lại cho tháng mới
+      const oldInput = document.getElementById('inv-elec-old');
+      const newInput = document.getElementById('inv-elec-new');
+      if (oldInput) oldInput.value = '';
+      if (newInput) newInput.value = '';
+      fetchInvoiceElectricityDefault();
+    });
+    ySelect.addEventListener('change', () => {
+      autoFillInvoiceDates(true);  // force cập nhật ngày khi đổi năm
+      // Reset chỉ số điện để tải lại cho năm mới
+      const oldInput = document.getElementById('inv-elec-old');
+      const newInput = document.getElementById('inv-elec-new');
+      if (oldInput) oldInput.value = '';
+      if (newInput) newInput.value = '';
+      fetchInvoiceElectricityDefault();
+    });
 
     // Tự điền lần đầu khi mở tab
-    autoFillInvoiceDates();
+    autoFillInvoiceDates(false);
 
     invoiceTabInited = true;
   }
 
   // Load rooms dropdown
   await loadInvoiceRoomsDropdown();
+
+  // Đăng ký sự kiện khi đổi phòng để tải số điện mặc định
+  const roomSelect = document.getElementById('inv-room-select');
+  roomSelect.removeEventListener('change', fetchInvoiceElectricityDefault);
+  roomSelect.addEventListener('change', fetchInvoiceElectricityDefault);
+  
+  // Tải mặc định lần đầu
+  fetchInvoiceElectricityDefault();
+}
+
+async function fetchInvoiceElectricityDefault() {
+  const roomId = document.getElementById('inv-room-select').value;
+  const month = document.getElementById('inv-month').value;
+  const year = document.getElementById('inv-year').value;
+
+  const oldInput = document.getElementById('inv-elec-old');
+  const newInput = document.getElementById('inv-elec-new');
+
+  if (!oldInput || !newInput) return;
+  if (!roomId || !month || !year) {
+    oldInput.value = '';
+    newInput.value = '';
+    return;
+  }
+
+  try {
+    const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}`);
+    
+    // Chỉ số cũ: Lấy từ prevElecReading (số mới của tháng trước), nếu không có thì lấy electricity.old_reading, nếu không có nữa thì lấy 0
+    let oldVal = 0;
+    if (data.prevElecReading !== null && data.prevElecReading !== undefined) {
+      oldVal = data.prevElecReading;
+    } else if (data.electricity && data.electricity.old_reading !== null && data.electricity.old_reading !== undefined) {
+      oldVal = data.electricity.old_reading;
+    } else if (data.summary && data.summary.currentElecIndex !== null && data.summary.currentElecIndex !== undefined) {
+      oldVal = data.summary.currentElecIndex;
+    }
+    oldInput.value = oldVal;
+
+    // Chỉ số mới: Lấy từ electricity.new_reading (nếu tháng này đã nhập điện), nếu chưa nhập thì bằng chỉ số cũ
+    let newVal = oldVal;
+    if (data.electricity && data.electricity.new_reading !== null && data.electricity.new_reading !== undefined) {
+      newVal = data.electricity.new_reading;
+    }
+    newInput.value = newVal;
+  } catch (err) {
+    console.error('Lỗi khi tải số điện mặc định:', err);
+  }
 }
 
 async function loadInvoiceRoomsDropdown() {
@@ -2099,9 +2056,11 @@ async function generateInvoicePreview() {
   const rentFrom = document.getElementById('inv-rent-from')?.value || '';
   const rentTo = document.getElementById('inv-rent-to')?.value || '';
 
-  // Đọc kỳ tính điện
-  const elecFrom = document.getElementById('inv-elec-from')?.value || '';
-  const elecTo = document.getElementById('inv-elec-to')?.value || '';
+  // Đọc chỉ số điện cũ và mới đã nhập
+  const elecOldInput = document.getElementById('inv-elec-old');
+  const elecNewInput = document.getElementById('inv-elec-new');
+  const elecOld = elecOldInput && elecOldInput.value !== '' ? parseFloat(elecOldInput.value) : null;
+  const elecNew = elecNewInput && elecNewInput.value !== '' ? parseFloat(elecNewInput.value) : null;
 
   if (!roomId) {
     showToast('Vui lòng chọn phòng trước', 'error');
@@ -2114,7 +2073,7 @@ async function generateInvoicePreview() {
 
   try {
     const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}&include_residence=${residenceOption}`);
-    renderInvoiceDocument(data, note, { rentFrom, rentTo, elecFrom, elecTo });
+    renderInvoiceDocument(data, note, { rentFrom, rentTo, elecOld, elecNew });
 
     document.getElementById('invoice-empty-state').style.display = 'none';
     document.getElementById('invoice-preview-container').style.display = 'block';
@@ -2129,9 +2088,9 @@ async function generateInvoicePreview() {
   }
 }
 
-function renderInvoiceDocument(data, note, dateRanges = {}) {
+function renderInvoiceDocument(data, note, options = {}) {
   const { room, tenants, electricity, payment, settings, summary } = data;
-  const { rentFrom, rentTo, elecFrom, elecTo } = dateRanges;
+  const { rentFrom, rentTo, elecOld, elecNew } = options;
 
   // Period label
   document.getElementById('inv-period-label').textContent = `Tháng ${summary.month}/${summary.year}`;
@@ -2189,22 +2148,47 @@ function renderInvoiceDocument(data, note, dateRanges = {}) {
     `;
   }
 
-  // Row: Tiền điện (chỉ hiện khi có tiêu thụ, hoặc hiện cảnh báo chưa nhập ở các tháng sau tháng đầu)
-  if (electricity && summary.elecAmount > 0) {
-    const consumption = electricity.consumption || (electricity.new_reading - electricity.old_reading);
-    // Tạo label kỳ điện
-    const elecPeriodLabel = (elecFrom || elecTo)
-      ? `<br><small style="color:var(--neutral-gray)">📅 Kỳ: ${elecFrom ? formatInvoiceDate(elecFrom) : '...'} – ${elecTo ? formatInvoiceDate(elecTo) : '...'}</small>`
-      : '';
+  // Xử lý tính toán tiền điện dựa trên các trị số nhập vào (hoặc mặc định từ DB)
+  let calculatedElecAmount = 0;
+  let hasElecInfo = false;
+  let oldReading = 0;
+  let newReading = 0;
+  let elecUnitPrice = parseFloat(settings['electricity_price']) || 3500;
+
+  if (electricity) {
+    oldReading = electricity.old_reading;
+    newReading = electricity.new_reading;
+    elecUnitPrice = electricity.unit_price || elecUnitPrice;
+    hasElecInfo = true;
+  } else if (summary.currentElecIndex !== null && summary.currentElecIndex !== undefined) {
+    oldReading = summary.currentElecIndex;
+    newReading = summary.currentElecIndex;
+    hasElecInfo = true;
+  }
+
+  // Ghi đè nếu có số chỉnh sửa trực tiếp từ form
+  if (elecOld !== null) {
+    oldReading = elecOld;
+    hasElecInfo = true;
+  }
+  if (elecNew !== null) {
+    newReading = elecNew;
+    hasElecInfo = true;
+  }
+
+  const consumption = Math.max(0, newReading - oldReading);
+  calculatedElecAmount = consumption * elecUnitPrice;
+
+  // Row: Tiền điện
+  if (hasElecInfo) {
     tbody.innerHTML += `
       <tr>
         <td>⚡ Tiền điện</td>
         <td>
-          ${electricity.old_reading} → ${electricity.new_reading} kWh
-          <small>${consumption} kWh × ${formatVND(electricity.unit_price)}/kWh</small>
-          ${elecPeriodLabel}
+          ${oldReading} → ${newReading} kWh
+          <small>${consumption} kWh × ${formatVND(elecUnitPrice)}/kWh</small>
         </td>
-        <td class="text-right">${formatVND(summary.elecAmount)}</td>
+        <td class="text-right">${formatVND(calculatedElecAmount)}</td>
       </tr>
     `;
   } else if (!summary.isDepositMonth) {
@@ -2216,6 +2200,10 @@ function renderInvoiceDocument(data, note, dateRanges = {}) {
       </tr>
     `;
   }
+
+  // Cập nhật lại tổng cộng trên hóa đơn dựa vào tiền điện mới tính toán
+  const diffElec = calculatedElecAmount - (summary.elecAmount || 0);
+  const grandTotal = summary.totalAmount + diffElec;
 
   // Row: Tiền nước (chỉ hiện khi có phát sinh)
   if (summary.waterAmount > 0) {
@@ -2277,7 +2265,7 @@ function renderInvoiceDocument(data, note, dateRanges = {}) {
   tfoot.innerHTML = `
     <tr class="inv-total-row">
       <td colspan="2"><strong>💰 TỔNG CỘNG</strong></td>
-      <td class="text-right"><strong id="inv-grand-total">${formatVND(summary.totalAmount)}</strong></td>
+      <td class="text-right"><strong id="inv-grand-total">${formatVND(grandTotal)}</strong></td>
     </tr>
   `;
 

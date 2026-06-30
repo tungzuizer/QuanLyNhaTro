@@ -46,10 +46,7 @@
           <span class="nav-icon">💰</span>
           <span class="nav-text">Thu Tiền Tháng</span>
         </a>
-        <a href="#" class="nav-item" data-tab="search">
-          <span class="nav-icon">🔍</span>
-          <span class="nav-text">Tìm kiếm</span>
-        </a>
+
         <a href="#" class="nav-item" data-tab="invoice">
           <span class="nav-icon">🧾</span>
           <span class="nav-text">Tạo Hóa Đơn</span>
@@ -75,10 +72,7 @@
           </h1>
         </div>
         <div style="display:flex; align-items:center; gap:12px;">
-          <div class="quick-search-container">
-            <input type="text" id="quick-search-input" placeholder="Tìm phòng, tên người..." readonly
-              data-tab-trigger="search">
-          </div>
+
           <!-- Notification Bell -->
           <div class="notif-bell-wrapper" id="notif-bell-wrapper">
             <button class="notif-bell-btn" id="notif-bell-btn" title="Thông báo phòng đến hạn" onclick="toggleNotifPanel()">
@@ -183,7 +177,7 @@
               <button class="btn btn-primary" onclick="switchTab('rooms')">🔑 Xem DS Phòng</button>
               <button class="btn btn-warning" onclick="switchTab('payments')">💰 Thu Tiền Tháng Này</button>
               <button class="btn btn-secondary" onclick="switchTab('electricity')">⚡ Nhập số điện</button>
-              <button class="btn btn-accent" onclick="switchTab('search')">🔍 Tìm người thuê</button>
+
             </div>
           </div>
         </section>
@@ -521,35 +515,7 @@
           </div>
         </section>
 
-        <!-- ========================================== -->
-        <!-- TAB: SEARCH (TÌM KIẾM) -->
-        <!-- ========================================== -->
-        <section id="tab-search" class="tab-pane">
-          <div class="search-section">
-            <div class="search-box-container">
-              <input type="text" id="search-input" class="form-control search-input"
-                placeholder="Tìm kiếm theo: tên người thuê, số điện thoại, CCCD, mã phòng...">
-              <button class="btn btn-primary btn-search" id="btn-search-trigger">Tìm kiếm</button>
-            </div>
-            <div class="search-results-container">
-              <!-- Kết quả tìm kiếm người thuê -->
-              <div class="results-section">
-                <h3>👥 Người thuê tìm thấy (<span id="count-tenants">0</span>)</h3>
-                <div id="search-tenants-results" class="results-list">
-                  <!-- Render động -->
-                </div>
-              </div>
 
-              <!-- Kết quả tìm kiếm phòng -->
-              <div class="results-section">
-                <h3>🔑 Phòng tìm thấy (<span id="count-rooms">0</span>)</h3>
-                <div id="search-rooms-results" class="results-grid">
-                  <!-- Render động -->
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
 
         <!-- ========================================== -->
         <!-- TAB: INVOICE (TẠO HÓA ĐƠN) -->
@@ -596,20 +562,20 @@
                 <span class="help-text">Hiển thị kỳ thu trên hóa đơn (tuỳ chọn).</span>
               </div>
 
-              <!-- Kỳ tính điện -->
+              <!-- Chỉ số điện năng -->
               <div class="form-group">
-                <label style="font-weight:600; color:var(--primary);">⚡ Kỳ tính tiền điện</label>
+                <label style="font-weight:600; color:var(--primary);">⚡ Chỉ số điện năng</label>
                 <div class="form-row" style="margin-top:6px;">
                   <div class="form-group col" style="margin-bottom:0;">
-                    <label for="inv-elec-from" style="font-size:12px;">Từ ngày</label>
-                    <input type="date" id="inv-elec-from" class="form-control">
+                    <label for="inv-elec-old" style="font-size:12px;">Chỉ số cũ</label>
+                    <input type="number" id="inv-elec-old" class="form-control" min="0" placeholder="Cũ">
                   </div>
                   <div class="form-group col" style="margin-bottom:0;">
-                    <label for="inv-elec-to" style="font-size:12px;">Đến ngày</label>
-                    <input type="date" id="inv-elec-to" class="form-control">
+                    <label for="inv-elec-new" style="font-size:12px;">Chỉ số mới</label>
+                    <input type="number" id="inv-elec-new" class="form-control" min="0" placeholder="Mới">
                   </div>
                 </div>
-                <span class="help-text">Hiển thị kỳ điện trên hóa đơn (tuỳ chọn).</span>
+                <span class="help-text">Chỉnh sửa chỉ số điện trực tiếp cho hóa đơn này.</span>
               </div>
 
               <div class="form-group">
