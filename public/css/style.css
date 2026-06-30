@@ -2999,7 +2999,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 20px;
   padding: 8px 16px;
-  font-size: 13px;
+  font-size: 16px;
   outline: none;
   transition: border-color 0.2s;
 }

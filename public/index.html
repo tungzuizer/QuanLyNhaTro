@@ -783,23 +783,6 @@
                 <label for="setting-bank-owner">Chủ tài khoản</label>
                 <input type="text" id="setting-bank-owner" class="form-control" placeholder="VD: NGUYEN VAN A">
               </div>
-              <hr style="margin: 20px 0; border-color: var(--border-color);">
-              <h4 style="margin-bottom: 14px; font-size: 14px;">📨 Cấu hình gửi báo cáo nợ qua Telegram</h4>
-              <p class="help-text" style="margin-bottom:14px;">Hệ thống sẽ tự động gửi báo cáo công nợ lúc <strong>8:00 sáng</strong> mỗi ngày về Telegram của bạn thông qua Bot đã cấu hình bên dưới.</p>
-              <div class="form-row" style="align-items: flex-end;">
-                <div class="form-group col">
-                  <label for="setting-email-enabled">Trạng thái gửi báo cáo tự động</label>
-                  <select id="setting-email-enabled" class="form-control">
-                    <option value="false">🔕 Tắt gửi báo cáo Telegram</option>
-                    <option value="true">🔔 Bật gửi báo cáo lúc 8:00 sáng mỗi ngày</option>
-                  </select>
-                </div>
-                <div class="form-group col-auto" style="min-width: 160px;">
-                  <button type="button" class="btn btn-secondary btn-block" onclick="testEmailNotification()" id="btn-test-email" style="height: 42px; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                    🧪 Gửi thử báo cáo
-                  </button>
-                </div>
-              </div>
               <button type="submit" class="btn btn-primary">Lưu cài đặt</button>
             </form>
 
@@ -822,73 +805,7 @@
               </div>
             </div>
 
-            <!-- === TELEGRAM BOT SECTION === -->
-            <hr style="margin: 28px 0; border-color: var(--border-color);">
-            <div id="telegram-bot-section">
-              <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
-                <span style="font-size:22px;">✈️</span>
-                <h4 style="font-size:14px; font-weight:700; margin:0;">Telegram Bot — Nhập điện &amp; Hỏi thông tin</h4>
-                <span id="tg-status-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--neutral-light);border:1px solid var(--border-color);color:var(--neutral-gray);margin-left:auto;">
-                  <span id="tg-status-dot">⚫</span>
-                  <span id="tg-status-text">Chưa kết nối</span>
-                </span>
-              </div>
-              <p class="help-text" style="margin-bottom:16px;">
-                Bot cho phép nhắn số điện (<code>A101: 2500</code>) và hỏi thông tin phòng ngay trên Telegram mà không cần mở app.
-              </p>
-
-              <div style="background:var(--primary-light);border:1px solid hsl(221,85%,85%);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:18px;font-size:13px;">
-                <strong>📋 Hướng dẫn lấy thông tin:</strong>
-                <ol style="margin:8px 0 0 16px; line-height:1.8;">
-                  <li>Mở Telegram → tìm <strong>@BotFather</strong> → gõ <code>/newbot</code> → lấy <strong>Bot Token</strong></li>
-                  <li>Tìm <strong>@userinfobot</strong> → gõ <code>/start</code> → lấy <strong>Chat ID của bạn</strong></li>
-                  <li>Dán vào ô bên dưới và nhấn <strong>Kết nối Bot</strong></li>
-                </ol>
-              </div>
-
-              <div class="form-row">
-                <div class="form-group col">
-                  <label for="tg-bot-token">🔑 Bot Token</label>
-                  <input type="password" id="tg-bot-token" class="form-control" placeholder="Dạng: 123456789:ABCdef-xyz..." autocomplete="off">
-                  <span class="help-text" id="tg-token-preview"></span>
-                </div>
-                <div class="form-group col">
-                  <label for="tg-admin-chat-id">👤 Admin Chat ID của bạn</label>
-                  <input type="text" id="tg-admin-chat-id" class="form-control" placeholder="Dạng: 987654321" autocomplete="off">
-                  <span class="help-text">Chỉ tin nhắn từ Chat ID này mới được bot phản hồi.</span>
-                </div>
-              </div>
-
-              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
-                <button type="button" id="btn-tg-connect" class="btn btn-primary" onclick="connectTelegramBot()">✈️ Kết nối Bot</button>
-                <button type="button" id="btn-tg-disconnect" class="btn btn-danger" onclick="disconnectTelegramBot()" style="display:none;">🔴 Ngắt kết nối</button>
-                <span id="tg-connect-msg" style="font-size:13px;"></span>
-              </div>
-
-              <div id="tg-commands-panel" style="display:none;margin-top:20px;background:var(--neutral-light);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:16px;">
-                <h5 style="font-size:13px;font-weight:700;margin-bottom:10px;">📱 Các lệnh bot hỗ trợ:</h5>
-                <div style="overflow-x:auto;">
-                  <table style="font-size:12px;border-collapse:collapse;width:100%;min-width:400px;">
-                    <thead><tr style="background:hsl(220,14%,94%);">
-                      <th style="padding:7px 12px;text-align:left;white-space:nowrap;">Lệnh / Tin nhắn</th>
-                      <th style="padding:7px 12px;text-align:left;">Tác dụng</th>
-                    </tr></thead>
-                    <tbody>
-                      <tr><td style="padding:6px 12px;"><code>A101: 2500</code></td><td style="padding:6px 12px;">Nhập số điện phòng A101 = 2500 kWh</td></tr>
-                      <tr style="background:var(--white);"><td style="padding:6px 12px;"><code>/phong A101</code></td><td style="padding:6px 12px;">Xem thông tin phòng + người thuê</td></tr>
-                      <tr><td style="padding:6px 12px;"><code>/tienphong A101</code></td><td style="padding:6px 12px;">Tiền thuê phải đóng tháng này</td></tr>
-                      <tr style="background:var(--white);"><td style="padding:6px 12px;"><code>/chuathu</code></td><td style="padding:6px 12px;">DS phòng chưa đóng tiền tháng này</td></tr>
-                      <tr><td style="padding:6px 12px;"><code>/dien</code></td><td style="padding:6px 12px;">DS phòng chưa nhập số điện (Tất cả)</td></tr>
-                      <tr style="background:var(--white);"><td style="padding:6px 12px;"><code>/dien15</code></td><td style="padding:6px 12px;">DS phòng chưa nhập điện đợt 15 (Giữa tháng)</td></tr>
-                      <tr><td style="padding:6px 12px;"><code>/dien30</code></td><td style="padding:6px 12px;">DS phòng chưa nhập điện đợt 30 (Cuối tháng)</td></tr>
-                      <tr style="background:var(--white);"><td style="padding:6px 12px;"><code>/sodien</code></td><td style="padding:6px 12px;">Xem số điện các phòng tháng này</td></tr>
-                      <tr><td style="padding:6px 12px;"><code>/baocao</code></td><td style="padding:6px 12px;">Tóm tắt tài chính tháng này</td></tr>
-                      <tr style="background:var(--white);"><td style="padding:6px 12px;"><code>/help</code></td><td style="padding:6px 12px;">Xem hướng dẫn sử dụng bot</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+          </div>
 
           </div>
         </section>
