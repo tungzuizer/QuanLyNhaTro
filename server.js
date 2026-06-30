@@ -810,13 +810,15 @@ app.get('/api/invoice', async (req, res) => {
     const elecAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (elec ? elec.total_cost : 0);
 
     // Láº¥y giĂ¡ nÆ°á»›c/rĂ¡c/táº¡m trĂº
-    const waterPrice = parseFloat(settings['water_price']) || 20000;
+        const waterPrice = parseFloat(settings['water_price']) || 20000;
     const trashPrice = parseFloat(settings['trash_price']) || 10000;
     const residencePrice = parseFloat(settings['residence_price']) || 50000;
+    
+    // Tính toán số người dựa trên số lượng thành viên hiện tại trong phòng
     const memberCount = room.member_count || 0;
 
-    const waterAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (payment && payment.is_paid === 1 ? (payment.water_amount || 0) : waterPrice * memberCount);
-    const trashAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (payment && payment.is_paid === 1 ? (payment.trash_amount || 0) : trashPrice * memberCount);
+    const waterAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : waterPrice * memberCount;
+    const trashAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : trashPrice * memberCount;
 
     // Xá»­ lĂ½ tĂ¹y chá»n phĂ­ táº¡m trĂº
     const includeResidenceParam = req.query.include_residence; // 'force' | 'none' | 'auto' | undefined
