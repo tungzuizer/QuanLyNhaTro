@@ -581,6 +581,16 @@
               </div>
 
               <div class="form-group">
+                <label for="inv-residence-option">🛂 Phí tạm trú</label>
+                <select id="inv-residence-option" class="form-control">
+                  <option value="auto">🔄 Tự động (Chỉ tính tháng đầu tiên)</option>
+                  <option value="force">✅ Bắt buộc thêm phí tạm trú</option>
+                  <option value="none">❌ Không tính phí tạm trú</option>
+                </select>
+                <span class="help-text">Dùng "Bắt buộc thêm" khi phòng thuê lâu nhưng chưa thu phí tạm trú.</span>
+              </div>
+
+              <div class="form-group">
                 <label for="inv-note">Ghi chú thêm (tuỳ chọn)</label>
                 <textarea id="inv-note" class="form-control" rows="2"
                   placeholder="VD: Đã bao gồm phí giữ xe..."></textarea>
@@ -739,35 +749,21 @@
               <div class="form-group">
                 <label for="setting-bank-owner">Chủ tài khoản</label>
                 <input type="text" id="setting-bank-owner" class="form-control" placeholder="VD: NGUYEN VAN A">
-              <hr style="margin: 20px 0; border-color: var(--border-color);">
-              <h4 style="margin-bottom: 14px; font-size: 14px;">✉️ Cấu hình thông báo qua Gmail</h4>
-              <div class="form-row">
-                <div class="form-group col">
-                  <label for="setting-email-sender">Gmail gửi thông báo (Sender)</label>
-                  <input type="email" id="setting-email-sender" class="form-control" placeholder="VD: app.nhatro@gmail.com">
-                </div>
-                <div class="form-group col">
-                  <label for="setting-email-pass">Mật khẩu ứng dụng Gmail (App Password)</label>
-                  <input type="password" id="setting-email-pass" class="form-control" placeholder="Mật khẩu 16 chữ số từ tài khoản Google">
-                  <span class="help-text"><a href="https://support.google.com/accounts/answer/185833" target="_blank" style="color: var(--primary);">Cách tạo Mật khẩu ứng dụng ↗️</a></span>
-                </div>
               </div>
+              <hr style="margin: 20px 0; border-color: var(--border-color);">
+              <h4 style="margin-bottom: 14px; font-size: 14px;">📨 Cấu hình gửi báo cáo nợ qua Telegram</h4>
+              <p class="help-text" style="margin-bottom:14px;">Hệ thống sẽ tự động gửi báo cáo công nợ lúc <strong>8:00 sáng</strong> mỗi ngày về Telegram của bạn thông qua Bot đã cấu hình bên dưới.</p>
               <div class="form-row" style="align-items: flex-end;">
                 <div class="form-group col">
-                  <label for="setting-email-receiver">Gmail nhận thông báo (Receiver)</label>
-                  <input type="text" id="setting-email-receiver" class="form-control" placeholder="VD: email1@gmail.com, email2@gmail.com">
-                  <span class="help-text">Hỗ trợ nhiều email (phân tách bằng dấu phẩy).</span>
-                </div>
-                <div class="form-group col">
-                  <label for="setting-email-enabled">Trạng thái gửi email ngầm</label>
+                  <label for="setting-email-enabled">Trạng thái gửi báo cáo tự động</label>
                   <select id="setting-email-enabled" class="form-control">
-                    <option value="false">Tắt thông báo Gmail</option>
-                    <option value="true">Bật gửi báo cáo lúc 8:00 sáng mỗi ngày</option>
+                    <option value="false">🔕 Tắt gửi báo cáo Telegram</option>
+                    <option value="true">🔔 Bật gửi báo cáo lúc 8:00 sáng mỗi ngày</option>
                   </select>
                 </div>
-                <div class="form-group col-auto" style="min-width: 120px;">
+                <div class="form-group col-auto" style="min-width: 160px;">
                   <button type="button" class="btn btn-secondary btn-block" onclick="testEmailNotification()" id="btn-test-email" style="height: 42px; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                    🧪 Gửi thử
+                    🧪 Gửi thử báo cáo
                   </button>
                 </div>
               </div>
@@ -1092,6 +1088,10 @@
     <a href="#" class="bottom-nav-item" data-tab="payments">
       <span class="bottom-nav-icon">💰</span>
       <span class="bottom-nav-text">Thu Tiền</span>
+    </a>
+    <a href="#" class="bottom-nav-item" data-tab="invoice">
+      <span class="bottom-nav-icon">🧾</span>
+      <span class="bottom-nav-text">Hóa Đơn</span>
     </a>
     <a href="#" class="bottom-nav-item" data-tab="settings">
       <span class="bottom-nav-icon">⚙️</span>

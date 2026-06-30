@@ -2056,6 +2056,7 @@ async function generateInvoicePreview() {
   const month = document.getElementById('inv-month').value;
   const year = document.getElementById('inv-year').value;
   const note = document.getElementById('inv-note').value.trim();
+  const residenceOption = document.getElementById('inv-residence-option')?.value || 'auto';
 
   if (!roomId) {
     showToast('Vui lòng chọn phòng trước', 'error');
@@ -2067,7 +2068,7 @@ async function generateInvoicePreview() {
   btn.disabled = true;
 
   try {
-    const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}`);
+    const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}&include_residence=${residenceOption}`);
     renderInvoiceDocument(data, note);
 
     document.getElementById('invoice-empty-state').style.display = 'none';
@@ -2761,7 +2762,7 @@ function testPushNotification() {
   }
 }
 
-// Hàm gửi email thử nghiệm (Test Email)
+// Hàm gửi báo cáo thử nghiệm qua Telegram
 async function testEmailNotification() {
   const btn = document.getElementById('btn-test-email');
   if (btn) {
@@ -2769,26 +2770,25 @@ async function testEmailNotification() {
     btn.textContent = '⏳ Đang gửi...';
   }
 
-  // Đầu tiên, lưu lại các cài đặt hiện tại trên form để server có cấu hình mới nhất
+  // Lưu cài đặt trước khi gửi thử
   const form = document.getElementById('settings-form');
   if (form) {
-    // Kích hoạt sự kiện submit ngầm để lưu cài đặt trước khi test
     const submitBtn = form.querySelector('button[type="submit"]');
     if (submitBtn) {
       submitBtn.click();
     }
   }
 
-  // Chờ một chút để lưu cài đặt hoàn tất, sau đó gửi yêu cầu gửi email test
+  // Chờ lưu xong rồi gửi test
   setTimeout(async () => {
     try {
-      const res = await fetch('/api/settings/test-email', {
+      const res = await fetch('/api/settings/test-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Lỗi khi gửi email test');
+        throw new Error(data.error || 'Lỗi khi gửi báo cáo test');
       }
       showToast(data.message, 'success');
     } catch (err) {
@@ -2796,7 +2796,7 @@ async function testEmailNotification() {
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = '🧪 Gửi thử';
+        btn.textContent = '🧪 Gửi thử báo cáo';
       }
     }
   }, 1000);

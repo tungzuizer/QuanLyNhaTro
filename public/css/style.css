@@ -1399,6 +1399,20 @@ body {
   .stat-info p {
     font-size: 18px;
   }
+
+  /* 6 tabs trên màn hình nhỏ */
+  .bottom-nav-item {
+    padding: 5px 2px 3px;
+    font-size: 9px;
+  }
+
+  .bottom-nav-item .bottom-nav-icon {
+    font-size: 18px;
+  }
+
+  .bottom-nav-text {
+    font-size: 9px;
+  }
 }
 
 /* ==========================================
