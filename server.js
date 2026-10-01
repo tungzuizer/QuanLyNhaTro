@@ -21,6 +21,42 @@ app.get('/api/ping', (req, res) => {
   res.status(200).send('pong');
 });
 
+app.get('/api/diag', async (req, res) => {
+  const net = require('net');
+  const results = {};
+  const targets = [
+    { host: 'smtp.gmail.com', port: 587 },
+    { host: 'smtp.gmail.com', port: 465 },
+    { host: 'smtp.sendgrid.net', port: 587 },
+    { host: 'smtp.sendgrid.net', port: 2525 },
+    { host: 'smtp.resend.com', port: 465 },
+    { host: 'smtp.resend.com', port: 587 }
+  ];
+
+  for (const t of targets) {
+    const key = `${t.host}:${t.port}`;
+    results[key] = await new Promise(resolve => {
+      const sock = new net.Socket();
+      sock.setTimeout(2500);
+      sock.on('connect', () => {
+        sock.destroy();
+        resolve('OPEN');
+      });
+      sock.on('timeout', () => {
+        sock.destroy();
+        resolve('TIMEOUT (BLOCKED)');
+      });
+      sock.on('error', (err) => {
+        sock.destroy();
+        resolve('ERROR: ' + err.message);
+      });
+      sock.connect(t.port, t.host);
+    });
+  }
+
+  res.json(results);
+});
+
 // ==========================================
 // 1. API DASHBOARD
 // ==========================================
