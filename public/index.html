@@ -450,18 +450,12 @@
               <select id="pay-month-select" class="form-control"></select>
               <label>Năm:</label>
               <select id="pay-year-select" class="form-control"></select>
-              <button class="btn btn-primary" id="btn-load-payments">Xem danh sách</button>
+              <button class="btn btn-primary" id="btn-load-payments"><i class="bi bi-arrow-repeat"></i> Xem danh sách</button>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <div class="payments-legend">
+            <div class="payments-header-right">
+              <div class="payments-legend desktop-only">
                 <span class="legend-item legend-paid"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã thu</span>
                 <span class="legend-item legend-unpaid"><i class="bi bi-hourglass-split" style="color:#f59e0b"></i> Chưa thu</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <label style="font-size:12px;font-weight:600;white-space:nowrap;">Đợt thu:</label>
-                <button class="btn btn-sm pay-billing-pill active" data-billing="all">Tất cả</button>
-                <button class="btn btn-sm pay-billing-pill" data-billing="15"><i class="bi bi-calendar-event"></i> Đợt 15</button>
-                <button class="btn btn-sm pay-billing-pill" data-billing="30"><i class="bi bi-calendar-event"></i> Đợt 30</button>
               </div>
             </div>
           </div>
@@ -484,14 +478,57 @@
             </div>
           </div>
 
-          <!-- Bảng thu tiền từng phòng -->
+          <!-- Bảng & Lưới thu tiền từng phòng -->
           <div class="payments-table-card card">
             <div class="payments-table-header">
-              <h3><i class="bi bi-cash-stack"></i> Danh sách thu tiền tháng <span id="pay-month-display">--/----</span></h3>
-              <div class="pay-filter-btns">
-                <button class="btn btn-sm pay-filter-btn active" data-filter="all">Tất cả</button>
-                <button class="btn btn-sm pay-filter-btn" data-filter="unpaid"><i class="bi bi-hourglass-split"></i> Chưa thu</button>
-                <button class="btn btn-sm pay-filter-btn" data-filter="paid"><i class="bi bi-check-circle"></i> Đã thu</button>
+              <h3><i class="bi bi-cash-stack"></i> Thu tiền tháng <span id="pay-month-display">--/----</span></h3>
+              <div class="pay-view-switcher">
+                <button id="btn-toggle-pay-view" class="btn btn-sm btn-outline-secondary pay-view-btn" title="Chuyển chế độ xem 2 cột / 1 cột">
+                  <i class="bi bi-grid-fill"></i> <span class="view-mode-label">2 Cột</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Thanh tìm kiếm và bộ lọc nhanh đa năng -->
+            <div class="pay-filter-toolbar">
+              <!-- Ô tìm kiếm tức thì -->
+              <div class="pay-search-wrap">
+                <i class="bi bi-search pay-search-icon"></i>
+                <input type="text" id="pay-search-input" class="form-control pay-search-input" placeholder="Tìm số phòng (101, B2...) hoặc tên khách...">
+                <button id="pay-search-clear" class="btn btn-sm pay-search-clear" style="display:none;" title="Xóa tìm kiếm">
+                  <i class="bi bi-x-circle-fill"></i>
+                </button>
+              </div>
+
+              <!-- Thanh trượt bộ lọc Chip ngang -->
+              <div class="pay-chips-scroll">
+                <!-- Khu vực -->
+                <div class="pay-chip-segment">
+                  <span class="pay-chip-segment-title">Khu:</span>
+                  <button class="btn btn-sm pay-zone-pill active" data-zone="all">Tất cả</button>
+                  <button class="btn btn-sm pay-zone-pill" data-zone="A">Khu A</button>
+                  <button class="btn btn-sm pay-zone-pill" data-zone="B">Khu B</button>
+                </div>
+
+                <div class="pay-chip-divider"></div>
+
+                <!-- Trạng thái -->
+                <div class="pay-chip-segment">
+                  <span class="pay-chip-segment-title">Trạng thái:</span>
+                  <button class="btn btn-sm pay-filter-btn active" data-filter="all">Tất cả (<span id="pay-cnt-all">0</span>)</button>
+                  <button class="btn btn-sm pay-filter-btn" data-filter="unpaid"><i class="bi bi-hourglass-split"></i> Chưa thu (<span id="pay-cnt-unpaid">0</span>)</button>
+                  <button class="btn btn-sm pay-filter-btn" data-filter="paid"><i class="bi bi-check-circle"></i> Đã thu (<span id="pay-cnt-paid">0</span>)</button>
+                </div>
+
+                <div class="pay-chip-divider"></div>
+
+                <!-- Đợt thu -->
+                <div class="pay-chip-segment">
+                  <span class="pay-chip-segment-title">Đợt:</span>
+                  <button class="btn btn-sm pay-billing-pill active" data-billing="all">Tất cả</button>
+                  <button class="btn btn-sm pay-billing-pill" data-billing="15">Đợt 15</button>
+                  <button class="btn btn-sm pay-billing-pill" data-billing="30">Đợt 30</button>
+                </div>
               </div>
             </div>
 
@@ -522,11 +559,17 @@
               </table>
             </div>
 
-            <!-- Mobile Cards View -->
+            <!-- Mobile Cards View (Lưới 2 Cột hoặc 1 Cột) -->
             <div class="payments-mobile-cards" id="payments-cards-body">
-              <div class="text-center text-muted" style="padding: 30px;">
+              <div class="text-center text-muted" style="padding: 30px; grid-column: 1 / -1;">
                 Chọn tháng/năm và bấm "Xem danh sách" để tải dữ liệu
               </div>
+            </div>
+
+            <!-- Thông báo khi lọc không thấy kết quả -->
+            <div id="pay-no-match-notice" class="text-center text-muted" style="display:none; padding: 30px;">
+              <i class="bi bi-search" style="font-size: 24px; color: var(--neutral-gray);"></i>
+              <div style="margin-top: 8px; font-weight: 500;">Không tìm thấy phòng nào phù hợp với bộ lọc</div>
             </div>
           </div>
         </section>

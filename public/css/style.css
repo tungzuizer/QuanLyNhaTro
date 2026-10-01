@@ -1863,6 +1863,58 @@ body {
   background-color: hsl(35, 90%, 40%);
 }
 
+/* ==========================================
+   PAYMENTS TAB STYLES & MOBILE CARD GRID
+   ========================================== */
+.payments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.payments-month-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.payments-month-filter label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--neutral-dark);
+  margin: 0;
+}
+
+.payments-month-filter .form-control {
+  width: auto;
+  min-width: 90px;
+}
+
+.payments-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.payments-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.legend-item {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--neutral-gray);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Dual views for payments (Desktop Table vs Mobile Cards) */
 .payments-desktop-table {
   display: block;
@@ -1872,183 +1924,454 @@ body {
   display: none;
 }
 
-/* Pay Room Card (Mobile View) */
-.pay-room-card {
-  background: var(--white);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.pay-room-card.card-paid {
-  border-left: 5px solid var(--success);
-  background: linear-gradient(to right, hsl(142, 70%, 99%), #ffffff);
-}
-
-.pay-room-card.card-unpaid {
-  border-left: 5px solid var(--warning);
-  background: linear-gradient(to right, hsl(38, 92%, 99%), #ffffff);
-}
-
-.pay-card-top {
+/* Toolbar tìm kiếm & Chip lọc nhanh */
+.pay-filter-toolbar {
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.pay-card-room-info {
+.pay-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.pay-search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--neutral-gray);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.pay-search-input {
+  width: 100%;
+  padding-left: 36px !important;
+  padding-right: 36px !important;
+  border-radius: 20px !important;
+  height: 38px;
+  font-size: 13px;
+  background: var(--white);
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.pay-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(33, 115, 243, 0.15);
+  background: #ffffff;
+}
+
+.pay-search-clear {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.pay-search-clear:hover {
+  color: #64748b;
+}
+
+/* Chips Filter Scrollbar */
+.pay-chips-scroll {
   display: flex;
   align-items: center;
   gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
 }
 
-.pay-card-room-badge {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--neutral-dark);
+.pay-chips-scroll::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
 
-.pay-card-zone-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 12px;
-  background: var(--neutral-light);
-  color: var(--neutral-gray);
-  border: 1px solid var(--border-color);
-}
-
-.pay-card-tenant-box {
-  background: #f8fafc;
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  border: 1px solid #f1f5f9;
-}
-
-.pay-card-tenant-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--neutral-dark);
-  margin-bottom: 4px;
-}
-
-.pay-card-tenant-meta {
-  display: flex;
-  flex-wrap: wrap;
+.pay-chip-segment {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  color: var(--neutral-gray);
+  gap: 4px;
+  background: #f1f5f9;
+  padding: 3px 4px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  flex-shrink: 0;
 }
 
-.pay-card-phone-link {
-  color: var(--primary);
-  text-decoration: none;
+.pay-chip-segment-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  padding: 0 6px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.pay-chip-divider {
+  width: 1px;
+  height: 20px;
+  background: #cbd5e1;
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* Chip Buttons */
+.pay-zone-pill,
+.pay-filter-btn,
+.pay-billing-pill {
+  font-size: 12px;
   font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 16px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  white-space: nowrap;
+  transition: all 0.15s ease;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
 
-.pay-card-due-tag {
-  margin-top: 6px;
-}
-
-.pay-card-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.pay-card-item {
-  display: flex;
-  flex-direction: column;
-  padding: 8px 10px;
-  background: #f8fafc;
-  border-radius: var(--radius-sm);
-  border: 1px solid #f1f5f9;
-}
-
-.pay-card-label {
-  font-size: 11px;
-  color: var(--neutral-gray);
-  margin-bottom: 2px;
-}
-
-.pay-card-value {
-  font-size: 13px;
-  font-weight: 600;
+.pay-zone-pill:hover,
+.pay-filter-btn:hover,
+.pay-billing-pill:hover {
+  background: rgba(255, 255, 255, 0.8);
   color: var(--neutral-dark);
 }
 
-.pay-card-total-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 14px;
-  background: #eff6ff;
-  border-radius: var(--radius-sm);
-  border: 1px solid #dbeafe;
-  margin-bottom: 12px;
+.pay-zone-pill.active,
+.pay-filter-btn.active,
+.pay-billing-pill.active {
+  background: var(--white);
+  color: var(--primary);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.pay-card-total-title {
-  font-size: 13px;
+.pay-filter-btn[data-filter="unpaid"].active {
+  color: #d97706;
+}
+
+.pay-filter-btn[data-filter="paid"].active {
+  color: #16a34a;
+}
+
+/* Switcher chế độ xem */
+.pay-view-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pay-view-btn {
+  font-size: 12px;
   font-weight: 600;
-  color: #1e40af;
+  border-radius: 16px;
+  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ==========================================
+   COMPACT MOBILE CARDS (LƯỚI 2 CỘT & 3 CỘT)
+   ========================================== */
+.payments-mobile-cards {
+  display: none;
+}
+
+/* Card Style */
+.pay-room-card {
+  background: var(--white);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  overflow: hidden;
+}
+
+.pay-room-card:active {
+  transform: scale(0.98);
+}
+
+/* Card Paid (Đã thu) */
+.pay-room-card.card-paid {
+  border-color: #bbf7d0;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 50px);
+}
+
+.pay-room-card.card-paid::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #16a34a;
+}
+
+/* Card Unpaid (Chưa thu) */
+.pay-room-card.card-unpaid {
+  border-color: #fde68a;
+  background: linear-gradient(180deg, #fffbeb 0%, #ffffff 50px);
+}
+
+.pay-room-card.card-unpaid::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #f59e0b;
+}
+
+/* Card Header */
+.pay-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  gap: 4px;
+}
+
+.pay-card-code-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.pay-card-code {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--neutral-dark);
+  letter-spacing: -0.2px;
+}
+
+.pay-card-zone-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.pay-card-status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.pay-card-status-pill.paid {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.pay-card-status-pill.unpaid {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+/* Card Tenant & Due Info */
+.pay-card-tenant-row {
+  margin-bottom: 6px;
+}
+
+.pay-card-tenant-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pay-card-due-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.pay-card-cycle-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f8fafc;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid #f1f5f9;
+}
+
+.pay-card-due-tag {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.pay-card-due-tag.overdue {
+  color: #dc2626;
+}
+
+.pay-card-due-tag.due-today {
+  color: #dc2626;
+}
+
+.pay-card-due-tag.due-soon {
+  color: #d97706;
+}
+
+.pay-card-due-tag.normal {
+  color: #64748b;
+}
+
+/* Card Money Section */
+.pay-card-amount-box {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border: 1px solid #f1f5f9;
 }
 
 .pay-card-total-val {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
   color: var(--primary);
+  display: block;
+  line-height: 1.2;
 }
 
+.pay-card-amount-details {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 2px;
+  display: flex;
+  justify-content: space-between;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Card Action Button */
 .pay-card-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  align-items: center;
 }
 
-.pay-card-actions .btn-pay-action {
+.btn-pay-invoice-1tap {
   flex: 1;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
+  background: var(--primary);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 1px 2px rgba(33, 115, 243, 0.2);
+  transition: all 0.15s ease;
 }
 
-.pay-card-actions .btn-pay-toggle {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
+.btn-pay-invoice-1tap:hover {
+  background: var(--primary-dark);
+  color: #ffffff;
+}
+
+.btn-pay-quick-toggle {
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
 }
 
-/* Responsive for payments */
+/* ==========================================
+   RESPONSIVE MEDIA QUERIES
+   ========================================== */
 @media (max-width: 768px) {
   .payments-desktop-table {
     display: none !important;
   }
 
+  /* Mặc định hiển thị lưới 2 CỘT trên Mobile */
   .payments-mobile-cards {
-    display: flex !important;
-    flex-direction: column;
-    gap: 12px;
-    padding: 12px;
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    padding: 10px !important;
+  }
+
+  /* Chế độ 1 Cột khi bật toggle */
+  .payments-mobile-cards.cols-1 {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Chế độ 3 Cột khi bật toggle */
+  .payments-mobile-cards.cols-3 {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+    padding: 8px !important;
+  }
+
+  /* Điều chỉnh font chữ nhỏ gọn trong chế độ 3 cột */
+  .payments-mobile-cards.cols-3 .pay-room-card {
+    padding: 8px 6px;
+  }
+  .payments-mobile-cards.cols-3 .pay-card-code {
+    font-size: 13px;
+  }
+  .payments-mobile-cards.cols-3 .pay-card-total-val {
+    font-size: 12px;
+  }
+  .payments-mobile-cards.cols-3 .btn-pay-invoice-1tap {
+    font-size: 11px;
+    padding: 5px 4px;
+  }
+  .payments-mobile-cards.cols-3 .pay-card-zone-tag,
+  .payments-mobile-cards.cols-3 .pay-card-status-pill {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+  .payments-mobile-cards.cols-3 .pay-card-amount-details {
+    display: none;
+  }
+
+  .desktop-only {
+    display: none !important;
   }
 
   .payment-summary-grid {
@@ -2057,19 +2380,45 @@ body {
 
   .payments-stats-bar {
     flex-direction: column;
+    gap: 8px;
   }
 
   .payments-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    gap: 10px;
   }
 
   .payments-month-filter {
     width: 100%;
+    display: grid;
+    grid-template-columns: auto 1fr auto 1fr auto;
+    align-items: center;
+    gap: 6px;
   }
 
-  .pay-filter-btns {
-    flex-wrap: wrap;
+  .payments-month-filter .form-control {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .payments-month-filter #btn-load-payments {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    width: 100%;
+  }
+
+  .pay-filter-toolbar {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .pay-card-code {
+    font-size: 14px;
+  }
+  .pay-card-total-val {
+    font-size: 13px;
   }
 }
 
