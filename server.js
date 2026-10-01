@@ -834,21 +834,38 @@ const DEFAULT_EMAIL_SENDER = process.env.EMAIL_SENDER || 'nhatroliso@gmail.com';
 const DEFAULT_EMAIL_PASS = process.env.EMAIL_PASS || 'cxma vytw meqc bitp';
 const DEFAULT_EMAIL_RECEIVER = process.env.EMAIL_RECEIVER || 'nhatroliso@gmail.com';
 
-function createEmailTransporter(sender, pass) {
+async function sendEmailWithTransporter(sender, pass, mailOptions) {
   const user = (sender || DEFAULT_EMAIL_SENDER).trim();
   const rawPass = (pass || DEFAULT_EMAIL_PASS).replace(/\s+/g, '');
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user,
-      pass: rawPass
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000
-  });
+
+  const configs = [
+    { host: 'smtp.gmail.com', port: 587, secure: false },
+    { service: 'gmail' },
+    { host: 'smtp.gmail.com', port: 465, secure: true }
+  ];
+
+  let lastErr = null;
+  for (const cfg of configs) {
+    try {
+      const transporter = nodemailer.createTransport({
+        ...cfg,
+        auth: { user, pass: rawPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        tls: { rejectUnauthorized: false }
+      });
+      const result = await transporter.sendMail(mailOptions);
+      return result;
+    } catch (err) {
+      console.warn(`[SMTP Warning] Thử cấu hình SMTP thất bại:`, err.message);
+      lastErr = err;
+      if (err.responseCode === 535 || err.message.includes('Invalid login') || err.message.includes('Username and Password not accepted')) {
+        throw err;
+      }
+    }
+  }
+  throw lastErr;
 }
 
 async function getDailyReportData(settingsMap, vnDate) {
@@ -1302,7 +1319,7 @@ async function sendDailyReportEmail(force = false, customReceiver = null) {
     subjectPrefix = `🟡 [Có ${dueTodayCount} phòng đến hạn hôm nay]`;
   }
 
-  await transporter.sendMail({
+  await sendEmailWithTransporter(sender, pass, {
     from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
     to: receiver.trim(),
     subject: `${subjectPrefix} Tổng kết ngày ${vnDate.day}/${vnDate.month}/${vnDate.year}`,
@@ -1334,10 +1351,7 @@ app.post('/api/settings/test-email', async (req, res) => {
       return res.status(400).json({ error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password)!' });
     }
 
-    const transporter = createEmailTransporter(sender, pass);
-    await transporter.verify();
-
-    await transporter.sendMail({
+    await sendEmailWithTransporter(sender, pass, {
       from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
       to: receiver.trim(),
       subject: '✅ [Nhà Trọ] Kiểm tra kết nối Gmail thành công!',
