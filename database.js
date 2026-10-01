@@ -128,6 +128,33 @@ async function initDatabase() {
       console.error("Lỗi khi chạy migration đổi tên phòng khu B:", e);
     }
 
+    // Migration / Auto-sync: Đồng bộ phòng không có người thuê về trạng thái vacant & member_count = 0
+    try {
+      const syncVacRes = await client.query(`
+        UPDATE rooms
+        SET status = 'vacant', member_count = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE id NOT IN (SELECT DISTINCT room_id FROM tenants)
+          AND status = 'occupied'
+      `);
+      if (syncVacRes.rowCount > 0) {
+        console.log(`✅ Đã đồng bộ ${syncVacRes.rowCount} phòng không có người thuê về trạng thái Trống (vacant).`);
+      }
+
+      const syncOccRes = await client.query(`
+        UPDATE rooms
+        SET status = 'occupied',
+            member_count = CASE WHEN member_count <= 0 THEN 1 ELSE member_count END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id IN (SELECT DISTINCT room_id FROM tenants)
+          AND status = 'vacant'
+      `);
+      if (syncOccRes.rowCount > 0) {
+        console.log(`✅ Đã đồng bộ ${syncOccRes.rowCount} phòng có người thuê về trạng thái Đang thuê (occupied).`);
+      }
+    } catch(e) {
+      console.error("Lỗi khi đồng bộ trạng thái phòng:", e);
+    }
+
     await client.query('COMMIT');
     console.log('✅ Đã tạo các bảng dữ liệu trên Postgres thành công.');
 

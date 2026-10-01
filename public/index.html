@@ -932,6 +932,11 @@
                 <input type="date" id="tenant-end-date" class="form-control">
               </div>
             </div>
+            <div class="form-group" id="tenant-member-count-group">
+              <label for="tenant-member-count">Số người ở thực tế (tính phí dịch vụ nước/rác/tạm trú)</label>
+              <input type="number" id="tenant-member-count" class="form-control" min="1" value="1" placeholder="VD: 3">
+              <span class="help-text">Phòng có 1 người đại diện nhưng tiền dịch vụ nhân theo số người ở này.</span>
+            </div>
             <div class="form-group">
               <label for="tenant-notes">Ghi chú</label>
               <textarea id="tenant-notes" class="form-control" rows="2"></textarea>

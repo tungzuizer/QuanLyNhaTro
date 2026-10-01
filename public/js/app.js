@@ -329,6 +329,13 @@ function registerEventListeners() {
     document.getElementById('tenant-start-date').value = today;
     document.getElementById('tenant-end-date').value = '';
 
+    const memberGroup = document.getElementById('tenant-member-count-group');
+    if (memberGroup) {
+      memberGroup.style.display = 'block';
+      const currentMembers = currentState.selectedRoomData?.room?.member_count;
+      document.getElementById('tenant-member-count').value = (currentMembers && currentMembers > 0) ? currentMembers : 1;
+    }
+
     document.getElementById('tenant-form-title').textContent = 'Thêm người thuê mới';
     tenantForm.style.display = 'block';
   });
@@ -817,16 +824,20 @@ function renderTenantsList(tenants) {
     return;
   }
 
-  tenants.forEach(tenant => {
+  tenants.forEach((tenant, index) => {
     const card = document.createElement('div');
     card.className = 'tenant-item';
 
     const startDateStr = tenant.start_date ? formatDate(tenant.start_date) : '--';
     const endDateStr = tenant.end_date ? formatDate(tenant.end_date) : 'Dài hạn';
+    const isRepresentative = index === 0;
 
     card.innerHTML = `
       <div class="tenant-main-info">
-        <h4 class="tenant-name-heading"></h4>
+        <h4 class="tenant-name-heading">
+          <span class="tenant-name-text"></span>
+          ${isRepresentative ? '<span class="badge" style="background:#e0f2fe; color:#0369a1; font-size:11px; margin-left:6px; font-weight:600;"><i class="bi bi-star-fill"></i> Đại diện phòng</span>' : ''}
+        </h4>
         <div class="tenant-meta">
           <span><i class="bi bi-telephone"></i> SĐT: <strong class="tenant-phone-label"></strong></span>
           <span><i class="bi bi-person-vcard"></i> CCCD: <strong class="tenant-cccd-label"></strong></span>
@@ -840,7 +851,7 @@ function renderTenantsList(tenants) {
       </div>
     `;
 
-    card.querySelector('.tenant-name-heading').textContent = tenant.full_name;
+    card.querySelector('.tenant-name-text').textContent = tenant.full_name;
     card.querySelector('.tenant-phone-label').textContent = tenant.phone || 'Chưa nhập';
     card.querySelector('.tenant-cccd-label').textContent = tenant.cccd || 'Chưa nhập';
 
@@ -909,6 +920,9 @@ async function handleTenantSubmit(e) {
   e.preventDefault();
 
   const tenantId = document.getElementById('tenant-id').value;
+  const memberCountInput = document.getElementById('tenant-member-count');
+  const memberCount = memberCountInput ? parseInt(memberCountInput.value) : 1;
+
   const body = {
     room_id: currentState.selectedRoomId,
     full_name: document.getElementById('tenant-name').value,
@@ -916,7 +930,8 @@ async function handleTenantSubmit(e) {
     cccd: document.getElementById('tenant-cccd').value,
     start_date: document.getElementById('tenant-start-date').value,
     end_date: document.getElementById('tenant-end-date').value || null,
-    notes: document.getElementById('tenant-notes').value
+    notes: document.getElementById('tenant-notes').value,
+    member_count: !isNaN(memberCount) && memberCount > 0 ? memberCount : 1
   };
 
   try {
@@ -963,6 +978,11 @@ window.editTenant = function (tenant) {
   }
 
   document.getElementById('tenant-notes').value = tenant.notes || '';
+
+  // Khi sửa thông tin đại diện, ẩn trường số người để tránh nhầm lẫn (số người chỉnh ở form sửa phòng)
+  const memberGroup = document.getElementById('tenant-member-count-group');
+  if (memberGroup) memberGroup.style.display = 'none';
+
   document.getElementById('tenant-form-title').textContent = 'Sửa thông tin người thuê';
   document.getElementById('tenant-form').style.display = 'block';
 };

@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const nodemailer = require('nodemailer');
@@ -12,7 +12,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Route ping nháº¹ Ä‘á»ƒ giá»¯ server luĂ´n thá»©c trĂªn Render
+// Route ping nhẹ để giữ server luôn thức trên Render
 app.get('/api/ping', (req, res) => {
   res.status(200).send('pong');
 });
@@ -53,7 +53,7 @@ app.get('/api/dashboard', async (req, res) => {
     ).get(prevYear, prevMonth);
     const prevMonthElec = prevMonthElecRes ? prevMonthElecRes.sum : 0;
 
-    // Láº¥y giĂ¡ nÆ°á»›c/rĂ¡c/táº¡m trĂº tá»« settings
+    // Lấy giá nước/rác/tạm trú từ settings
     const settingsList = await db.prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?)').all('water_price', 'trash_price', 'electricity_price', 'residence_price');
     const settingsMap = {};
     settingsList.forEach(s => { settingsMap[s.key] = parseFloat(s.value) || 0; });
@@ -61,9 +61,9 @@ app.get('/api/dashboard', async (req, res) => {
     const trashPrice = settingsMap['trash_price'] || 10000;
     const residencePrice = settingsMap['residence_price'] || 50000;
 
-    // TĂ­nh toĂ¡n sá»‘ liá»‡u thu tiá»n Ä‘á»“ng bá»™ 100% vá»›i tab danh sĂ¡ch thu tiá»n
+    // Tính toán số liệu thu tiền đồng bộ 100% với tab danh sách thu tiền
     const rows = await db.prepare(`
-      SELECT 
+      SELECT
         r.id as room_id,
         r.room_code,
         COALESCE(p.rent_amount, r.rent_price) as rent_price,
@@ -91,7 +91,7 @@ app.get('/api/dashboard', async (req, res) => {
         if (!isNaN(leaseDate.getTime())) {
           const leaseYear = leaseDate.getFullYear();
           const leaseMonth = leaseDate.getMonth() + 1;
-          // Náº¿u thuĂª báº¯t Ä‘áº§u tá»« thĂ¡ng nĂ y hoáº·c tÆ°Æ¡ng lai, vĂ  chÆ°a thanh toĂ¡n, thĂ¬ khĂ´ng tĂ­nh tiá»n thĂ¡ng nĂ y
+          // Nếu thuê bắt đầu từ tháng này hoặc tương lai, và chưa thanh toán, thì không tính tiền tháng này
           if ((leaseYear > currentYear || (leaseYear === currentYear && leaseMonth >= currentMonth)) && row.is_paid !== 1) {
             return false;
           }
@@ -109,7 +109,7 @@ app.get('/api/dashboard', async (req, res) => {
       const isPaid = row.is_paid === 1;
       const memberCount = row.member_count || 0;
 
-      // XĂ¡c Ä‘á»‹nh thĂ¡ng Ä‘áº§u tiĂªn thu tiá»n (sau thĂ¡ng báº¯t Ä‘áº§u há»£p Ä‘á»“ng 1 thĂ¡ng)
+      // Xác định tháng đầu tiên thu tiền (sau tháng bắt đầu hợp đồng 1 tháng)
       let isFirstMonth = false;
       if (row.lease_start_date) {
         const leaseDate = new Date(row.lease_start_date);
@@ -168,7 +168,7 @@ app.get('/api/dashboard', async (req, res) => {
 });
 
 // ==========================================
-// 2. API PHĂ’NG (ROOMS)
+// 2. API PHÒNG (ROOMS)
 // ==========================================
 app.get('/api/rooms', async (req, res) => {
   try {
@@ -189,7 +189,7 @@ app.get('/api/rooms', async (req, res) => {
 app.get('/api/rooms/:id', async (req, res) => {
   try {
     const room = await db.prepare('SELECT * FROM rooms WHERE id = ?').get(req.params.id);
-    if (!room) return res.status(404).json({ error: 'KhĂ´ng tĂ¬m tháº¥y phĂ²ng nĂ y' });
+    if (!room) return res.status(404).json({ error: 'Không tìm thấy phòng này' });
     const tenants = await db.prepare('SELECT * FROM tenants WHERE room_id = ? ORDER BY id DESC').all(req.params.id);
     const electricityHistory = await db.prepare(
       'SELECT * FROM electricity_readings WHERE room_id = ? ORDER BY year DESC, month DESC LIMIT 12'
@@ -206,73 +206,81 @@ app.get('/api/rooms/:id', async (req, res) => {
 app.put('/api/rooms/:id', async (req, res) => {
   try {
     const { rent_price, deposit, status, member_count, billing_day } = req.body;
-    
-    // Náº¿u chuyá»ƒn tráº¡ng thĂ¡i thĂ nh trá»‘ng (vacant), tá»± Ä‘á»™ng xĂ³a sáº¡ch ngÆ°á»i thuĂª trong phĂ²ng
+
+    // Nếu chuyển trạng thái thành trống (vacant), tự động xóa sạch người thuê trong phòng
     if (status === 'vacant') {
       await db.prepare('DELETE FROM tenants WHERE room_id = ?').run(req.params.id);
     }
-    
-    // Äáº¿m sá»‘ lÆ°á»£ng ngÆ°á»i thuĂª thá»±c táº¿ Ä‘Äƒng kĂ½ trong DB
+
+    // Đếm số lượng người thuê thực tế đăng ký trong DB
     const countResult = await db.prepare('SELECT COUNT(*) as count FROM tenants WHERE room_id = ?').get(req.params.id);
     const actualCount = countResult ? countResult.count : 0;
-    
-    // Báº£o lÆ°u sá»‘ ngÆ°á»i do ngÆ°á»i dĂ¹ng nháº­p thá»§ cĂ´ng (vĂ¬ há» cĂ³ thá»ƒ chá»‰ Ä‘Äƒng kĂ½ 1 ngÆ°á»i Ä‘áº¡i diá»‡n nhÆ°ng thá»±c táº¿ á»Ÿ Ä‘Ă´ng hÆ¡n)
-    let finalMemberCount = parseInt(member_count) || 0;
-    
-    // Náº¿u phĂ²ng cĂ³ ngÆ°á»i thuĂª trong DB nhÆ°ng sá»‘ ngÆ°á»i nháº­p láº¡i lĂ  0, tá»± Ä‘á»™ng Ä‘áº·t tá»‘i thiá»ƒu lĂ  1
-    if (actualCount > 0 && finalMemberCount === 0) {
-      finalMemberCount = 1;
-    }
-    
-    // Náº¿u tráº¡ng thĂ¡i lĂ  trá»‘ng (vacant), báº¯t buá»™c sá»‘ ngÆ°á»i vá» 0
+
+    let finalMemberCount = parseInt(member_count);
+    if (isNaN(finalMemberCount) || finalMemberCount < 0) finalMemberCount = 0;
+
+    let finalStatus = status || 'vacant';
     if (status === 'vacant') {
       finalMemberCount = 0;
+      finalStatus = 'vacant';
+    } else if (status === 'maintenance') {
+      finalStatus = 'maintenance';
+      if (actualCount === 0) finalMemberCount = 0;
+    } else if (actualCount === 0) {
+      // Không có người thuê đăng ký => bắt buộc trạng thái Trống và số người = 0
+      finalStatus = 'vacant';
+      finalMemberCount = 0;
+    } else {
+      // Có người thuê trong DB
+      finalStatus = 'occupied';
+      if (finalMemberCount < 1) {
+        finalMemberCount = actualCount;
+      }
     }
 
-    const finalStatus = finalMemberCount > 0 ? 'occupied' : status;
-    const finalBillingDay = billing_day === 15 ? 15 : 30; // Chá»‰ cháº¥p nháº­n 15 hoáº·c 30
+    const finalBillingDay = billing_day === 15 ? 15 : 30; // Chỉ chấp nhận 15 hoặc 30
 
     const info = await db.prepare(
       'UPDATE rooms SET rent_price = ?, deposit = ?, status = ?, member_count = ?, billing_day = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).run(rent_price, deposit, finalStatus, finalMemberCount, finalBillingDay, req.params.id);
-    
-    if (info.changes === 0) return res.status(404).json({ error: 'KhĂ´ng tĂ¬m tháº¥y phĂ²ng' });
-    res.json({ message: 'Cáº­p nháº­t phĂ²ng thĂ nh cĂ´ng' });
+
+    if (info.changes === 0) return res.status(404).json({ error: 'Không tìm thấy phòng' });
+    res.json({ message: 'Cập nhật phòng thành công', status: finalStatus, member_count: finalMemberCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ==========================================
-// 3. API NGÆ¯á»œI THUĂ (TENANTS)
+// 3. API NGƯỜI THUÊ (TENANTS)
 // ==========================================
 app.post('/api/tenants', async (req, res) => {
   try {
-    const { room_id, full_name, phone, cccd, start_date, end_date, notes } = req.body;
+    const { room_id, full_name, phone, cccd, start_date, end_date, notes, member_count } = req.body;
     if (!room_id || !full_name || !start_date)
-      return res.status(400).json({ error: 'Vui lĂ²ng Ä‘iá»n Ä‘áº§y Ä‘á»§ Há» tĂªn vĂ  NgĂ y báº¯t Ä‘áº§u' });
-    
+      return res.status(400).json({ error: 'Vui lòng điền đầy đủ Họ tên và Ngày bắt đầu' });
+
     const info = await db.prepare(
       'INSERT INTO tenants (room_id, full_name, phone, cccd, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id'
     ).run(room_id, full_name, phone || null, cccd || null, start_date, end_date || null, notes || null);
-    
-    
-    // Khi them nguoi thue moi: Dam bao trang thai phong chuyen thanh 'occupied'.
-    // Dem so nguoi thue thuc te dang ky trong DB sau khi them.
-    // Tang member_count len 1 so voi truoc (bao luu do lech neu chu nha nhap thu cong cao hon),
-    // nhung khong thap hon so nguoi dang ky thuc te.
+
     const room = await db.prepare('SELECT member_count FROM rooms WHERE id = ?').get(room_id);
-    const currentMembers = room ? room.member_count : 0;
+    const currentMembers = room ? (room.member_count || 0) : 0;
     const countAfterAdd = await db.prepare('SELECT COUNT(*) as count FROM tenants WHERE room_id = ?').get(room_id);
     const actualCountAfterAdd = countAfterAdd ? countAfterAdd.count : 1;
-    // Tang member_count len 1, nhung dam bao khong thap hon so nguoi dang ky thuc te
-    const newMembers = Math.max(currentMembers + 1, actualCountAfterAdd);
-    
+
+    let newMembers;
+    if (member_count !== undefined && member_count !== null && parseInt(member_count) > 0) {
+      newMembers = parseInt(member_count);
+    } else {
+      newMembers = currentMembers > 0 ? Math.max(currentMembers + 1, actualCountAfterAdd) : Math.max(1, actualCountAfterAdd);
+    }
+
     await db.prepare(
       "UPDATE rooms SET member_count = ?, status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     ).run(newMembers, room_id);
-    
-    res.status(201).json({ id: info.lastInsertRowid, message: 'ThĂªm ngÆ°á»i thuĂª thĂ nh cĂ´ng' });
+
+    res.status(201).json({ id: info.lastInsertRowid, message: 'Thêm người thuê thành công', member_count: newMembers });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -282,12 +290,12 @@ app.put('/api/tenants/:id', async (req, res) => {
   try {
     const { full_name, phone, cccd, start_date, end_date, notes } = req.body;
     if (!full_name || !start_date)
-      return res.status(400).json({ error: 'Há» tĂªn vĂ  NgĂ y báº¯t Ä‘áº§u khĂ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng' });
+      return res.status(400).json({ error: 'Họ tên và Ngày bắt đầu không được để trống' });
     const info = await db.prepare(
       'UPDATE tenants SET full_name = ?, phone = ?, cccd = ?, start_date = ?, end_date = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).run(full_name, phone, cccd, start_date, end_date, notes, req.params.id);
-    if (info.changes === 0) return res.status(404).json({ error: 'KhĂ´ng tĂ¬m tháº¥y ngÆ°á»i thuĂª' });
-    res.json({ message: 'Sá»­a thĂ´ng tin ngÆ°á»i thuĂª thĂ nh cĂ´ng' });
+    if (info.changes === 0) return res.status(404).json({ error: 'Không tìm thấy người thuê' });
+    res.json({ message: 'Sửa thông tin người thuê thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -296,39 +304,36 @@ app.put('/api/tenants/:id', async (req, res) => {
 app.delete('/api/tenants/:id', async (req, res) => {
   try {
     const tenant = await db.prepare('SELECT room_id FROM tenants WHERE id = ?').get(req.params.id);
-    if (!tenant) return res.status(404).json({ error: 'KhĂ´ng tĂ¬m tháº¥y ngÆ°á»i thuĂª' });
-    
+    if (!tenant) return res.status(404).json({ error: 'Không tìm thấy người thuê' });
+
     await db.prepare('DELETE FROM tenants WHERE id = ?').run(req.params.id);
-    
-    // Kiá»ƒm tra sá»‘ lÆ°á»£ng ngÆ°á»i thuĂª cĂ²n láº¡i trong DB
+
+    // Kiểm tra số lượng người thuê còn lại trong DB
     const countResult = await db.prepare('SELECT COUNT(*) as count FROM tenants WHERE room_id = ?').get(tenant.room_id);
     const actualCount = countResult ? countResult.count : 0;
-    
+
     if (actualCount === 0) {
-      // Náº¿u khĂ´ng cĂ²n báº¥t ká»³ ngÆ°á»i thuĂª Ä‘Äƒng kĂ½ nĂ o, Ä‘Æ°a tráº¡ng thĂ¡i phĂ²ng vá» trá»‘ng vĂ  sá»‘ ngÆ°á»i vá» 0
+      // Nếu không còn bất kỳ người thuê đăng ký nào, đưa trạng thái phòng về trống và số người về 0
       await db.prepare(
         "UPDATE rooms SET member_count = 0, status = 'vacant', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       ).run(tenant.room_id);
     } else {
-      // Neu van con nguoi thue khac:
-      // Giam member_count xuong 1 (bao luu do lech neu chu nha nhap thu cong cao hon),
-      // nhung khong thap hon so nguoi dang ky thuc te con lai.
       const roomData = await db.prepare('SELECT member_count FROM rooms WHERE id = ?').get(tenant.room_id);
-      const currentMembers = roomData ? roomData.member_count : actualCount;
-      const newMembers = Math.max(currentMembers - 1, actualCount);
+      const currentMembers = roomData ? (roomData.member_count || 0) : actualCount;
+      const newMembers = Math.max(actualCount, Math.max(1, currentMembers - 1));
       await db.prepare(
         "UPDATE rooms SET member_count = ?, status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       ).run(newMembers, tenant.room_id);
     }
-    
-    res.json({ message: 'XĂ³a ngÆ°á»i thuĂª thĂ nh cĂ´ng' });
+
+    res.json({ message: 'Xóa người thuê thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ==========================================
-// 4. API ÄIá»†N NÄ‚NG (ELECTRICITY)
+// 4. API ĐIỆN NĂNG (ELECTRICITY)
 // ==========================================
 app.get('/api/electricity/last-reading/:roomId', async (req, res) => {
   try {
@@ -345,9 +350,9 @@ app.post('/api/electricity', async (req, res) => {
   try {
     const { room_id, year, month, old_reading, new_reading } = req.body;
     if (!room_id || !year || !month || old_reading === undefined || new_reading === undefined)
-      return res.status(400).json({ error: 'Thiáº¿u thĂ´ng tin báº¯t buá»™c' });
+      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
     if (parseFloat(new_reading) < parseFloat(old_reading))
-      return res.status(400).json({ error: 'Chá»‰ sá»‘ má»›i khĂ´ng Ä‘Æ°á»£c nhá» hÆ¡n chá»‰ sá»‘ cÅ©' });
+      return res.status(400).json({ error: 'Chỉ số mới không được nhỏ hơn chỉ số cũ' });
 
     const priceSetting = await db.prepare("SELECT value FROM settings WHERE key = 'electricity_price'").get();
     const unitPrice = priceSetting ? parseFloat(priceSetting.value) : 3500;
@@ -362,49 +367,45 @@ app.post('/api/electricity', async (req, res) => {
         consumption = EXCLUDED.consumption, unit_price = EXCLUDED.unit_price, total_cost = EXCLUDED.total_cost
     `).run(room_id, parseInt(year), parseInt(month), parseFloat(old_reading), parseFloat(new_reading), consumption, unitPrice, totalCost);
 
-    // Äá»“ng bá»™ vá»›i báº£ng rent_payments náº¿u báº£n ghi thanh toĂ¡n cá»§a thĂ¡ng Ä‘Ă³ Ä‘Ă£ tá»“n táº¡i
+    // Đồng bộ với bảng rent_payments nếu bản ghi thanh toán của tháng đó đã tồn tại
     await db.prepare(`
-      UPDATE rent_payments 
+      UPDATE rent_payments
       SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount + deposit_amount, updated_at = CURRENT_TIMESTAMP
       WHERE room_id = ? AND year = ? AND month = ?
     `).run(totalCost, totalCost, room_id, parseInt(year), parseInt(month));
 
-    res.json({ message: 'LÆ°u chá»‰ sá»‘ Ä‘iá»‡n thĂ nh cĂ´ng', consumption, totalCost });
+    res.json({ message: 'Lưu chỉ số điện thành công', consumption, totalCost });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ==========================================
-// API ÄIá»†N HĂ€NG LOáº T (BULK ELECTRICITY)
+// API ĐIỆN HÀNG LOẠT (BULK ELECTRICITY)
 // ==========================================
 
-// Láº¥y dá»¯ liá»‡u bulk: danh sĂ¡ch phĂ²ng + chá»‰ sá»‘ cÅ© gáº§n nháº¥t + chá»‰ sá»‘ Ä‘Ă£ nháº­p thĂ¡ng nĂ y (náº¿u cĂ³)
+// Lấy dữ liệu bulk: danh sách phòng + chỉ số cũ gần nhất + chỉ số đã nhập tháng này (nếu có)
 app.get('/api/electricity/bulk-data', async (req, res) => {
   try {
     const { year, month } = req.query;
-    if (!year || !month) return res.status(400).json({ error: 'Cáº§n cung cáº¥p year vĂ  month' });
+    if (!year || !month) return res.status(400).json({ error: 'Cần cung cấp year và month' });
 
     const y = parseInt(year);
     const m = parseInt(month);
 
-    // ThĂ¡ng trÆ°á»›c Ä‘á»ƒ láº¥y chá»‰ sá»‘ cÅ©
-    const prevM = m === 1 ? 12 : m - 1;
-    const prevY = m === 1 ? y - 1 : y;
-
-    // Láº¥y táº¥t cáº£ phĂ²ng (bao gá»“m billing_day Ä‘á»ƒ biáº¿t Ä‘á»£t thu tiá»n)
+    // Lấy tất cả phòng (bao gồm billing_day để biết đợt thu tiền)
     const rooms = await db.prepare(
       "SELECT r.*, r.billing_day, (SELECT COUNT(*) FROM tenants t WHERE t.room_id = r.id) as tenant_count FROM rooms r ORDER BY r.zone ASC, r.room_code ASC"
     ).all();
 
-    // Láº¥y chá»‰ sá»‘ Ä‘iá»‡n thĂ¡ng hiá»‡n táº¡i (náº¿u Ä‘Ă£ nháº­p)
+    // Lấy chỉ số điện tháng hiện tại (nếu đã nhập)
     const currentReadings = await db.prepare(
       'SELECT * FROM electricity_readings WHERE year = ? AND month = ?'
     ).all(y, m);
     const currentMap = {};
     currentReadings.forEach(r => { currentMap[r.room_id] = r; });
 
-    // Láº¥y chá»‰ sá»‘ cÅ© (new_reading cá»§a thĂ¡ng trÆ°á»›c) hoáº·c chá»‰ sá»‘ má»›i nháº¥t (SQLite compatible)
+    // Lấy chỉ số cũ (new_reading của tháng trước) hoặc chỉ số mới nhất (SQLite compatible)
     const lastReadings = await db.prepare(`
       SELECT e.room_id, e.new_reading, e.year, e.month
       FROM electricity_readings e
@@ -436,13 +437,13 @@ app.get('/api/electricity/bulk-data', async (req, res) => {
   }
 });
 
-// LÆ°u hĂ ng loáº¡t chá»‰ sá»‘ Ä‘iá»‡n
+// Lưu hàng loạt chỉ số điện
 app.post('/api/electricity/bulk', async (req, res) => {
   try {
     const { year, month, readings } = req.body;
     // readings: [{ room_id, old_reading, new_reading }]
     if (!year || !month || !Array.isArray(readings) || readings.length === 0)
-      return res.status(400).json({ error: 'Dá»¯ liá»‡u khĂ´ng há»£p lá»‡' });
+      return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
 
     const priceSetting = await db.prepare("SELECT value FROM settings WHERE key = 'electricity_price'").get();
     const unitPrice = priceSetting ? parseFloat(priceSetting.value) : 3500;
@@ -468,9 +469,9 @@ app.post('/api/electricity/bulk', async (req, res) => {
           consumption = EXCLUDED.consumption, unit_price = EXCLUDED.unit_price, total_cost = EXCLUDED.total_cost
       `).run(room_id, parseInt(year), parseInt(month), oldVal, newVal, consumption, unitPrice, totalCost);
 
-      // Sync vá»›i rent_payments náº¿u tá»“n táº¡i
+      // Sync với rent_payments nếu tồn tại
       await db.prepare(`
-        UPDATE rent_payments 
+        UPDATE rent_payments
         SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount + deposit_amount, updated_at = CURRENT_TIMESTAMP
         WHERE room_id = ? AND year = ? AND month = ?
       `).run(totalCost, totalCost, room_id, parseInt(year), parseInt(month));
@@ -479,7 +480,7 @@ app.post('/api/electricity/bulk', async (req, res) => {
     }
 
     res.json({
-      message: `ÄĂ£ lÆ°u ${results.length} phĂ²ng thĂ nh cĂ´ng${errorCount > 0 ? `, bá» qua ${errorCount} phĂ²ng lá»—i` : ''}`,
+      message: `Đã lưu ${results.length} phòng thành công${errorCount > 0 ? `, bỏ qua ${errorCount} phòng lỗi` : ''}`,
       saved: results.length,
       errors: errorCount
     });
@@ -489,16 +490,16 @@ app.post('/api/electricity/bulk', async (req, res) => {
 });
 
 // ==========================================
-// 5. API THU TIá»€N THĂNG (RENT PAYMENTS) đŸ’°
+// 5. API THU TIỀN THÁNG (RENT PAYMENTS) 💰
 // ==========================================
 
-// Láº¥y danh sĂ¡ch thu tiá»n cá»§a thĂ¡ng/nÄƒm - bao gá»“m tiá»n thuĂª + tiá»n Ä‘iá»‡n tá»«ng phĂ²ng
+// Lấy danh sách thu tiền của tháng/năm - bao gồm tiền thuê + tiền điện từng phòng
 app.get('/api/payments', async (req, res) => {
   try {
     const { year, month } = req.query;
-    if (!year || !month) return res.status(400).json({ error: 'Cáº§n cung cáº¥p year vĂ  month' });
+    if (!year || !month) return res.status(400).json({ error: 'Cần cung cấp year và month' });
 
-    // Láº¥y giĂ¡ nÆ°á»›c/rĂ¡c/táº¡m trĂº tá»« settings
+    // Lấy giá nước/rác/tạm trú từ settings
     const settingsList = await db.prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?)').all('water_price', 'trash_price', 'electricity_price', 'residence_price');
     const settingsMap = {};
     settingsList.forEach(s => { settingsMap[s.key] = parseFloat(s.value) || 0; });
@@ -507,7 +508,7 @@ app.get('/api/payments', async (req, res) => {
     const residencePrice = settingsMap['residence_price'] || 50000;
 
     const rows = await db.prepare(`
-      SELECT 
+      SELECT
         r.id as room_id,
         r.room_code,
         r.zone,
@@ -539,7 +540,7 @@ app.get('/api/payments', async (req, res) => {
       LEFT JOIN rent_payments p ON p.room_id = r.id AND p.year = ? AND p.month = ?
       WHERE r.status = 'occupied' OR p.id IS NOT NULL OR e.id IS NOT NULL
       GROUP BY r.id, p.id, e.id
-      ORDER BY 
+      ORDER BY
         CASE WHEN p.is_paid IS NULL OR p.is_paid = 0 THEN 0 ELSE 1 END ASC,
         r.room_code ASC
     `).all(parseInt(year), parseInt(month), parseInt(year), parseInt(month));
@@ -552,7 +553,7 @@ app.get('/api/payments', async (req, res) => {
           const leaseMonth = leaseDate.getMonth() + 1;
           const billingYear = parseInt(year);
           const billingMonth = parseInt(month);
-          // Chi loai tru phong chua bat dau thue (thang tuong lai)
+          // Chỉ loại trừ phòng chưa bắt đầu thuê (tháng tương lai)
           if (leaseYear > billingYear || (leaseYear === billingYear && leaseMonth > billingMonth)) {
             return false;
           }
@@ -581,7 +582,7 @@ app.get('/api/payments', async (req, res) => {
         }
       }
 
-      // Kiem tra tra phong: tenant co end_date trong thang billing
+      // Kiểm tra trả phòng: tenant có end_date trong tháng billing
       const endDate = row.end_date;
       if (endDate) {
         const ed = new Date(endDate);
@@ -594,7 +595,7 @@ app.get('/api/payments', async (req, res) => {
         }
       }
 
-      // Tinh tien nha theo ngay neu la thang dau hoac tra phong
+      // Tính tiền nhà theo ngày nếu là tháng đầu hoặc trả phòng
       if (!isPaid) {
         if (isFirstMonth && row.lease_start_date) {
           const leaseDate = new Date(row.lease_start_date);
@@ -632,15 +633,15 @@ app.get('/api/payments', async (req, res) => {
       const depositAmt = (isPaid && row.deposit_amount !== null && row.deposit_amount !== undefined)
         ? row.deposit_amount : (isFirstMonth ? (row.deposit || 0) : 0);
 
-      return { 
-        ...row, 
+      return {
+        ...row,
         rent_price: rentAmt,
-        water_amount: waterAmt, 
-        trash_amount: trashAmt, 
-        residence_amount: residenceAmt, 
+        water_amount: waterAmt,
+        trash_amount: trashAmt,
+        residence_amount: residenceAmt,
         deposit_amount: depositAmt,
-        waterPrice, 
-        trashPrice, 
+        waterPrice,
+        trashPrice,
         residencePrice,
         isFirstMonth,
         isCheckout
@@ -653,15 +654,15 @@ app.get('/api/payments', async (req, res) => {
   }
 });
 
-// ÄĂ¡nh dáº¥u Ä‘Ă£ thu / chÆ°a thu tiá»n
+// Đánh dấu đã thu / chưa thu tiền
 app.post('/api/payments/mark', async (req, res) => {
   try {
     const { room_id, year, month, is_paid, note } = req.body;
     if (!room_id || !year || !month)
-      return res.status(400).json({ error: 'Thiáº¿u thĂ´ng tin báº¯t buá»™c' });
+      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
 
     const room = await db.prepare('SELECT rent_price, deposit, member_count, billing_day FROM rooms WHERE id = ?').get(room_id);
-    if (!room) return res.status(404).json({ error: 'KhĂ´ng tĂ¬m tháº¥y phĂ²ng' });
+    if (!room) return res.status(404).json({ error: 'Không tìm thấy phòng' });
 
     const elec = await db.prepare(
       'SELECT total_cost FROM electricity_readings WHERE room_id = ? AND year = ? AND month = ?'
@@ -670,7 +671,7 @@ app.post('/api/payments/mark', async (req, res) => {
     const tenants = await db.prepare('SELECT full_name FROM tenants WHERE room_id = ?').all(room_id);
     const tenantName = tenants.map(t => t.full_name).join(', ') || null;
 
-    // Láº¥y giĂ¡ nÆ°á»›c/rĂ¡c/táº¡m trĂº tá»« settings
+    // Lấy giá nước/rác/tạm trú từ settings
     const settingsList = await db.prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?)')
       .all('water_price', 'trash_price', 'residence_price');
     const settingsMap = {};
@@ -680,7 +681,7 @@ app.post('/api/payments/mark', async (req, res) => {
     const residencePrice = settingsMap['residence_price'] || 50000;
     const memberCount = room.member_count || 0;
 
-    // Xac dinh thang dau tien va tra phong
+    // Xác định tháng đầu tiên và trả phòng
     const earliestTenant = await db.prepare('SELECT MIN(start_date) as start_date FROM tenants WHERE room_id = ?').get(room_id);
     const latestEndDate = await db.prepare('SELECT MAX(end_date) as end_date FROM tenants WHERE room_id = ? AND end_date IS NOT NULL').get(room_id);
     let isFirstMonth = false;
@@ -736,7 +737,6 @@ app.post('/api/payments/mark', async (req, res) => {
     const depositAmount = isFirstMonth ? (room.deposit || 0) : 0;
     const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
     const paidAt = is_paid ? new Date().toISOString() : null;
-    const finalBillingDay = room.billing_day || 30;
 
     await db.prepare(`
       INSERT INTO rent_payments (room_id, year, month, rent_amount, electricity_amount, water_amount, trash_amount, residence_amount, deposit_amount, total_amount, is_paid, paid_at, note, tenant_name)
@@ -756,14 +756,14 @@ app.post('/api/payments/mark', async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
     `).run(room_id, parseInt(year), parseInt(month), rentAmount, elecAmount, waterAmount, trashAmount, residenceAmount, depositAmount, totalAmount, is_paid ? 1 : 0, paidAt, note || null, tenantName);
 
-    res.json({ message: is_paid ? 'âœ… ÄĂ£ Ä‘Ă¡nh dáº¥u ÄĂƒ THU tiá»n' : 'â†©ï¸ ÄĂ£ bá» Ä‘Ă¡nh dáº¥u thu tiá»n', totalAmount });
+    res.json({ message: is_paid ? '✅ Đã đánh dấu ĐÃ THU tiền' : '↩️ Đã bỏ đánh dấu thu tiền', totalAmount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ==========================================
-// 6. API SETTINGS (CĂ€I Äáº¶T)
+// 6. API SETTINGS (CÀI ĐẶT)
 // ==========================================
 app.get('/api/settings', async (req, res) => {
   try {
@@ -778,12 +778,12 @@ app.get('/api/settings', async (req, res) => {
 
 app.put('/api/settings', async (req, res) => {
   try {
-    const { 
-      electricity_price, water_price, trash_price, residence_price, payment_due_day, 
+    const {
+      electricity_price, water_price, trash_price, residence_price, payment_due_day,
       bank_name, bank_account, bank_owner,
       email_sender, email_pass, email_receiver, email_enabled
     } = req.body;
-    
+
     const upsertSetting = async (key, val) => {
       if (val !== undefined && val !== null) {
         await db.prepare(
@@ -805,25 +805,24 @@ app.put('/api/settings', async (req, res) => {
     await upsertSetting('email_receiver', email_receiver);
     await upsertSetting('email_enabled', email_enabled);
 
-    res.json({ message: 'Cáº­p nháº­t cĂ i Ä‘áº·t thĂ nh cĂ´ng' });
+    res.json({ message: 'Cập nhật cài đặt thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-
 // ==========================================
-// 7. API Táº O HĂ“A ÄÆ N
+// 7. API TẠO HÓA ĐƠN
 // ==========================================
 app.get('/api/invoice', async (req, res) => {
   try {
     const { room_id, year, month } = req.query;
     if (!room_id || !year || !month) {
-      return res.status(400).json({ error: 'Thiáº¿u thĂ´ng tin phĂ²ng, thĂ¡ng hoáº·c nÄƒm' });
+      return res.status(400).json({ error: 'Thiếu thông tin phòng, tháng hoặc năm' });
     }
 
     const room = await db.prepare('SELECT * FROM rooms WHERE id = ?').get(room_id);
-    if (!room) return res.status(404).json({ error: 'KhĂ´ng tĂ¬m tháº¥y phĂ²ng' });
+    if (!room) return res.status(404).json({ error: 'Không tìm thấy phòng' });
 
     const tenants = await db.prepare(
       'SELECT full_name, phone FROM tenants WHERE room_id = ? ORDER BY id ASC'
@@ -837,7 +836,7 @@ app.get('/api/invoice', async (req, res) => {
       'SELECT * FROM rent_payments WHERE room_id = ? AND year = ? AND month = ?'
     ).get(room_id, parseInt(year), parseInt(month));
 
-    // Get previous month electricity (for old reading display)
+    // Lấy chỉ số tháng trước
     const prevMonth = parseInt(month) === 1 ? 12 : parseInt(month) - 1;
     const prevYear = parseInt(month) === 1 ? parseInt(year) - 1 : parseInt(year);
     const prevElec = await db.prepare(
@@ -848,7 +847,7 @@ app.get('/api/invoice', async (req, res) => {
     const settings = {};
     settingsList.forEach(s => { settings[s.key] = s.value; });
 
-    // Xac dinh thang dau tien, tra phong
+    // Xác định tháng đầu tiên, trả phòng
     const earliestTenant = await db.prepare('SELECT MIN(start_date) as start_date FROM tenants WHERE room_id = ?').get(room_id);
     const latestEndDate = await db.prepare('SELECT MAX(end_date) as end_date FROM tenants WHERE room_id = ? AND end_date IS NOT NULL').get(room_id);
     let isFirstMonth = false;
@@ -924,7 +923,7 @@ app.get('/api/invoice', async (req, res) => {
     const depositAmount = isPaidAlready ? (payment.deposit_amount || 0) : (isFirstMonth ? (room.deposit || 0) : 0);
     const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
 
-    // Láº¥y chá»‰ sá»‘ Ä‘iá»‡n má»›i nháº¥t cá»§a phĂ²ng
+    // Lấy chỉ số điện mới nhất của phòng
     const latestElec = await db.prepare(
       'SELECT new_reading FROM electricity_readings WHERE room_id = ? ORDER BY year DESC, month DESC LIMIT 1'
     ).get(room_id);
@@ -962,7 +961,7 @@ app.get('/api/invoice', async (req, res) => {
 });
 
 // ==========================================
-// 8. API TĂŒM KIáº¾M TOĂ€N Cá»¤C
+// 8. API TÌM KIẾM TOÀN CỤC
 // ==========================================
 app.get('/api/search', async (req, res) => {
   try {
