@@ -1,3 +1,7 @@
+const dns = require('dns');
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -834,11 +838,16 @@ function createEmailTransporter(sender, pass) {
   const user = (sender || DEFAULT_EMAIL_SENDER).trim();
   const rawPass = (pass || DEFAULT_EMAIL_PASS).replace(/\s+/g, '');
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user,
       pass: rawPass
-    }
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
   });
 }
 
