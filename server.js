@@ -842,7 +842,10 @@ app.put('/api/settings', async (req, res) => {
     await upsertSetting('bank_owner', bank_owner);
     await upsertSetting('email_sender', email_sender);
     await upsertSetting('email_pass', email_pass);
-    await upsertSetting('email_receiver', email_receiver);
+    if (email_receiver !== undefined && email_receiver !== null) {
+      const recipientList = parseEmailRecipients(email_receiver);
+      await upsertSetting('email_receiver', recipientList.length > 0 ? recipientList.join(', ') : email_receiver.trim());
+    }
     await upsertSetting('email_enabled', email_enabled);
 
     res.json({ message: 'Cập nhật cài đặt thành công' });
@@ -870,6 +873,29 @@ const DEFAULT_EMAIL_SENDER = process.env.EMAIL_SENDER || 'nhatroliso@gmail.com';
 const DEFAULT_EMAIL_PASS = process.env.EMAIL_PASS || 'cxma vytw meqc bitp';
 const DEFAULT_EMAIL_RECEIVER = process.env.EMAIL_RECEIVER || 'nhatroliso@gmail.com';
 const DEFAULT_EMAIL_WEBHOOK_URL = process.env.EMAIL_WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycbxoOaREN1W46IHKhbfb8uyCybAaLpaGqpkL8F_0uUMcgHord_19dsh4MchPj7h_hpQSCA/exec';
+
+function parseEmailRecipients(receiverInput) {
+  if (!receiverInput) return [];
+  if (Array.isArray(receiverInput)) {
+    receiverInput = receiverInput.join(',');
+  }
+  if (typeof receiverInput !== 'string') return [];
+
+  const parts = receiverInput.split(/[,;\n\r\t]+/);
+  const validEmails = [];
+
+  for (const rawPart of parts) {
+    const subParts = rawPart.trim().split(/\s+/);
+    for (const sub of subParts) {
+      const email = sub.trim();
+      if (email.length > 0 && email.includes('@')) {
+        validEmails.push(email);
+      }
+    }
+  }
+
+  return [...new Set(validEmails)];
+}
 
 async function sendEmailViaWebhook(targetUrl, payload) {
   try {
@@ -1388,7 +1414,9 @@ async function sendDailyReportEmail(force = false, customReceiver = null) {
 
   const sender = settingsMap.email_sender || DEFAULT_EMAIL_SENDER;
   const pass = settingsMap.email_pass || DEFAULT_EMAIL_PASS;
-  const receiver = (customReceiver && customReceiver.trim()) || settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
+  const rawReceiver = (customReceiver && customReceiver.trim()) || settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
+  const recipientList = parseEmailRecipients(rawReceiver);
+  const receiver = recipientList.length > 0 ? recipientList.join(', ') : (sender ? sender.trim() : DEFAULT_EMAIL_RECEIVER);
 
   if (!sender || !pass) {
     return { error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password)!' };
@@ -1415,7 +1443,7 @@ async function sendDailyReportEmail(force = false, customReceiver = null) {
 
   await sendEmailWithTransporter(sender, pass, {
     from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
-    to: receiver.trim(),
+    to: receiver,
     subject: `${subjectPrefix} Tổng kết ngày ${vnDate.day}/${vnDate.month}/${vnDate.year}`,
     html: emailHtml
   }, settingsMap.email_webhook_url);
@@ -1435,10 +1463,12 @@ app.post('/api/settings/test-email', async (req, res) => {
     const sender = settingsMap.email_sender || DEFAULT_EMAIL_SENDER;
     const pass = settingsMap.email_pass || DEFAULT_EMAIL_PASS;
     const reqReceiver = req.body?.email_receiver || req.body?.receiver;
-    const receiver = (reqReceiver && reqReceiver.trim()) || settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
+    const rawReceiver = (reqReceiver && reqReceiver.trim()) || settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
+    const recipientList = parseEmailRecipients(rawReceiver);
+    const receiver = recipientList.length > 0 ? recipientList.join(', ') : (sender ? sender.trim() : DEFAULT_EMAIL_RECEIVER);
 
     if (reqReceiver && reqReceiver.trim() && reqReceiver.trim() !== settingsMap.email_receiver) {
-      await upsertSetting('email_receiver', reqReceiver.trim());
+      await upsertSetting('email_receiver', recipientList.length > 0 ? recipientList.join(', ') : reqReceiver.trim());
     }
 
     if (!sender || !pass) {
@@ -1447,23 +1477,23 @@ app.post('/api/settings/test-email', async (req, res) => {
 
     await sendEmailWithTransporter(sender, pass, {
       from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
-      to: receiver.trim(),
+      to: receiver,
       subject: '[Nhà Trọ] Kiểm tra kết nối Gmail thành công!',
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 500px; margin: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
           <h2 style="color: #2563eb; margin-top: 0;">Kết nối Gmail thành công!</h2>
           <p>Hệ thống Quản lý Nhà Trọ Tiện Nghi đã kết nối thành công với tài khoản Gmail của bạn.</p>
-          <p>Từ bây giờ, hệ thống sẽ tự động tổng hợp báo cáo thu tiền và nhắc nhở phòng quá hạn gửi về email này hàng ngày lúc 12:00 trưa.</p>
+          <p>Từ bây giờ, hệ thống sẽ tự động tổng hợp báo cáo thu tiền và nhắc nhở phòng quá hạn gửi về danh sách email này hàng ngày lúc 12:00 trưa.</p>
           <div style="background: #f8fafc; padding: 12px; border-radius: 6px; font-size: 13px; color: #64748b; margin-top: 16px;">
             <b>Thời gian gửi:</b> ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}<br/>
             <b>Email phát tán:</b> ${sender}<br/>
-            <b>Email nhận:</b> ${receiver}
+            <b>Danh sách nhận (${recipientList.length || 1} email):</b> ${receiver}
           </div>
         </div>
       `
     }, settingsMap.email_webhook_url);
 
-    res.json({ message: `Đã gửi email test thành công đến ${receiver}!` });
+    res.json({ message: `Đã gửi email test thành công đến: ${receiver}!` });
   } catch (err) {
     let errMsg = err.message;
     if (err.responseCode === 535 || err.message.includes('Invalid login') || err.message.includes('Username and Password not accepted')) {
@@ -1478,7 +1508,8 @@ app.post('/api/settings/send-report-now', async (req, res) => {
   try {
     const reqReceiver = req.body?.email_receiver || req.body?.receiver;
     if (reqReceiver && reqReceiver.trim()) {
-      await upsertSetting('email_receiver', reqReceiver.trim());
+      const recipientList = parseEmailRecipients(reqReceiver);
+      await upsertSetting('email_receiver', recipientList.length > 0 ? recipientList.join(', ') : reqReceiver.trim());
     }
     const result = await sendDailyReportEmail(true, reqReceiver);
     if (result.error) {
