@@ -1183,8 +1183,9 @@ function generateDailyEmailHTML(data) {
 
   const overdueSection = overdueRooms.length > 0 ? `
     <div style="margin-bottom: 24px; background: #fff5f5; border: 1px solid #fed7d7; border-radius: 8px; padding: 16px;">
-      <h3 style="color: #c53030; margin: 0 0 12px 0; font-size: 15px;">
-        🔴 Phòng đã quá hạn đóng tiền (${overdueRooms.length} phòng)
+      <h3 style="color: #c53030; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center;">
+        <span style="display: inline-block; width: 10px; height: 10px; background-color: #e53e3e; border-radius: 50%; margin-right: 8px;"></span>
+        Phòng đã quá hạn đóng tiền (${overdueRooms.length} phòng)
       </h3>
       <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
         <thead>
@@ -1213,8 +1214,9 @@ function generateDailyEmailHTML(data) {
 
   const dueTodaySection = dueTodayRooms.length > 0 ? `
     <div style="margin-bottom: 24px; background: #fffaf0; border: 1px solid #feebc8; border-radius: 8px; padding: 16px;">
-      <h3 style="color: #dd6b20; margin: 0 0 12px 0; font-size: 15px;">
-        🟡 Phòng đến hạn hôm nay (${dueTodayRooms.length} phòng)
+      <h3 style="color: #dd6b20; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center;">
+        <span style="display: inline-block; width: 10px; height: 10px; background-color: #dd6b20; border-radius: 50%; margin-right: 8px;"></span>
+        Phòng đến hạn hôm nay (${dueTodayRooms.length} phòng)
       </h3>
       <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
         <thead>
@@ -1241,8 +1243,9 @@ function generateDailyEmailHTML(data) {
 
   const upcomingSection = upcomingRooms.length > 0 ? `
     <div style="margin-bottom: 24px; background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 8px; padding: 16px;">
-      <h3 style="color: #2b6cb0; margin: 0 0 12px 0; font-size: 15px;">
-        🔵 Phòng sắp đến hạn (${upcomingRooms.length} phòng - Còn 1-3 ngày)
+      <h3 style="color: #2b6cb0; margin: 0 0 12px 0; font-size: 15px; display: flex; align-items: center;">
+        <span style="display: inline-block; width: 10px; height: 10px; background-color: #3182ce; border-radius: 50%; margin-right: 8px;"></span>
+        Phòng sắp đến hạn (${upcomingRooms.length} phòng - Còn 1-3 ngày)
       </h3>
       <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
         <thead>
@@ -1283,7 +1286,7 @@ function generateDailyEmailHTML(data) {
         <!-- Header -->
         <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 24px; color: #ffffff; text-align: center;">
           <h1 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">NHÀ TRỌ TIỆN NGHI</h1>
-          <p style="margin: 0; font-size: 14px; color: #94a3b8;">📊 Báo cáo thu tiền & Nhắc hạn ngày <b>${dateStr}</b></p>
+          <p style="margin: 0; font-size: 14px; color: #94a3b8;">Báo cáo thu tiền & Nhắc hạn ngày <b>${dateStr}</b></p>
         </div>
 
         <div style="padding: 24px;">
@@ -1314,7 +1317,7 @@ function generateDailyEmailHTML(data) {
 
           ${allUnpaidRooms.length === 0 ? `
             <div style="text-align: center; padding: 24px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0; color: #166534; margin-bottom: 24px;">
-              <div style="font-size: 24px; margin-bottom: 6px;">🎉</div>
+              <div style="font-size: 16px; font-weight: bold; margin-bottom: 6px; color: #15803d;">[HOÀN TẤT]</div>
               <b>Tuyệt vời! Tất cả các phòng đã hoàn tất đóng tiền trọ tháng này!</b>
             </div>
           ` : ''}
@@ -1323,7 +1326,7 @@ function generateDailyEmailHTML(data) {
           ${allUnpaidRooms.length > 0 ? `
             <div style="margin-top: 24px;">
               <h3 style="font-size: 15px; color: #1e293b; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #e2e8f0;">
-                📋 Danh sách chi tiết ${allUnpaidRooms.length} phòng chưa thu tiền
+                Danh sách chi tiết ${allUnpaidRooms.length} phòng chưa thu tiền
               </h3>
               <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
                 <thead>
@@ -1403,11 +1406,11 @@ async function sendDailyReportEmail(force = false, customReceiver = null) {
 
   const overdueCount = reportData.overdueRooms.length;
   const dueTodayCount = reportData.dueTodayRooms.length;
-  let subjectPrefix = '📊 [Báo cáo thu tiền]';
+  let subjectPrefix = '[Báo cáo thu tiền]';
   if (overdueCount > 0) {
-    subjectPrefix = `🔴 [Có ${overdueCount} phòng quá hạn]`;
+    subjectPrefix = `[CẢNH BÁO - ${overdueCount} phòng quá hạn]`;
   } else if (dueTodayCount > 0) {
-    subjectPrefix = `🟡 [Có ${dueTodayCount} phòng đến hạn hôm nay]`;
+    subjectPrefix = `[NHẮC HẠN - ${dueTodayCount} phòng đến hạn hôm nay]`;
   }
 
   await sendEmailWithTransporter(sender, pass, {
@@ -1445,10 +1448,10 @@ app.post('/api/settings/test-email', async (req, res) => {
     await sendEmailWithTransporter(sender, pass, {
       from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
       to: receiver.trim(),
-      subject: '✅ [Nhà Trọ] Kiểm tra kết nối Gmail thành công!',
+      subject: '[Nhà Trọ] Kiểm tra kết nối Gmail thành công!',
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 500px; margin: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #2563eb; margin-top: 0;">🎉 Kết nối Gmail thành công!</h2>
+          <h2 style="color: #2563eb; margin-top: 0;">Kết nối Gmail thành công!</h2>
           <p>Hệ thống Quản lý Nhà Trọ Tiện Nghi đã kết nối thành công với tài khoản Gmail của bạn.</p>
           <p>Từ bây giờ, hệ thống sẽ tự động tổng hợp báo cáo thu tiền và nhắc nhở phòng quá hạn gửi về email này hàng ngày lúc 12:00 trưa.</p>
           <div style="background: #f8fafc; padding: 12px; border-radius: 6px; font-size: 13px; color: #64748b; margin-top: 16px;">
