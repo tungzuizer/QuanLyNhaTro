@@ -1254,7 +1254,7 @@ function generateDailyEmailHTML(data) {
   `;
 }
 
-async function sendDailyReportEmail(force = false) {
+async function sendDailyReportEmail(force = false, customReceiver = null) {
   const settings = await db.prepare('SELECT key, value FROM settings').all();
   const settingsMap = {};
   settings.forEach(s => { settingsMap[s.key] = s.value; });
@@ -1266,7 +1266,7 @@ async function sendDailyReportEmail(force = false) {
 
   const sender = settingsMap.email_sender || DEFAULT_EMAIL_SENDER;
   const pass = settingsMap.email_pass || DEFAULT_EMAIL_PASS;
-  const receiver = settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
+  const receiver = (customReceiver && customReceiver.trim()) || settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
 
   if (!sender || !pass) {
     return { error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password)!' };
@@ -1314,7 +1314,12 @@ app.post('/api/settings/test-email', async (req, res) => {
 
     const sender = settingsMap.email_sender || DEFAULT_EMAIL_SENDER;
     const pass = settingsMap.email_pass || DEFAULT_EMAIL_PASS;
-    const receiver = settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
+    const reqReceiver = req.body?.email_receiver || req.body?.receiver;
+    const receiver = (reqReceiver && reqReceiver.trim()) || settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
+
+    if (reqReceiver && reqReceiver.trim() && reqReceiver.trim() !== settingsMap.email_receiver) {
+      await upsertSetting('email_receiver', reqReceiver.trim());
+    }
 
     if (!sender || !pass) {
       return res.status(400).json({ error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password)!' });
@@ -1354,7 +1359,11 @@ app.post('/api/settings/test-email', async (req, res) => {
 // Endpoint gửi ngay báo cáo thu tiền
 app.post('/api/settings/send-report-now', async (req, res) => {
   try {
-    const result = await sendDailyReportEmail(true);
+    const reqReceiver = req.body?.email_receiver || req.body?.receiver;
+    if (reqReceiver && reqReceiver.trim()) {
+      await upsertSetting('email_receiver', reqReceiver.trim());
+    }
+    const result = await sendDailyReportEmail(true, reqReceiver);
     if (result.error) {
       return res.status(400).json({ error: result.error });
     }

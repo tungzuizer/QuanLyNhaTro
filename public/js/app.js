@@ -632,22 +632,14 @@ async function handleSettingsSubmit(e) {
     currentState.residencePrice = parseFloat(residencePrice) || 50000;
     currentState.paymentDueDay = parseInt(dueDay) || 5;
     currentState.bankSettings = {
-      electricity_price: price,
-      water_price: waterPrice,
-      trash_price: trashPrice,
-      residence_price: residencePrice,
-      bank_name: bankName,
-      bank_account: bankAccount,
-      bank_owner: bankOwner,
-      email_sender: emailSender,
-      email_pass: emailPass,
-      email_receiver: emailReceiver,
-      email_enabled: emailEnabled
+      ...(currentState.bankSettings || {}),
+      ...payload
     };
     showToast('Đã lưu cài đặt thành công', 'success');
     // Cập nhật lại thông báo theo ngày thu mới
     loadNotifications();
   } catch (err) {
+    showToast('Lỗi khi lưu cài đặt: ' + (err.message || err), 'error');
     console.error(err);
   }
 }
@@ -3205,36 +3197,30 @@ async function testEmailNotification() {
   const btn = document.getElementById('btn-test-email');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang kết nối...';
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang kết nối & gửi...';
   }
 
-  // Tự động lưu form cài đặt trước
-  const form = document.getElementById('settings-form');
-  if (form) {
-    const submitBtn = form.querySelector('button[type="submit"]');
-    if (submitBtn) submitBtn.click();
-  }
+  const receiverVal = document.getElementById('setting-email-receiver')?.value.trim();
 
-  setTimeout(async () => {
-    try {
-      const res = await fetch('/api/settings/test-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Lỗi khi gửi email test');
-      }
-      showToast(data.message, 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-envelope-check"></i> Gửi thử Email test';
-      }
+  try {
+    const res = await fetch('/api/settings/test-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email_receiver: receiverVal })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Lỗi khi gửi email test');
     }
-  }, 600);
+    showToast(data.message, 'success');
+  } catch (err) {
+    showToast(err.message || 'Lỗi khi gửi email test', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-envelope-check"></i> Gửi thử Email test';
+    }
+  }
 }
 
 // Hàm gửi báo cáo thu tiền và nhắc nợ ngay lập tức
@@ -3245,33 +3231,27 @@ async function sendReportNow() {
     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang tổng hợp & gửi...';
   }
 
-  // Tự động lưu form cài đặt trước
-  const form = document.getElementById('settings-form');
-  if (form) {
-    const submitBtn = form.querySelector('button[type="submit"]');
-    if (submitBtn) submitBtn.click();
-  }
+  const receiverVal = document.getElementById('setting-email-receiver')?.value.trim();
 
-  setTimeout(async () => {
-    try {
-      const res = await fetch('/api/settings/send-report-now', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Lỗi khi gửi báo cáo');
-      }
-      showToast(data.message, 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-send-fill"></i> Gửi báo cáo thu tiền ngay';
-      }
+  try {
+    const res = await fetch('/api/settings/send-report-now', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email_receiver: receiverVal })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Lỗi khi gửi báo cáo');
     }
-  }, 600);
+    showToast(data.message, 'success');
+  } catch (err) {
+    showToast(err.message || 'Lỗi khi gửi báo cáo', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-send-fill"></i> Gửi báo cáo thu tiền ngay';
+    }
+  }
 }
 
 // Hàm copy URL webhook Cron
