@@ -870,13 +870,63 @@ const DEFAULT_EMAIL_SENDER = process.env.EMAIL_SENDER || 'nhatroliso@gmail.com';
 const DEFAULT_EMAIL_PASS = process.env.EMAIL_PASS || 'cxma vytw meqc bitp';
 const DEFAULT_EMAIL_RECEIVER = process.env.EMAIL_RECEIVER || 'nhatroliso@gmail.com';
 
-async function sendEmailWithTransporter(sender, pass, mailOptions) {
+async function sendEmailViaWebhook(targetUrl, payload) {
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      redirect: 'follow'
+    });
+
+    const text = await response.text();
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      json = { status: response.ok ? 'success' : 'error', text };
+    }
+
+    if (!response.ok || json.status === 'error' || json.error) {
+      throw new Error(json.error || `Webhook trả về mã lỗi HTTP ${response.status}: ${text}`);
+    }
+
+    return json;
+  } catch (err) {
+    throw new Error(`Lỗi kết nối Webhook (${targetUrl}): ${err.message}`);
+  }
+}
+
+async function sendEmailWithTransporter(sender, pass, mailOptions, webhookUrl = null) {
   const user = (sender || DEFAULT_EMAIL_SENDER).trim();
   const rawPass = (pass || DEFAULT_EMAIL_PASS).replace(/\s+/g, '');
+  const targetWebhook = (webhookUrl && webhookUrl.trim()) || process.env.EMAIL_WEBHOOK_URL;
 
+  // 1. Ưu tiên gửi qua HTTPS Webhook (Google Apps Script Web App / Webhook Relay) trên cổng 443
+  if (targetWebhook && targetWebhook.trim()) {
+    try {
+      console.log(`[Email] Đang gửi qua Webhook HTTPS (Cổng 443): ${targetWebhook.trim()}`);
+      const result = await sendEmailViaWebhook(targetWebhook.trim(), {
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        html: mailOptions.html,
+        text: mailOptions.text || '',
+        from: mailOptions.from || user,
+        fromName: 'Nhà Trọ Tiện Nghi'
+      });
+      console.log(`[Email] Gửi qua Webhook thành công!`);
+      return result;
+    } catch (whErr) {
+      console.warn(`[Webhook Warning] Gửi qua Webhook thất bại, thử chuyển sang SMTP:`, whErr.message);
+    }
+  }
+
+  // 2. Thử gửi qua SMTP tiêu chuẩn (Cổng 587 hoặc 465)
   const configs = [
-    { host: 'smtp.gmail.com', port: 587, secure: false },
     { service: 'gmail' },
+    { host: 'smtp.gmail.com', port: 587, secure: false },
     { host: 'smtp.gmail.com', port: 465, secure: true }
   ];
 
@@ -901,6 +951,12 @@ async function sendEmailWithTransporter(sender, pass, mailOptions) {
       }
     }
   }
+
+  // Nếu gặp lỗi kết nối (đặc biệt là do Render chặn cổng SMTP)
+  if (lastErr && (lastErr.code === 'ETIMEDOUT' || lastErr.code === 'ENETUNREACH' || lastErr.message.includes('timeout') || lastErr.message.includes('connect'))) {
+    throw new Error(`Máy chủ Render chặn các cổng SMTP thông thường (465/587). Vui lòng thêm biến môi trường EMAIL_WEBHOOK_URL (Google Apps Script Web App) trên Render để gửi qua HTTPS cổng 443 không bị chặn. Chi tiết lỗi: ${lastErr.message}`);
+  }
+
   throw lastErr;
 }
 
@@ -1344,8 +1400,6 @@ async function sendDailyReportEmail(force = false, customReceiver = null) {
   const reportData = await getDailyReportData(settingsMap, vnDate);
   const emailHtml = generateDailyEmailHTML(reportData);
 
-  const transporter = createEmailTransporter(sender, pass);
-
   const overdueCount = reportData.overdueRooms.length;
   const dueTodayCount = reportData.dueTodayRooms.length;
   let subjectPrefix = '📊 [Báo cáo thu tiền]';
@@ -1360,7 +1414,7 @@ async function sendDailyReportEmail(force = false, customReceiver = null) {
     to: receiver.trim(),
     subject: `${subjectPrefix} Tổng kết ngày ${vnDate.day}/${vnDate.month}/${vnDate.year}`,
     html: emailHtml
-  });
+  }, settingsMap.email_webhook_url);
 
   await upsertSetting('last_email_sent_date', todayStr);
 
@@ -1403,7 +1457,7 @@ app.post('/api/settings/test-email', async (req, res) => {
           </div>
         </div>
       `
-    });
+    }, settingsMap.email_webhook_url);
 
     res.json({ message: `Đã gửi email test thành công đến ${receiver}!` });
   } catch (err) {
