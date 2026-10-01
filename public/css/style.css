@@ -38,6 +38,20 @@
 
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-width: 260px;
+
+  /* Liquid Glass (mobile only, applied via @media) */
+  --glass-blur: 24px;
+  --glass-saturate: 1.8;
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-bg-heavy: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-border-subtle: rgba(255, 255, 255, 0.55);
+  --glass-inner-glow: inset 0 1px 1px rgba(255, 255, 255, 0.9);
+  --glass-shadow: 0 8px 32px rgba(15, 23, 42, 0.10), 0 2px 8px rgba(15, 23, 42, 0.05);
+  --glass-shadow-elevated: 0 12px 36px -4px rgba(15, 23, 42, 0.14), 0 4px 12px rgba(15, 23, 42, 0.06);
+  --glass-radius: 20px;
+  --glass-radius-lg: 28px;
+  --glass-radius-pill: 60px;
 }
 
 /* Reset styles */
@@ -911,7 +925,7 @@ body {
 
   .main-content {
     margin-left: 0 !important;
-    padding: 12px 12px 76px !important; /* padding-bottom cao hơn bottom nav */
+    padding: 12px 12px calc(90px + env(safe-area-inset-bottom, 0px)) !important; /* padding-bottom cao hơn floating bottom nav */
     min-height: 100dvh;
   }
 
@@ -930,15 +944,22 @@ body {
   }
 
   /* ==========================================
-     TOPBAR: Gọn gàng như App Header
+     TOPBAR — Liquid Glass App Header
      ========================================== */
   .topbar {
-    margin-bottom: 16px;
-    padding: 0 0 12px 0;
-    border-bottom: 1px solid var(--border-color);
+    margin: -12px -12px 16px;
+    padding: 12px 16px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-bottom: 1px solid var(--glass-border-subtle);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     flex-wrap: nowrap;
     gap: 8px;
     align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
   }
 
   .topbar-left {
@@ -955,32 +976,36 @@ body {
     display: none !important;
   }
 
-  /* Mobile notification bell – keep it */
-  .notif-bell-btn {
+  /* Mobile notification bell & settings buttons */
+  .notif-bell-btn,
+  .topbar-icon-btn {
     width: 38px;
     height: 38px;
     font-size: 16px;
   }
 
   /* ==========================================
-     BOTTOM NAVIGATION BAR (App-like)
+     BOTTOM NAVIGATION BAR — Floating Island (iOS Liquid Glass)
      ========================================== */
   .bottom-nav {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 62px;
-    background: rgba(255,255,255,0.97);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-top: 1px solid var(--border-color);
-    box-shadow: 0 -2px 20px rgba(0,0,0,0.07);
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    left: 12px;
+    right: 12px;
+    margin: 0 auto;
+    max-width: 440px;
+    height: 64px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    border-radius: 36px;
+    box-shadow: var(--glass-shadow-elevated), var(--glass-inner-glow);
     display: flex !important;
     justify-content: space-around;
-    align-items: stretch;
+    align-items: center;
     z-index: 999;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding: 6px 8px;
   }
 
   .bottom-nav-item {
@@ -989,49 +1014,198 @@ body {
     align-items: center;
     justify-content: center;
     flex: 1;
-    padding: 6px 4px 4px;
-    color: hsl(220, 9%, 60%);
+    height: 100%;
+    padding: 3px 2px;
+    border-radius: 20px;
+    color: #475569;
     text-decoration: none;
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 500;
-    letter-spacing: 0.2px;
-    transition: color 0.18s ease;
+    letter-spacing: -0.2px;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
-    gap: 3px;
+    gap: 2px;
     border: none;
-    background: none;
+    background: transparent;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .bottom-nav-item .bottom-nav-icon {
-    font-size: 22px;
+    font-size: 19px;
     line-height: 1;
-    transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    width: 22px;
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease;
+  }
+
+  .bottom-nav-item:active .bottom-nav-icon {
+    transform: scale(0.90);
   }
 
   .bottom-nav-text {
-    font-size: 10px;
-    line-height: 1.2;
+    font-size: 10.5px;
+    line-height: 1.1;
+    font-weight: 500;
+    transition: color 0.2s ease, font-weight 0.2s ease;
+    white-space: nowrap;
   }
 
   .bottom-nav-item.active {
     color: var(--primary);
-    font-weight: 700;
+    background: rgba(37, 99, 235, 0.10);
   }
 
   .bottom-nav-item.active .bottom-nav-icon {
-    transform: translateY(-3px) scale(1.15);
+    color: var(--primary);
+    transform: scale(1.12);
   }
 
-  .bottom-nav-item.active::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 25%;
-    right: 25%;
-    height: 3px;
-    background: var(--primary);
-    border-radius: 0 0 3px 3px;
+  .bottom-nav-item.active .bottom-nav-text {
+    color: var(--primary);
+    font-weight: 600;
   }
+
+  /* Center Floating Bubble (Dashboard / Tổng quan) */
+  .bottom-nav-item.bottom-nav-center {
+    position: relative;
+    overflow: visible;
+    flex: 1.15;
+    padding-bottom: 2px;
+    background: transparent !important;
+  }
+
+  .center-btn-bubble {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 22px;
+    margin-top: -18px;
+    border: 3.5px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.42), inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.28s ease, background 0.28s ease;
+  }
+
+  .bottom-nav-item.bottom-nav-center:active .center-btn-bubble {
+    transform: scale(0.92) translateY(0);
+  }
+
+  .bottom-nav-item.bottom-nav-center.active .center-btn-bubble {
+    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+    transform: scale(1.08) translateY(-2px);
+    box-shadow: 0 8px 22px rgba(37, 99, 235, 0.55), 0 2px 6px rgba(0, 0, 0, 0.1), inset 0 1px 2px rgba(255, 255, 255, 0.75);
+    border-color: #ffffff;
+  }
+
+  .bottom-nav-item.bottom-nav-center .center-text {
+    font-size: 10.5px;
+    font-weight: 600;
+    margin-top: 1px;
+    letter-spacing: -0.2px;
+    color: #475569;
+  }
+
+  .bottom-nav-item.bottom-nav-center.active .center-text {
+    color: var(--primary);
+    font-weight: 700;
+  }
+
+  /* ==========================================
+     WEBGL LIQUID GLASS CANVAS (Tắt vì dùng CSS Glass sạch hơn)
+     ========================================== */
+  #glass-canvas {
+    display: none !important;
+  }
+
+  /* ==========================================
+     MOBILE DRAWER MENU — Liquid Glass
+     ========================================== */
+  .mobile-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1050;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+  }
+
+  .mobile-drawer-overlay.open {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .mobile-drawer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(30px) saturate(1.6);
+    -webkit-backdrop-filter: blur(30px) saturate(1.6);
+    border-top: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius-lg) var(--glass-radius-lg) 0 0;
+    box-shadow: var(--glass-shadow-elevated), var(--glass-inner-glow);
+    z-index: 1051;
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(100%);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .mobile-drawer-overlay.open .mobile-drawer {
+    transform: translateY(0);
+  }
+
+  .mobile-drawer-handle {
+    width: 36px;
+    height: 5px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 3px;
+    margin: 0 auto 16px;
+  }
+
+  .mobile-drawer-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: var(--glass-radius);
+    color: var(--neutral-dark);
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 500;
+    transition: background 0.2s ease;
+    border: none;
+    background: none;
+    width: 100%;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-drawer-item:active {
+    background: rgba(0, 0, 0, 0.06);
+  }
+
+  .mobile-drawer-item i {
+    font-size: 20px;
+    width: 28px;
+    text-align: center;
+    color: var(--primary);
+  }
+
+  /* ==========================================
+     TOPBAR — Liquid Glass
+     ========================================== */
 
   /* ==========================================
      DASHBOARD: Tối ưu các card thống kê
@@ -1045,7 +1219,12 @@ body {
   .stat-card {
     padding: 14px 12px;
     gap: 10px;
-    border-radius: var(--radius-md);
+    border-radius: var(--glass-radius);
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(12px) saturate(1.3);
+    -webkit-backdrop-filter: blur(12px) saturate(1.3);
+    border: 1px solid var(--glass-border-subtle);
+    box-shadow: var(--glass-shadow), var(--glass-inner-glow);
   }
 
   .stat-icon {
@@ -1400,18 +1579,18 @@ body {
     font-size: 18px;
   }
 
-  /* 6 tabs trên màn hình nhỏ */
+  /* Bottom nav trên màn hình nhỏ */
   .bottom-nav-item {
-    padding: 5px 2px 3px;
-    font-size: 9px;
+    padding: 4px 2px 2px;
+    font-size: 10px;
   }
 
   .bottom-nav-item .bottom-nav-icon {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .bottom-nav-text {
-    font-size: 9px;
+    font-size: 10px;
   }
 }
 
@@ -2597,6 +2776,37 @@ body {
   flex-shrink: 0;
 }
 
+.topbar-icon-btn {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--white);
+  font-size: 18px;
+  color: var(--neutral-dark);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.topbar-icon-btn:hover,
+.topbar-icon-btn.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: scale(1.08);
+}
+
+.topbar-icon-btn:active {
+  transform: scale(0.92);
+}
+
 .notif-bell-btn:hover {
   background: var(--primary-light);
   border-color: var(--primary);
@@ -2780,15 +2990,15 @@ body {
 
 /* Bubble Button */
 .assistant-bubble-btn {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--primary);
   border: none;
   color: white;
-  font-size: 26px;
+  font-size: 20px;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(43, 108, 176, 0.4);
+  box-shadow: 0 4px 14px rgba(43, 108, 176, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2797,18 +3007,18 @@ body {
 }
 
 .assistant-bubble-btn:hover {
-  transform: scale(1.1) rotate(5deg);
-  box-shadow: 0 6px 20px rgba(43, 108, 176, 0.5);
+  transform: scale(1.08) rotate(4deg);
+  box-shadow: 0 6px 18px rgba(43, 108, 176, 0.45);
 }
 
 .bubble-tooltip {
   position: absolute;
-  right: 68px;
+  right: 54px;
   background: var(--neutral-dark);
   color: white;
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   opacity: 0;
@@ -2820,7 +3030,7 @@ body {
 .assistant-bubble-btn:hover .bubble-tooltip {
   opacity: 1;
   visibility: visible;
-  right: 68px;
+  right: 54px;
 }
 
 /* Chat Box Window */
@@ -2870,12 +3080,12 @@ body {
 }
 
 .chat-avatar {
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .chat-box-title h4 {
   margin: 0;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
@@ -2888,7 +3098,7 @@ body {
   background: none;
   border: none;
   color: white;
-  font-size: 24px;
+  font-size: 20px;
   cursor: pointer;
   opacity: 0.8;
   transition: opacity 0.2s;
@@ -3012,8 +3222,8 @@ body {
   background: var(--primary);
   border: none;
   color: white;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
@@ -3021,7 +3231,7 @@ body {
   justify-content: center;
   transition: background-color 0.2s;
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .chat-send-btn:hover {
@@ -3031,10 +3241,16 @@ body {
 /* Responsive Assistant on Mobile */
 @media (max-width: 768px) {
   .assistant-widget {
-    bottom: 74px; /* Tránh đè lên bottom-nav */
-    right: 16px;
+    bottom: calc(86px + env(safe-area-inset-bottom, 0px)); /* Tránh đè lên floating bottom-nav */
+    right: 14px;
   }
-  
+
+  .assistant-bubble-btn {
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+  }
+
   .assistant-chat-box {
     width: calc(100vw - 32px);
     right: 0;

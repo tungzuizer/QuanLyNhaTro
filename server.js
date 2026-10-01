@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const db = require('./database');
-const telegramBot = require('./telegramBot');
+const assistant = require('./assistant');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -517,6 +517,7 @@ app.get('/api/payments', async (req, res) => {
         r.member_count,
         r.deposit,
         (SELECT MIN(start_date) FROM tenants WHERE room_id = r.id) as lease_start_date,
+        (SELECT MAX(end_date) FROM tenants WHERE room_id = r.id AND end_date IS NOT NULL) as end_date,
         COALESCE(p.tenant_name, STRING_AGG(t.full_name, ', ')) as tenant_names,
         STRING_AGG(t.phone, ', ') as tenant_phones,
         COALESCE(p.electricity_amount, e.total_cost) as electricity_amount,
@@ -551,8 +552,8 @@ app.get('/api/payments', async (req, res) => {
           const leaseMonth = leaseDate.getMonth() + 1;
           const billingYear = parseInt(year);
           const billingMonth = parseInt(month);
-          // Náº¿u thuĂª báº¯t Ä‘áº§u tá»« thĂ¡ng nĂ y hoáº·c tÆ°Æ¡ng lai, thĂ¬ khĂ´ng hiá»ƒn thá»‹ trong danh sĂ¡ch thu tiá»n thĂ¡ng nĂ y
-          if (leaseYear > billingYear || (leaseYear === billingYear && leaseMonth >= billingMonth)) {
+          // Chi loai tru phong chua bat dau thue (thang tuong lai)
+          if (leaseYear > billingYear || (leaseYear === billingYear && leaseMonth > billingMonth)) {
             return false;
           }
         }
@@ -560,45 +561,76 @@ app.get('/api/payments', async (req, res) => {
       return true;
     });
 
-    // Gáº¯n waterAmount, trashAmount, residenceAmount, depositAmount, computedTotal cho má»—i dĂ²ng
     const enrichedRows = filteredRows.map(row => {
       const memberCount = row.member_count || 0;
       const isPaid = row.is_paid === 1;
 
-      // XĂ¡c Ä‘á»‹nh thĂ¡ng báº¯t Ä‘áº§u há»£p Ä‘á»“ng (thĂ¡ng Ä‘Ă³ng tiá»n cá»c) vĂ  thĂ¡ng tĂ­nh tiá»n Ä‘áº§u tiĂªn (thĂ¡ng tiáº¿p theo)
       let isFirstMonth = false;
-      let isDepositMonth = false;
+      let isCheckout = false;
+      let proratedRent = row.rent_price || 0;
+
       if (row.lease_start_date) {
         const leaseDate = new Date(row.lease_start_date);
         if (!isNaN(leaseDate.getTime())) {
           const leaseYear = leaseDate.getFullYear();
           const leaseMonth = leaseDate.getMonth() + 1;
           const diffMonths = (parseInt(year) - leaseYear) * 12 + (parseInt(month) - leaseMonth);
-          if (diffMonths === 1) {
-            isFirstMonth = true;
-          }
           if (diffMonths === 0) {
-            isDepositMonth = true;
+            isFirstMonth = true;
           }
         }
       }
 
-      // Náº¿u chÆ°a thu tiá»n (isPaid = false), luĂ´n tĂ­nh láº¡i theo sá»‘ ngÆ°á»i á»Ÿ hiá»‡n táº¡i vĂ  Ä‘Æ¡n giĂ¡ cĂ i Ä‘áº·t má»›i
+      // Kiem tra tra phong: tenant co end_date trong thang billing
+      const endDate = row.end_date;
+      if (endDate) {
+        const ed = new Date(endDate);
+        if (!isNaN(ed.getTime())) {
+          const edYear = ed.getFullYear();
+          const edMonth = ed.getMonth() + 1;
+          if (edYear === parseInt(year) && edMonth === parseInt(month)) {
+            isCheckout = true;
+          }
+        }
+      }
+
+      // Tinh tien nha theo ngay neu la thang dau hoac tra phong
+      if (!isPaid) {
+        if (isFirstMonth && row.lease_start_date) {
+          const leaseDate = new Date(row.lease_start_date);
+          const billingDay = row.billing_day || 30;
+          const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+          const endOfPeriod = Math.min(billingDay, lastDay);
+          const startDay = leaseDate.getDate();
+          const daysStayed = endOfPeriod - startDay + 1;
+          if (daysStayed <= 0) {
+            proratedRent = 0;
+          } else if (daysStayed <= 15) {
+            proratedRent = (row.rent_price || 0) / 2;
+          } else {
+            proratedRent = row.rent_price || 0;
+          }
+        } else if (isCheckout && endDate) {
+          const ed = new Date(endDate);
+          const dayOfMonth = ed.getDate();
+          if (dayOfMonth <= 15) {
+            proratedRent = (row.rent_price || 0) / 2;
+          } else {
+            proratedRent = row.rent_price || 0;
+          }
+        }
+      }
+
       const rentAmt = (isPaid && row.rent_amount !== null && row.rent_amount !== undefined)
-        ? row.rent_amount
-        : (isDepositMonth ? 0 : (row.rent_price || 0));
+        ? row.rent_amount : proratedRent;
       const waterAmt = (isPaid && row.water_amount !== null && row.water_amount !== undefined)
-        ? row.water_amount
-        : (isDepositMonth ? 0 : waterPrice * memberCount);
+        ? row.water_amount : waterPrice * memberCount;
       const trashAmt = (isPaid && row.trash_amount !== null && row.trash_amount !== undefined)
-        ? row.trash_amount
-        : (isDepositMonth ? 0 : trashPrice * memberCount);
+        ? row.trash_amount : trashPrice * memberCount;
       const residenceAmt = (isPaid && row.residence_amount !== null && row.residence_amount !== undefined)
-        ? row.residence_amount
-        : (isFirstMonth ? residencePrice * memberCount : 0);
+        ? row.residence_amount : (isFirstMonth ? residencePrice * memberCount : 0);
       const depositAmt = (isPaid && row.deposit_amount !== null && row.deposit_amount !== undefined)
-        ? row.deposit_amount
-        : (isDepositMonth ? (row.deposit || 0) : 0);
+        ? row.deposit_amount : (isFirstMonth ? (row.deposit || 0) : 0);
 
       return { 
         ...row, 
@@ -609,7 +641,9 @@ app.get('/api/payments', async (req, res) => {
         deposit_amount: depositAmt,
         waterPrice, 
         trashPrice, 
-        residencePrice 
+        residencePrice,
+        isFirstMonth,
+        isCheckout
       };
     });
 
@@ -646,31 +680,60 @@ app.post('/api/payments/mark', async (req, res) => {
     const residencePrice = settingsMap['residence_price'] || 50000;
     const memberCount = room.member_count || 0;
 
-    // Kiá»ƒm tra thĂ¡ng Ä‘áº§u tiĂªn thu tiá»n
+    // Xac dinh thang dau tien va tra phong
     const earliestTenant = await db.prepare('SELECT MIN(start_date) as start_date FROM tenants WHERE room_id = ?').get(room_id);
+    const latestEndDate = await db.prepare('SELECT MAX(end_date) as end_date FROM tenants WHERE room_id = ? AND end_date IS NOT NULL').get(room_id);
     let isFirstMonth = false;
-    let isDepositMonth = false;
+    let isCheckout = false;
+    let proratedRent = room.rent_price || 0;
+
     if (earliestTenant && earliestTenant.start_date) {
       const leaseDate = new Date(earliestTenant.start_date);
       if (!isNaN(leaseDate.getTime())) {
         const leaseYear = leaseDate.getFullYear();
         const leaseMonth = leaseDate.getMonth() + 1;
         const diffMonths = (parseInt(year) - leaseYear) * 12 + (parseInt(month) - leaseMonth);
-        if (diffMonths === 1) {
-          isFirstMonth = true;
-        }
         if (diffMonths === 0) {
-          isDepositMonth = true;
+          isFirstMonth = true;
+          const billingDay = room.billing_day || 30;
+          const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+          const endOfPeriod = Math.min(billingDay, lastDay);
+          const startDay = leaseDate.getDate();
+          const daysStayed = endOfPeriod - startDay + 1;
+          if (daysStayed <= 0) {
+            proratedRent = 0;
+          } else if (daysStayed <= 15) {
+            proratedRent = (room.rent_price || 0) / 2;
+          } else {
+            proratedRent = room.rent_price || 0;
+          }
         }
       }
     }
 
-    const rentAmount = isDepositMonth ? 0 : (room.rent_price || 0);
-    const elecAmount = isDepositMonth ? 0 : (elec ? elec.total_cost : 0);
-    const waterAmount = isDepositMonth ? 0 : (waterPrice * memberCount);
-    const trashAmount = isDepositMonth ? 0 : (trashPrice * memberCount);
+    if (latestEndDate && latestEndDate.end_date) {
+      const ed = new Date(latestEndDate.end_date);
+      if (!isNaN(ed.getTime())) {
+        const edYear = ed.getFullYear();
+        const edMonth = ed.getMonth() + 1;
+        if (edYear === parseInt(year) && edMonth === parseInt(month)) {
+          isCheckout = true;
+          const dayOfMonth = ed.getDate();
+          if (dayOfMonth <= 15) {
+            proratedRent = (room.rent_price || 0) / 2;
+          } else {
+            proratedRent = room.rent_price || 0;
+          }
+        }
+      }
+    }
+
+    const rentAmount = proratedRent;
+    const elecAmount = elec ? elec.total_cost : 0;
+    const waterAmount = waterPrice * memberCount;
+    const trashAmount = trashPrice * memberCount;
     const residenceAmount = isFirstMonth ? (residencePrice * memberCount) : 0;
-    const depositAmount = isDepositMonth ? (room.deposit || 0) : 0;
+    const depositAmount = isFirstMonth ? (room.deposit || 0) : 0;
     const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
     const paidAt = is_paid ? new Date().toISOString() : null;
     const finalBillingDay = room.billing_day || 30;
@@ -785,58 +848,80 @@ app.get('/api/invoice', async (req, res) => {
     const settings = {};
     settingsList.forEach(s => { settings[s.key] = s.value; });
 
-    // Kiá»ƒm tra xem cĂ³ pháº£i thĂ¡ng Ä‘áº§u tiĂªn hoáº·c thĂ¡ng báº¯t Ä‘áº§u thuĂª khĂ´ng
+    // Xac dinh thang dau tien, tra phong
     const earliestTenant = await db.prepare('SELECT MIN(start_date) as start_date FROM tenants WHERE room_id = ?').get(room_id);
+    const latestEndDate = await db.prepare('SELECT MAX(end_date) as end_date FROM tenants WHERE room_id = ? AND end_date IS NOT NULL').get(room_id);
     let isFirstMonth = false;
-    let isDepositMonth = false;
-    let isExcludedMonth = false;
+    let isCheckout = false;
+
+    const waterPrice = parseFloat(settings['water_price']) || 20000;
+    const trashPrice = parseFloat(settings['trash_price']) || 10000;
+    const residencePrice = parseFloat(settings['residence_price']) || 50000;
+    const memberCount = room.member_count || 0;
+
+    let proratedRent = room.rent_price || 0;
+
     if (earliestTenant && earliestTenant.start_date) {
       const leaseDate = new Date(earliestTenant.start_date);
       if (!isNaN(leaseDate.getTime())) {
         const leaseYear = leaseDate.getFullYear();
         const leaseMonth = leaseDate.getMonth() + 1;
         const diffMonths = (parseInt(year) - leaseYear) * 12 + (parseInt(month) - leaseMonth);
-        if (diffMonths === 1) {
+        if (diffMonths === 0) {
           isFirstMonth = true;
-        } else if (diffMonths === 0) {
-          isDepositMonth = true;
+          const billingDay = room.billing_day || 30;
+          const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+          const endOfPeriod = Math.min(billingDay, lastDay);
+          const startDay = leaseDate.getDate();
+          const daysStayed = endOfPeriod - startDay + 1;
+          if (daysStayed <= 0) {
+            proratedRent = 0;
+          } else if (daysStayed <= 15) {
+            proratedRent = (room.rent_price || 0) / 2;
+          } else {
+            proratedRent = room.rent_price || 0;
+          }
         } else if (diffMonths < 0) {
-          isExcludedMonth = true;
+          proratedRent = 0;
         }
       }
     }
 
-    const rentAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (room.rent_price || 0);
-    const elecAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : (elec ? elec.total_cost : 0);
+    if (latestEndDate && latestEndDate.end_date) {
+      const ed = new Date(latestEndDate.end_date);
+      if (!isNaN(ed.getTime())) {
+        const edYear = ed.getFullYear();
+        const edMonth = ed.getMonth() + 1;
+        if (edYear === parseInt(year) && edMonth === parseInt(month)) {
+          isCheckout = true;
+          const dayOfMonth = ed.getDate();
+          if (dayOfMonth <= 15) {
+            proratedRent = (room.rent_price || 0) / 2;
+          } else {
+            proratedRent = room.rent_price || 0;
+          }
+        }
+      }
+    }
 
-    // Láº¥y giĂ¡ nÆ°á»›c/rĂ¡c/táº¡m trĂº
-        const waterPrice = parseFloat(settings['water_price']) || 20000;
-    const trashPrice = parseFloat(settings['trash_price']) || 10000;
-    const residencePrice = parseFloat(settings['residence_price']) || 50000;
-    
-    // Tính toán số người dựa trên số lượng thành viên hiện tại trong phòng
-    const memberCount = room.member_count || 0;
+    const isPaidAlready = payment && payment.is_paid === 1;
+    const rentAmount = isPaidAlready ? (payment.rent_amount || 0) : proratedRent;
+    const elecAmount = isPaidAlready ? (payment.electricity_amount || 0) : (elec ? elec.total_cost : 0);
+    const waterAmount = isPaidAlready ? (payment.water_amount || 0) : waterPrice * memberCount;
+    const trashAmount = isPaidAlready ? (payment.trash_amount || 0) : trashPrice * memberCount;
 
-    const waterAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : waterPrice * memberCount;
-    const trashAmount = (isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1) ? 0 : trashPrice * memberCount;
-
-    // Xá»­ lĂ½ tĂ¹y chá»n phĂ­ táº¡m trĂº
-    const includeResidenceParam = req.query.include_residence; // 'force' | 'none' | 'auto' | undefined
+    const includeResidenceParam = req.query.include_residence;
     let residenceAmount;
     if (includeResidenceParam === 'none') {
       residenceAmount = 0;
     } else if (includeResidenceParam === 'force') {
       residenceAmount = residencePrice * memberCount;
-    } else if (payment && payment.is_paid === 1 && payment.residence_amount !== null && payment.residence_amount !== undefined) {
-      // Đã thu tiền rồi: dùng giá trị thực tế
+    } else if (isPaidAlready && payment.residence_amount !== null && payment.residence_amount !== undefined) {
       residenceAmount = payment.residence_amount;
-    } else if ((isExcludedMonth || isDepositMonth) && (!payment || payment.is_paid !== 1)) {
-      residenceAmount = 0;
     } else {
-      // Tự động: chỉ tính tháng đầu tiên
       residenceAmount = isFirstMonth ? residencePrice * memberCount : 0;
     }
-    const depositAmount = isExcludedMonth && (!payment || payment.is_paid !== 1) ? 0 : (payment && payment.is_paid === 1 ? (payment.deposit_amount || 0) : (isDepositMonth ? (room.deposit || 0) : 0));
+    const depositAmount = isPaidAlready ? (payment.deposit_amount || 0) : (isFirstMonth ? (room.deposit || 0) : 0);
     const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
 
     // Láº¥y chá»‰ sá»‘ Ä‘iá»‡n má»›i nháº¥t cá»§a phĂ²ng
@@ -866,7 +951,8 @@ app.get('/api/invoice', async (req, res) => {
         month: parseInt(month),
         year: parseInt(year),
         isFirstMonth,
-        isDepositMonth,
+        isCheckout,
+        isDepositMonth: isFirstMonth,
         currentElecIndex: latestElec ? latestElec.new_reading : 0
       }
     });
@@ -899,8 +985,6 @@ app.get('/api/search', async (req, res) => {
 });
 
 // ==========================================
-// 9. Gá»¬I BĂO CĂO NHáº®C Ná»¢ QUA TELEGRAM đŸ“¨
-// ==========================================
 // WEB ASSISTANT CHAT API
 // ==========================================
 
@@ -911,7 +995,7 @@ app.post('/api/assistant/chat', async (req, res) => {
     if (!message) {
       return res.status(400).json({ error: 'Nội dung tin nhắn không được để trống' });
     }
-    const result = await telegramBot.executeCommand(message.trim());
+    const result = await assistant.executeCommand(message.trim());
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -921,6 +1005,5 @@ app.post('/api/assistant/chat', async (req, res) => {
 app.listen(PORT, async () => {
   console.log(`✅ Server đang chạy tại http://localhost:${PORT}`);
 
-  // Inject db vào Trợ lý LISO để web chat hoạt động không cần Telegram Bot
-  telegramBot.setDb(db);
+  assistant.setDb(db);
 });

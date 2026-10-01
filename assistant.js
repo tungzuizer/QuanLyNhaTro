@@ -1,170 +1,18 @@
-/**
- * telegramBot.js - Telegram Bot cho Quản Lý Nhà Trọ LISO
- * 
- * Tính năng:
- * - Nhập số điện qua tin nhắn chat (auto-parse)
- * - Truy vấn thông tin phòng, tiền thuê, số điện
- * - Bảo mật: chỉ nhận lệnh từ Admin Chat ID đã cấu hình
- */
-
-const TelegramBotLib = require('node-telegram-bot-api');
-const TelegramBot = typeof TelegramBotLib === 'function' ? TelegramBotLib : (TelegramBotLib.TelegramBot || TelegramBotLib.default);
-
-let botInstance = null;
-
 let dbRef = null;
 
-// Cho phép inject db mà không cần khởi động Telegram Bot
 function setDb(db) {
   dbRef = db;
 }
 
-// ==========================================
-// KHỞI ĐỘNG / TẮT BOT
-// ==========================================
-async function startBot(token, adminChatId, db) {
-  if (botInstance) {
-    try {
-      await botInstance.stopPolling();
-    } catch(e) {}
-    botInstance = null;
-  }
-
-  if (!token || !token.trim()) return { ok: false, error: 'Chưa có Bot Token' };
-  if (!adminChatId) return { ok: false, error: 'Chưa có Admin Chat ID' };
-
-  dbRef = db;
-
-  try {
-    botInstance = new TelegramBot(token, { polling: true });
-
-    // Xử lý tất cả tin nhắn
-    botInstance.on('message', (msg) => handleMessage(msg, adminChatId));
-
-    // Xử lý lỗi polling
-    botInstance.on('polling_error', (err) => {
-      console.error('❌ Telegram polling error:', err.message);
-    });
-
-    // Kiểm tra kết nối
-    const me = await botInstance.getMe();
-    console.log(`✅ Telegram Bot @${me.username} đang chạy (Admin ID: ${adminChatId})`);
-    return { ok: true, botName: me.username, botId: me.id };
-  } catch (err) {
-    botInstance = null;
-    console.error('❌ Không thể khởi động Telegram Bot:', err.message);
-    return { ok: false, error: err.message };
-  }
-}
-
-async function stopBot() {
-  if (botInstance) {
-    try { await botInstance.stopPolling(); } catch(e) {}
-    botInstance = null;
-    console.log('🔴 Telegram Bot đã dừng');
-  }
-}
-
-function getBotStatus() {
-  return { running: !!botInstance };
-}
-
-// ==========================================
-// XỬ LÝ TIN NHẮN ĐẾN
-// ==========================================
-async function handleMessage(msg, adminChatId) {
-  const chatId = msg.chat.id;
-  const text = (msg.text || '').trim();
-
-  // Bảo mật: chỉ xử lý lệnh từ admin
-  if (String(chatId) !== String(adminChatId)) {
-    await botInstance.sendMessage(chatId,
-      '⛔ Xin lỗi, bạn không có quyền sử dụng bot này.\n' +
-      'Bot này dành riêng cho chủ nhà trọ LISO.\n\n' +
-      `🆔 Chat ID của bạn là: \`${chatId}\` (Bấm vào để copy và dán vào phần cài đặt Telegram trên web).`,
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-
-  if (!text) return;
-
-  // --- Điều hướng theo lệnh ---
-  if (text === '/start' || text === '/help') {
-    await sendHelp(chatId);
-  } else if (text.startsWith('/phong ')) {
-    await handlePhongCmd(chatId, text.slice(7).trim().toUpperCase());
-  } else if (text === '/chuathu') {
-    await handleChuaThu(chatId);
-  } else if (text === '/dien') {
-    await handleChuaNhapDien(chatId);
-  } else if (text === '/dien15' || text === '/dien 15') {
-    await handleChuaNhapDienByBillingDay(chatId, 15);
-  } else if (text === '/dien30' || text === '/dien 30') {
-    await handleChuaNhapDienByBillingDay(chatId, 30);
-  } else if (text === '/baocao') {
-    await handleBaoCao(chatId);
-  } else if (text === '/sodien') {
-    await handleSoDien(chatId);
-  } else if (text.startsWith('/tienphong ')) {
-    await handleTienPhong(chatId, text.slice(11).trim().toUpperCase());
-  } else {
-    // Thử parse số điện từ tin nhắn tự do
-    const parsed = parseElectricReadings(text);
-    if (parsed.length > 0) {
-      await handleElectricInput(chatId, parsed);
-    } else {
-      await botInstance.sendMessage(chatId,
-        '❓ Tôi không hiểu lệnh này.\n\nGõ /help để xem hướng dẫn.'
-      );
-    }
-  }
-}
-
-// ==========================================
-// HELPER: Escape ký tự đặc biệt MarkdownV2
-// ==========================================
 function escMd(str) {
   return String(str || '').replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&');
 }
 
-// ==========================================
-// LỆNH /help
-// ==========================================
-async function sendHelp(chatId) {
-  const msg =
-`🏠 *Bot Quản Lý Nhà Trọ LISO*
-
-📋 *NHẬP SỐ ĐIỆN:*
-Gửi trực tiếp tin nhắn theo định dạng:
-\`A101: 2500\`
-\`A102 - 2640, B101: 905\`
-\`phòng B201 số 1200\`
-
-🔍 *TRUY VẤN THÔNG TIN:*
-/phong A101 \\- Thông tin phòng A101
-/tienphong A101 \\- Tiền phải đóng tháng này
-/chuathu \\- Danh sách phòng chưa đóng tiền
-/dien \\- Phòng chưa nhập số điện
-/dien15 \\- Phòng chưa nhập điện đợt 15 (Giữa tháng)
-/dien30 \\- Phòng chưa nhập điện đợt 30 (Cuối tháng)
-/sodien \\- Xem số điện các phòng tháng này
-/baocao \\- Tóm tắt tài chính tháng này
-/help \\- Hướng dẫn này`;
-
-  await botInstance.sendMessage(chatId, msg, { parse_mode: 'MarkdownV2' });
-}
-
-// ==========================================
-// PARSE SỐ ĐIỆN TỪ TIN NHẮN TỰ DO
-// ==========================================
 function parseElectricReadings(text) {
   const results = [];
   const seen = new Set();
 
-  // Pattern 1: A101: 2500, A102-2640, B101 = 905
   const p1 = /([A-Ba-b]\d{3})\s*[:\-=]\s*(\d{3,5})/g;
-  // Pattern 2: phòng A101 số 2500 hoặc phòng A101 2500
   const p2 = /ph[oòó]ng\s*([A-Ba-b]\d{3})\s+(?:s[oốố]\s*)?(\d{3,5})/gi;
 
   for (const pattern of [p1, p2]) {
@@ -182,12 +30,8 @@ function parseElectricReadings(text) {
   return results;
 }
 
-// ==========================================
-// XỬ LÝ NHẬP SỐ ĐIỆN
-// ==========================================
-async function handleElectricInput(chatId, readings) {
+async function handleElectricInput(readings) {
   const now = new Date();
-  // Giờ Việt Nam UTC+7
   const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
   const month = vnNow.getUTCMonth() + 1;
   const year = vnNow.getUTCFullYear();
@@ -196,7 +40,6 @@ async function handleElectricInput(chatId, readings) {
 
   for (const { roomCode, newReading } of readings) {
     try {
-      // Tìm phòng theo mã
       const room = await dbRef.prepare(
         "SELECT id, room_code FROM rooms WHERE UPPER(room_code) = ?"
       ).get(roomCode.toUpperCase());
@@ -206,7 +49,6 @@ async function handleElectricInput(chatId, readings) {
         continue;
       }
 
-      // Lấy chỉ số cũ (tháng trước)
       const prevMonth = month === 1 ? 12 : month - 1;
       const prevYear = month === 1 ? year - 1 : year;
       const prevReading = await dbRef.prepare(
@@ -224,7 +66,6 @@ async function handleElectricInput(chatId, readings) {
       const price = parseFloat(priceRow?.value) || 3500;
       const cost = consumption * price;
 
-      // Upsert vào electricity_readings
       const existing = await dbRef.prepare(
         "SELECT id FROM electricity_readings WHERE room_id = ? AND year = ? AND month = ?"
       ).get(room.id, year, month);
@@ -243,12 +84,11 @@ async function handleElectricInput(chatId, readings) {
       results.push({ roomCode, status: '✅', msg: `${oldReading} → ${newReading} (${consumption} kWh = ${costStr}đ)` });
 
     } catch (err) {
-      console.error('Telegram elec error:', err);
+      console.error('Assistant elec error:', err);
       results.push({ roomCode, status: '❌', msg: 'Lỗi hệ thống: ' + err.message });
     }
   }
 
-  // Tạo tin nhắn phản hồi
   const now2 = new Date();
   const vnNow2 = new Date(now2.getTime() + 7 * 60 * 60 * 1000);
   const month2 = vnNow2.getUTCMonth() + 1;
@@ -260,24 +100,44 @@ async function handleElectricInput(chatId, readings) {
   }
   reply += `\n_Đã xử lý ${results.length} phòng_`;
 
-  await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+  return { replyText: reply, parseMode: 'MarkdownV2' };
 }
 
-// ==========================================
-// LỆNH /phong [mã phòng]
-// ==========================================
-async function handlePhongCmd(chatId, roomCode) {
+async function handleHelp() {
+  const msg =
+`🏠 *Trợ Lý LISO*
+
+📋 *NHẬP SỐ ĐIỆN:*
+Gửi trực tiếp tin nhắn theo định dạng:
+\`A101: 2500\`
+\`A102 - 2640, B101: 905\`
+\`phòng B201 số 1200\`
+
+🔍 *TRUY VẤN THÔNG TIN:*
+/phong A101 \\- Thông tin phòng A101
+/tienphong A101 \\- Tiền phải đóng tháng này
+/chuathu \\- Danh sách phòng chưa đóng tiền
+/dien \\- Phòng chưa nhập số điện
+/dien15 \\- Phòng chưa nhập điện đợt 15 (Giữa tháng)
+/dien30 \\- Phòng chưa nhập điện đợt 30 (Cuối tháng)
+/sodien \\- Xem số điện các phòng tháng này
+/baocao \\- Tóm tắt tài chính tháng này
+/help \\- Hướng dẫn này`;
+
+  return { replyText: msg, parseMode: 'MarkdownV2' };
+}
+
+async function handlePhongCmd(roomCode) {
   try {
     const room = await dbRef.prepare(`
-      SELECT r.*, 
+      SELECT r.*,
         (SELECT STRING_AGG(t.full_name, ', ') FROM tenants t WHERE t.room_id = r.id) as tenant_names,
         (SELECT STRING_AGG(t.phone, ', ') FROM tenants t WHERE t.room_id = r.id) as tenant_phones
       FROM rooms r WHERE UPPER(r.room_code) = ?
     `).get(roomCode);
 
     if (!room) {
-      await botInstance.sendMessage(chatId, `❌ Không tìm thấy phòng *${escMd(roomCode)}*`, { parse_mode: 'MarkdownV2' });
-      return;
+      return { replyText: `❌ Không tìm thấy phòng *${escMd(roomCode)}*`, parseMode: 'MarkdownV2' };
     }
 
     const statusEmoji = room.status === 'occupied' ? '🟠 Đang thuê' : room.status === 'vacant' ? '🟢 Trống' : '🔴 Sửa chữa';
@@ -298,17 +158,14 @@ async function handlePhongCmd(chatId, roomCode) {
       }
     }
 
-    await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+    return { replyText: reply, parseMode: 'MarkdownV2' };
   } catch (err) {
     console.error(err);
-    await botInstance.sendMessage(chatId, '❌ Lỗi khi tra cứu phòng');
+    return { replyText: '❌ Lỗi khi tra cứu phòng', parseMode: '' };
   }
 }
 
-// ==========================================
-// LỆNH /tienphong [mã phòng]
-// ==========================================
-async function handleTienPhong(chatId, roomCode) {
+async function handleTienPhong(roomCode) {
   try {
     const now = new Date();
     const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
@@ -331,8 +188,7 @@ async function handleTienPhong(chatId, roomCode) {
     `).get(year, month, year, month, roomCode);
 
     if (!row) {
-      await botInstance.sendMessage(chatId, `❌ Không tìm thấy phòng *${escMd(roomCode)}*`, { parse_mode: 'MarkdownV2' });
-      return;
+      return { replyText: `❌ Không tìm thấy phòng *${escMd(roomCode)}*`, parseMode: 'MarkdownV2' };
     }
 
     const isPaid = row.is_paid === 1;
@@ -352,17 +208,14 @@ async function handleTienPhong(chatId, roomCode) {
       reply += `🗓️ Đóng lúc: ${escMd(paidDate.toLocaleDateString('vi-VN'))}\n`;
     }
 
-    await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+    return { replyText: reply, parseMode: 'MarkdownV2' };
   } catch (err) {
     console.error(err);
-    await botInstance.sendMessage(chatId, '❌ Lỗi khi tra cứu tiền phòng');
+    return { replyText: '❌ Lỗi khi tra cứu tiền phòng', parseMode: '' };
   }
 }
 
-// ==========================================
-// LỆNH /chuathu - Phòng chưa đóng tiền
-// ==========================================
-async function handleChuaThu(chatId) {
+async function handleChuaThu() {
   try {
     const now = new Date();
     const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
@@ -383,11 +236,10 @@ async function handleChuaThu(chatId) {
     `).all(year, month);
 
     if (rows.length === 0) {
-      await botInstance.sendMessage(chatId,
-        `✅ Tuyệt vời\\! Tất cả các phòng đã đóng tiền tháng ${month}/${year}\\.`,
-        { parse_mode: 'MarkdownV2' }
-      );
-      return;
+      return {
+        replyText: `✅ Tuyệt vời\\! Tất cả các phòng đã đóng tiền tháng ${month}/${year}\\.`,
+        parseMode: 'MarkdownV2'
+      };
     }
 
     let reply = `⏳ *Phòng chưa đóng tiền \\- tháng ${month}/${year}*\n`;
@@ -399,24 +251,20 @@ async function handleChuaThu(chatId) {
       reply += `🔑 *${escMd(r.room_code)}* \\- ${escMd(tenant)} \\- ${escMd(amount)}đ\n`;
     }
 
-    await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+    return { replyText: reply, parseMode: 'MarkdownV2' };
   } catch (err) {
     console.error(err);
-    await botInstance.sendMessage(chatId, '❌ Lỗi khi lấy danh sách');
+    return { replyText: '❌ Lỗi khi lấy danh sách', parseMode: '' };
   }
 }
 
-// ==========================================
-// LỆNH /dien - Phòng chưa nhập số điện
-// ==========================================
-async function handleChuaNhapDien(chatId) {
+async function handleChuaNhapDien() {
   try {
     const now = new Date();
     const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
     const month = vnNow.getUTCMonth() + 1;
     const year = vnNow.getUTCFullYear();
 
-    // Lấy tổng số phòng đang thuê
     const totalRow = await dbRef.prepare(`
       SELECT COUNT(*) as cnt FROM rooms WHERE status = 'occupied'
     `).get();
@@ -437,8 +285,7 @@ async function handleChuaNhapDien(chatId) {
 
     if (rows.length === 0) {
       reply += `✅ Đã nhập số điện cho tất cả phòng tháng ${month}/${year}\\.`;
-      await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
-      return;
+      return { replyText: reply, parseMode: 'MarkdownV2' };
     }
 
     const codes = rows.map(r => r.room_code).join(', ');
@@ -446,32 +293,27 @@ async function handleChuaNhapDien(chatId) {
     reply += escMd(codes);
     reply += `\n\n💡 _Gửi theo dạng: \`A101: 2500\` để nhập_`;
 
-    await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+    return { replyText: reply, parseMode: 'MarkdownV2' };
   } catch (err) {
     console.error(err);
-    await botInstance.sendMessage(chatId, '❌ Lỗi khi lấy danh sách điện');
+    return { replyText: '❌ Lỗi khi lấy danh sách điện', parseMode: '' };
   }
 }
 
-// ==========================================
-// LỆNH /dien15 hoặc /dien30 - Phòng chưa nhập số điện theo đợt
-// ==========================================
-async function handleChuaNhapDienByBillingDay(chatId, billingDay) {
+async function handleChuaNhapDienByBillingDay(billingDay) {
   try {
     const now = new Date();
     const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
     const month = vnNow.getUTCMonth() + 1;
     const year = vnNow.getUTCFullYear();
 
-    // Lấy tổng số phòng đang thuê của đợt này
     const totalRow = await dbRef.prepare(`
-      SELECT COUNT(*) as cnt 
-      FROM rooms 
+      SELECT COUNT(*) as cnt
+      FROM rooms
       WHERE status = 'occupied' AND COALESCE(billing_day, 30) = ?
     `).get(billingDay);
     const totalRooms = totalRow ? totalRow.cnt : 0;
 
-    // Lấy danh sách phòng chưa nhập điện của đợt này
     const rows = await dbRef.prepare(`
       SELECT r.room_code
       FROM rooms r
@@ -488,8 +330,7 @@ async function handleChuaNhapDienByBillingDay(chatId, billingDay) {
 
     if (rows.length === 0) {
       reply += `✅ Đã nhập số điện cho tất cả phòng đợt ${billingDay} tháng ${month}/${year}\\.`;
-      await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
-      return;
+      return { replyText: reply, parseMode: 'MarkdownV2' };
     }
 
     const codes = rows.map(r => r.room_code).join(', ');
@@ -497,44 +338,38 @@ async function handleChuaNhapDienByBillingDay(chatId, billingDay) {
     reply += escMd(codes);
     reply += `\n\n💡 _Gửi theo dạng: \`A101: 2500\` để nhập_`;
 
-    await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+    return { replyText: reply, parseMode: 'MarkdownV2' };
   } catch (err) {
     console.error(err);
-    await botInstance.sendMessage(chatId, `❌ Lỗi khi lấy danh sách điện đợt ${billingDay}`);
+    return { replyText: `❌ Lỗi khi lấy danh sách điện đợt ${billingDay}`, parseMode: '' };
   }
 }
 
-// ==========================================
-// LỆNH /baocao - Báo cáo tổng hợp
-// ==========================================
-async function handleBaoCao(chatId) {
+async function handleBaoCao() {
   try {
     const now = new Date();
     const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
     const month = vnNow.getUTCMonth() + 1;
     const year = vnNow.getUTCFullYear();
 
-    // Thống kê phòng
     const roomStats = await dbRef.prepare(`
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN status = 'occupied' THEN 1 ELSE 0 END) as occupied,
         SUM(CASE WHEN status = 'vacant' THEN 1 ELSE 0 END) as vacant
       FROM rooms
     `).get();
 
-    // Thống kê thu tiền tháng này
     const payStats = await dbRef.prepare(`
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN is_paid = 1 THEN 1 ELSE 0 END) as paid,
         SUM(CASE WHEN is_paid = 1 THEN total_amount ELSE 0 END) as collected
       FROM rent_payments WHERE year = ? AND month = ?
     `).get(year, month);
 
-    // Số phòng chưa nhập điện
     const missingElec = await dbRef.prepare(`
-      SELECT COUNT(*) as cnt FROM rooms 
+      SELECT COUNT(*) as cnt FROM rooms
       WHERE status = 'occupied' AND id NOT IN (
         SELECT room_id FROM electricity_readings WHERE year = ? AND month = ?
       )
@@ -552,17 +387,14 @@ async function handleBaoCao(chatId) {
       reply += `\n💡 Gõ /dien để xem danh sách phòng chưa nhập`;
     }
 
-    await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+    return { replyText: reply, parseMode: 'MarkdownV2' };
   } catch (err) {
     console.error(err);
-    await botInstance.sendMessage(chatId, '❌ Lỗi khi tạo báo cáo');
+    return { replyText: '❌ Lỗi khi tạo báo cáo', parseMode: '' };
   }
 }
 
-// ==========================================
-// LỆNH /sodien - Xem số điện của từng phòng
-// ==========================================
-async function handleSoDien(chatId) {
+async function handleSoDien() {
   try {
     const now = new Date();
     const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
@@ -578,8 +410,7 @@ async function handleSoDien(chatId) {
     `).all(year, month);
 
     if (rows.length === 0) {
-      await botInstance.sendMessage(chatId, `📭 Không có phòng nào đang thuê để hiển thị số điện.`);
-      return;
+      return { replyText: `📭 Không có phòng nào đang thuê để hiển thị số điện.`, parseMode: '' };
     }
 
     let reply = `⚡ *Số điện các phòng tháng ${month}/${year}*\n\n`;
@@ -591,18 +422,11 @@ async function handleSoDien(chatId) {
       }
     }
 
-    await botInstance.sendMessage(chatId, reply, { parse_mode: 'MarkdownV2' });
+    return { replyText: reply, parseMode: 'MarkdownV2' };
   } catch (err) {
     console.error(err);
-    await botInstance.sendMessage(chatId, '❌ Lỗi khi lấy danh sách số điện các phòng');
+    return { replyText: '❌ Lỗi khi lấy danh sách số điện các phòng', parseMode: '' };
   }
-}
-
-async function sendDirectMessage(chatId, message, options = {}) {
-  if (!botInstance) {
-    throw new Error('Telegram Bot chưa kết nối.');
-  }
-  return await botInstance.sendMessage(chatId, message, options);
 }
 
 async function executeCommand(text) {
@@ -610,33 +434,37 @@ async function executeCommand(text) {
     return { replyText: '❌ Hệ thống chưa kết nối cơ sở dữ liệu. Vui lòng thử lại sau vài giây.', parseMode: '' };
   }
 
-  let replyText = '';
-  let parseMode = '';
-
-  const originalBotInstance = botInstance;
-  const mockBotInstance = {
-    sendMessage: async (chatId, message, options) => {
-      replyText = message;
-      parseMode = options?.parse_mode || '';
-      return { message_id: 0 };
-    }
-  };
-
-  botInstance = mockBotInstance;
   try {
-    const fakeMsg = {
-      chat: { id: 'admin_web' },
-      text: text
-    };
-    await handleMessage(fakeMsg, 'admin_web');
+    if (text === '/start' || text === '/help') {
+      return await handleHelp();
+    } else if (text.startsWith('/phong ')) {
+      return await handlePhongCmd(text.slice(7).trim().toUpperCase());
+    } else if (text === '/chuathu') {
+      return await handleChuaThu();
+    } else if (text === '/dien') {
+      return await handleChuaNhapDien();
+    } else if (text === '/dien15' || text === '/dien 15') {
+      return await handleChuaNhapDienByBillingDay(15);
+    } else if (text === '/dien30' || text === '/dien 30') {
+      return await handleChuaNhapDienByBillingDay(30);
+    } else if (text === '/baocao') {
+      return await handleBaoCao();
+    } else if (text === '/sodien') {
+      return await handleSoDien();
+    } else if (text.startsWith('/tienphong ')) {
+      return await handleTienPhong(text.slice(11).trim().toUpperCase());
+    } else {
+      const parsed = parseElectricReadings(text);
+      if (parsed.length > 0) {
+        return await handleElectricInput(parsed);
+      } else {
+        return { replyText: '❓ Tôi không hiểu lệnh này.\n\nGõ /help để xem hướng dẫn.', parseMode: '' };
+      }
+    }
   } catch (err) {
-    console.error('Lỗi khi giả lập chạy lệnh bot:', err);
-    replyText = '❌ Lỗi hệ thống: ' + err.message;
-  } finally {
-    botInstance = originalBotInstance;
+    console.error('Assistant error:', err);
+    return { replyText: '❌ Lỗi hệ thống: ' + err.message, parseMode: '' };
   }
-
-  return { replyText, parseMode };
 }
 
-module.exports = { startBot, stopBot, getBotStatus, sendDirectMessage, escMd, executeCommand, setDb };
+module.exports = { executeCommand, setDb };

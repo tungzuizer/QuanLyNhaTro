@@ -15,6 +15,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
   <!-- CSS Stylesheet -->
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -31,28 +33,28 @@
       </div>
       <nav class="nav-links">
         <a href="#" class="nav-item active" data-tab="dashboard">
-          <span class="nav-icon">📊</span>
+          <span class="nav-icon"><i class="bi bi-bar-chart-line"></i></span>
           <span class="nav-text">Dashboard</span>
         </a>
         <a href="#" class="nav-item" data-tab="rooms">
-          <span class="nav-icon">🔑</span>
+          <span class="nav-icon"><i class="bi bi-key"></i></span>
           <span class="nav-text">Quản lý Phòng</span>
         </a>
         <a href="#" class="nav-item" data-tab="electricity">
-          <span class="nav-icon">⚡</span>
+          <span class="nav-icon"><i class="bi bi-lightning"></i></span>
           <span class="nav-text">Quản lý Điện</span>
         </a>
         <a href="#" class="nav-item" data-tab="payments">
-          <span class="nav-icon">💰</span>
+          <span class="nav-icon"><i class="bi bi-cash-stack"></i></span>
           <span class="nav-text">Thu Tiền Tháng</span>
         </a>
 
         <a href="#" class="nav-item" data-tab="invoice">
-          <span class="nav-icon">🧾</span>
+          <span class="nav-icon"><i class="bi bi-receipt"></i></span>
           <span class="nav-text">Tạo Hóa Đơn</span>
         </a>
         <a href="#" class="nav-item" data-tab="settings">
-          <span class="nav-icon">⚙️</span>
+          <span class="nav-icon"><i class="bi bi-gear"></i></span>
           <span class="nav-text">Cài đặt</span>
         </a>
       </nav>
@@ -67,22 +69,27 @@
       <!-- Top Bar (Mobile header & Search) -->
       <header class="topbar">
         <div class="topbar-left" style="display: flex; align-items: center; gap: 12px;">
-          <button id="mobile-menu-toggle" class="mobile-only" style="margin-right: 4px;">☰</button>
+          <button id="mobile-menu-toggle" class="mobile-only" style="margin-right: 4px;"><i class="bi bi-list"></i></button>
           <h1 id="page-title" style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Dashboard
           </h1>
         </div>
-        <div style="display:flex; align-items:center; gap:12px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+
+          <!-- Mobile Settings Button -->
+          <button class="topbar-icon-btn mobile-only-flex" id="btn-mobile-settings" title="Cài đặt hệ thống" onclick="switchTab('settings')">
+            <i class="bi bi-gear"></i>
+          </button>
 
           <!-- Notification Bell -->
           <div class="notif-bell-wrapper" id="notif-bell-wrapper">
             <button class="notif-bell-btn" id="notif-bell-btn" title="Thông báo phòng đến hạn" onclick="toggleNotifPanel()">
-              🔔
+              <i class="bi bi-bell"></i>
               <span class="notif-badge" id="notif-badge" style="display:none;">0</span>
             </button>
             <!-- Dropdown Panel -->
             <div class="notif-panel" id="notif-panel" style="display:none;">
               <div class="notif-panel-header">
-                <span>🔔 Phòng chưa đóng tiền tháng này</span>
+                <span><i class="bi bi-bell"></i> Phòng chưa đóng tiền tháng này</span>
                 <button class="notif-close-btn" onclick="toggleNotifPanel()">✕</button>
               </div>
               <div id="notif-list" class="notif-list">
@@ -104,28 +111,28 @@
           <!-- Stats Grid -->
           <div class="stats-grid">
             <div class="stat-card">
-              <div class="stat-icon bg-primary">🔑</div>
+              <div class="stat-icon bg-primary"><i class="bi bi-key"></i></div>
               <div class="stat-info">
                 <h3>Tổng số phòng</h3>
                 <p id="stat-total-rooms">50</p>
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-icon bg-success">🟢</div>
+              <div class="stat-icon bg-success"><i class="bi bi-circle-fill" style="color:#16a34a"></i></div>
               <div class="stat-info">
                 <h3>Phòng trống</h3>
                 <p id="stat-vacant-rooms">0</p>
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-icon bg-warning">🟡</div>
+              <div class="stat-icon bg-warning"><i class="bi bi-circle-fill" style="color:#eab308"></i></div>
               <div class="stat-info">
                 <h3>Đang thuê</h3>
                 <p id="stat-occupied-rooms">0</p>
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-icon bg-danger">🔴</div>
+              <div class="stat-icon bg-danger"><i class="bi bi-circle-fill" style="color:#dc2626"></i></div>
               <div class="stat-info">
                 <h3>Đang sửa chữa</h3>
                 <p id="stat-maintenance-rooms">0</p>
@@ -136,12 +143,12 @@
           <!-- Financial Overview -->
           <div class="financial-grid">
             <div class="financial-card card-rent">
-              <h3>💰 Tổng tiền thuê phòng thu dự kiến</h3>
+              <h3><i class="bi bi-cash-stack"></i> Tổng tiền thuê phòng thu dự kiến</h3>
               <p class="money-text" id="stat-total-rent">0đ</p>
               <span>Tính trên các phòng đang hoạt động</span>
             </div>
             <div class="financial-card card-electric">
-              <h3>⚡ Tổng tiền điện tháng này</h3>
+              <h3><i class="bi bi-lightning"></i> Tổng tiền điện tháng này</h3>
               <p class="money-text" id="stat-total-electric">0đ</p>
               <span id="stat-electric-month-label">Chưa có chỉ số điện tháng này</span>
             </div>
@@ -152,7 +159,7 @@
             <h2>Thống kê thu tiền tháng này</h2>
             <div class="payment-summary-grid" style="margin-top: 16px;">
               <div class="pay-sum-card card-collected">
-                <span class="pay-sum-icon">✅</span>
+                <span class="pay-sum-icon"><i class="bi bi-check-circle" style="color:#16a34a"></i></span>
                 <div class="pay-sum-info">
                   <h3>Đã thu được</h3>
                   <p id="stat-collected">0đ</p>
@@ -160,7 +167,7 @@
                 </div>
               </div>
               <div class="pay-sum-card card-pending">
-                <span class="pay-sum-icon">⏳</span>
+                <span class="pay-sum-icon"><i class="bi bi-hourglass-split" style="color:#f59e0b"></i></span>
                 <div class="pay-sum-info">
                   <h3>Còn lại cần thu</h3>
                   <p id="stat-pending">0đ</p>
@@ -174,9 +181,9 @@
           <div class="dashboard-actions">
             <h2>Hành động nhanh</h2>
             <div class="action-buttons">
-              <button class="btn btn-primary" onclick="switchTab('rooms')">🔑 Xem DS Phòng</button>
-              <button class="btn btn-warning" onclick="switchTab('payments')">💰 Thu Tiền Tháng Này</button>
-              <button class="btn btn-secondary" onclick="switchTab('electricity')">⚡ Nhập số điện</button>
+              <button class="btn btn-primary" onclick="switchTab('rooms')"><i class="bi bi-key"></i> Xem DS Phòng</button>
+              <button class="btn btn-warning" onclick="switchTab('payments')"><i class="bi bi-cash-stack"></i> Thu Tiền Tháng Này</button>
+              <button class="btn btn-secondary" onclick="switchTab('electricity')"><i class="bi bi-lightning"></i> Nhập số điện</button>
 
             </div>
           </div>
@@ -230,10 +237,10 @@
           <!-- Mode toggle tabs -->
           <div class="elec-mode-tabs">
             <button class="elec-mode-btn active" data-mode="single">
-              ⚡ Nhập từng phòng
+              <i class="bi bi-lightning"></i> Nhập từng phòng
             </button>
             <button class="elec-mode-btn" data-mode="bulk">
-              📋 Nhập hàng loạt
+              <i class="bi bi-clipboard-data"></i> Nhập hàng loạt
             </button>
           </div>
 
@@ -242,7 +249,7 @@
             <div class="electric-management-container">
               <!-- Form nhập số điện -->
               <div class="card card-form">
-                <h3>⚡ Nhập chỉ số điện hàng tháng</h3>
+                <h3><i class="bi bi-lightning"></i> Nhập chỉ số điện hàng tháng</h3>
                 <form id="electric-form">
                   <div class="form-group">
                     <label for="elec-room-select">Chọn phòng</label>
@@ -281,7 +288,7 @@
 
               <!-- Bảng lịch sử điện của phòng được chọn -->
               <div class="card card-table">
-                <h3>🗓️ Lịch sử chỉ số điện gần đây</h3>
+                <h3><i class="bi bi-calendar3"></i> Lịch sử chỉ số điện gần đây</h3>
                 <div class="table-responsive">
                   <table class="table">
                     <thead>
@@ -322,7 +329,7 @@
                   </div>
                   <div style="display:flex; gap:8px; align-items:flex-end;">
                     <button id="btn-load-bulk" class="btn btn-primary" style="white-space:nowrap;">
-                      📋 Tải danh sách phòng
+                      <i class="bi bi-clipboard-data"></i> Tải danh sách phòng
                     </button>
                   </div>
                 </div>
@@ -332,15 +339,15 @@
                 <div class="bulk-filter-pills">
                   <button class="bulk-pill active" data-filter="all">Tất cả</button>
                   <button class="bulk-pill" data-filter="occupied">Đang thuê</button>
-                  <button class="bulk-pill" data-filter="missing">⚠️ Chưa nhập</button>
-                  <button class="bulk-pill" data-filter="done">✅ Đã nhập</button>
+                  <button class="bulk-pill" data-filter="missing"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</button>
+                  <button class="bulk-pill" data-filter="done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</button>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
                   <label style="font-size:12px;font-weight:600;white-space:nowrap;">Đợt thu:</label>
                   <div class="bulk-filter-pills">
                     <button class="bulk-billing-pill active" data-billing="all">Tất cả</button>
-                    <button class="bulk-billing-pill" data-billing="15">📅 Đợt 15</button>
-                    <button class="bulk-billing-pill" data-billing="30">📅 Đợt 30</button>
+                    <button class="bulk-billing-pill" data-billing="15"><i class="bi bi-calendar-event"></i> Đợt 15</button>
+                    <button class="bulk-billing-pill" data-billing="30"><i class="bi bi-calendar-event"></i> Đợt 30</button>
                   </div>
                 </div>
               </div>
@@ -349,23 +356,23 @@
             <!-- Summary bar (ẩn ban đầu) -->
             <div id="bulk-summary-bar" class="bulk-summary-bar" style="display:none;">
               <div class="bulk-sum-item">
-                <span>📊 Tổng phòng</span>
+                <span><i class="bi bi-bar-chart-line"></i> Tổng phòng</span>
                 <strong id="bulk-sum-total">0</strong>
               </div>
               <div class="bulk-sum-item green">
-                <span>✅ Đã nhập</span>
+                <span><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</span>
                 <strong id="bulk-sum-done">0</strong>
               </div>
               <div class="bulk-sum-item orange">
-                <span>⚠️ Chưa nhập</span>
+                <span><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</span>
                 <strong id="bulk-sum-missing">0</strong>
               </div>
               <div class="bulk-sum-item blue">
-                <span>⚡ Tổng tiêu thụ</span>
+                <span><i class="bi bi-lightning"></i> Tổng tiêu thụ</span>
                 <strong id="bulk-sum-kwh">0 kWh</strong>
               </div>
               <div class="bulk-sum-item purple">
-                <span>💰 Tổng tiền điện</span>
+                <span><i class="bi bi-cash-stack"></i> Tổng tiền điện</span>
                 <strong id="bulk-sum-cost">0đ</strong>
               </div>
             </div>
@@ -373,10 +380,10 @@
             <!-- Bulk input table -->
             <div id="bulk-table-container" class="card" style="display:none; padding: 0; overflow: hidden;">
               <div class="bulk-table-header">
-                <h3>⚡ Nhập chỉ số điện hàng loạt — <span id="bulk-period-label">--/----</span></h3>
+                <h3><i class="bi bi-lightning"></i> Nhập chỉ số điện hàng loạt — <span id="bulk-period-label">--/----</span></h3>
                 <div style="display:flex; gap: 8px;">
                   <button id="btn-bulk-save" class="btn btn-success">
-                    💾 Lưu tất cả
+                    <i class="bi bi-save"></i> Lưu tất cả
                   </button>
                 </div>
               </div>
@@ -387,7 +394,7 @@
                       <th style="width:100px;">Phòng</th>
                       <th style="width:60px;">Khu</th>
                       <th style="width:100px;">Chỉ số cũ</th>
-                      <th style="width:140px;">Chỉ số mới ✏️</th>
+                      <th style="width:140px;">Chỉ số mới <i class="bi bi-pencil"></i></th>
                       <th style="width:90px;">Tiêu thụ</th>
                       <th>Tiền điện</th>
                       <th style="width:90px;">Trạng thái</th>
@@ -405,7 +412,7 @@
               <!-- Footer save button -->
               <div class="bulk-table-footer">
                 <button id="btn-bulk-save-bottom" class="btn btn-success btn-block">
-                  💾 Lưu tất cả chỉ số điện đã nhập
+                  <i class="bi bi-save"></i> Lưu tất cả chỉ số điện đã nhập
                 </button>
               </div>
             </div>
@@ -413,16 +420,16 @@
             <!-- === KHU VỰC DÁN TIN NHẮN CHAT NHẬP SỐ ĐIỆN === -->
             <div id="bulk-chat-panel" class="card" style="display:none; margin-bottom: 0; padding: 16px 20px; border: 2px dashed var(--primary); background: var(--primary-soft, #f0f4ff);">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                <span style="font-size:18px;">💬</span>
+                <span style="font-size:18px;"><i class="bi bi-chat-dots"></i></span>
                 <h4 style="margin:0;font-size:14px;font-weight:600;color:var(--primary);">Nhập số điện từ tin nhắn chat</h4>
                 <button id="btn-close-chat-panel" style="margin-left:auto;background:none;border:none;font-size:18px;cursor:pointer;color:var(--neutral-gray);" title="Đóng">✕</button>
               </div>
               <p style="font-size:12px;color:var(--neutral-gray);margin-bottom:8px;">Dán nội dung tin nhắn vào ô bên dưới. Hệ thống sẽ tự động tìm mã phòng và chỉ số điện để điền vào bảng.</p>
-              <p style="font-size:12px;color:var(--neutral-gray);margin-bottom:10px;">📌 Ví dụ: <em>A101: 2500, A102 - 2640, phòng B101 số 905</em></p>
+              <p style="font-size:12px;color:var(--neutral-gray);margin-bottom:10px;"><i class="bi bi-pin-angle"></i> Ví dụ: <em>A101: 2500, A102 - 2640, phòng B101 số 905</em></p>
               <textarea id="bulk-chat-input" class="form-control" rows="5" placeholder="Dán tin nhắn chat vào đây..."></textarea>
               <div style="display:flex;gap:8px;margin-top:10px;">
-                <button id="btn-parse-chat" class="btn btn-primary">⚡ Tự động điền số điện</button>
-                <button id="btn-clear-chat" class="btn btn-secondary">🗑️ Xóa</button>
+                <button id="btn-parse-chat" class="btn btn-primary"><i class="bi bi-lightning"></i> Tự động điền số điện</button>
+                <button id="btn-clear-chat" class="btn btn-secondary"><i class="bi bi-trash"></i> Xóa</button>
               </div>
               <div id="bulk-chat-result" style="margin-top:10px;font-size:13px;"></div>
             </div>
@@ -447,14 +454,14 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <div class="payments-legend">
-                <span class="legend-item legend-paid">✅ Đã thu</span>
-                <span class="legend-item legend-unpaid">⏳ Chưa thu</span>
+                <span class="legend-item legend-paid"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã thu</span>
+                <span class="legend-item legend-unpaid"><i class="bi bi-hourglass-split" style="color:#f59e0b"></i> Chưa thu</span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <label style="font-size:12px;font-weight:600;white-space:nowrap;">Đợt thu:</label>
                 <button class="btn btn-sm pay-billing-pill active" data-billing="all">Tất cả</button>
-                <button class="btn btn-sm pay-billing-pill" data-billing="15">📅 Đợt 15</button>
-                <button class="btn btn-sm pay-billing-pill" data-billing="30">📅 Đợt 30</button>
+                <button class="btn btn-sm pay-billing-pill" data-billing="15"><i class="bi bi-calendar-event"></i> Đợt 15</button>
+                <button class="btn btn-sm pay-billing-pill" data-billing="30"><i class="bi bi-calendar-event"></i> Đợt 30</button>
               </div>
             </div>
           </div>
@@ -462,16 +469,16 @@
           <!-- Tổng kết thu tiền tháng -->
           <div class="payments-stats-bar" id="payments-stats-bar">
             <div class="pay-stat-item">
-              <span class="pay-stat-label">🏠 Tổng phòng đang thuê</span>
+              <span class="pay-stat-label"><i class="bi bi-house"></i> Tổng phòng đang thuê</span>
               <strong id="pay-stat-total">--</strong>
             </div>
             <div class="pay-stat-item green">
-              <span class="pay-stat-label">✅ Đã thu</span>
+              <span class="pay-stat-label"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã thu</span>
               <strong id="pay-stat-paid">-- phòng</strong>
               <span id="pay-stat-collected-amount" class="pay-money">0đ</span>
             </div>
             <div class="pay-stat-item orange">
-              <span class="pay-stat-label">⏳ Chưa thu</span>
+              <span class="pay-stat-label"><i class="bi bi-hourglass-split" style="color:#f59e0b"></i> Chưa thu</span>
               <strong id="pay-stat-unpaid">-- phòng</strong>
               <span id="pay-stat-pending-amount" class="pay-money">0đ</span>
             </div>
@@ -480,11 +487,11 @@
           <!-- Bảng thu tiền từng phòng -->
           <div class="payments-table-card card">
             <div class="payments-table-header">
-              <h3>💰 Danh sách thu tiền tháng <span id="pay-month-display">--/----</span></h3>
+              <h3><i class="bi bi-cash-stack"></i> Danh sách thu tiền tháng <span id="pay-month-display">--/----</span></h3>
               <div class="pay-filter-btns">
                 <button class="btn btn-sm pay-filter-btn active" data-filter="all">Tất cả</button>
-                <button class="btn btn-sm pay-filter-btn" data-filter="unpaid">⏳ Chưa thu</button>
-                <button class="btn btn-sm pay-filter-btn" data-filter="paid">✅ Đã thu</button>
+                <button class="btn btn-sm pay-filter-btn" data-filter="unpaid"><i class="bi bi-hourglass-split"></i> Chưa thu</button>
+                <button class="btn btn-sm pay-filter-btn" data-filter="paid"><i class="bi bi-check-circle"></i> Đã thu</button>
               </div>
             </div>
             <div class="table-responsive">
@@ -495,9 +502,9 @@
                     <th>Người thuê</th>
                     <th>Tiền thuê</th>
                     <th>Tiền điện</th>
-                    <th>💧 Tiền nước</th>
-                    <th>🗑️ Tiền rác</th>
-                    <th>🛂 Tạm trú</th>
+                    <th><i class="bi bi-droplet"></i> Tiền nước</th>
+                    <th><i class="bi bi-trash"></i> Tiền rác</th>
+                    <th><i class="bi bi-person-badge"></i> Tạm trú</th>
                     <th class="col-total">Tổng cần thu</th>
                     <th>Trạng thái</th>
                     <th>Thao tác</th>
@@ -525,7 +532,7 @@
 
             <!-- Panel trái: Form chọn phòng -->
             <div class="invoice-select-panel card">
-              <h3>🧾 Tạo Hóa Đơn</h3>
+              <h3><i class="bi bi-receipt"></i> Tạo Hóa Đơn</h3>
               <p class="help-text" style="margin-bottom:18px;">Chọn phòng và tháng cần xuất hóa đơn</p>
 
               <div class="form-group">
@@ -548,7 +555,7 @@
 
               <!-- Kỳ thu tiền phòng -->
               <div class="form-group">
-                <label style="font-weight:600; color:var(--primary);">📅 Kỳ thu tiền phòng</label>
+                <label style="font-weight:600; color:var(--primary);"><i class="bi bi-calendar-event"></i> Kỳ thu tiền phòng</label>
                 <div class="form-row" style="margin-top:6px;">
                   <div class="form-group col" style="margin-bottom:0;">
                     <label for="inv-rent-from" style="font-size:12px;">Từ ngày</label>
@@ -564,7 +571,7 @@
 
               <!-- Chỉ số điện năng -->
               <div class="form-group">
-                <label style="font-weight:600; color:var(--primary);">⚡ Chỉ số điện năng</label>
+                <label style="font-weight:600; color:var(--primary);"><i class="bi bi-lightning"></i> Chỉ số điện năng</label>
                 <div class="form-row" style="margin-top:6px;">
                   <div class="form-group col" style="margin-bottom:0;">
                     <label for="inv-elec-old" style="font-size:12px;">Chỉ số cũ</label>
@@ -580,19 +587,36 @@
 
               <!-- Chỉ số điện bàn giao khi nhận phòng -->
               <div class="form-group" id="inv-elec-handover-group" style="display:none;">
-                <label for="inv-elec-handover" style="font-weight:600; color:var(--primary);">🔌 Chỉ số điện bàn giao</label>
+                <label for="inv-elec-handover" style="font-weight:600; color:var(--primary);"><i class="bi bi-plug"></i> Chỉ số điện bàn giao</label>
                 <input type="number" id="inv-elec-handover" class="form-control" min="0" placeholder="Số điện bàn giao khi nhận phòng">
                 <span class="help-text">Chỉ hiển thị khi nhận phòng (Tháng đặt cọc).</span>
               </div>
 
-              <div class="form-group">
-                <label for="inv-residence-option">🛂 Phí tạm trú</label>
-                <select id="inv-residence-option" class="form-control">
-                  <option value="auto">🔄 Tự động (Chỉ tính tháng đầu tiên)</option>
-                  <option value="force">✅ Bắt buộc thêm phí tạm trú</option>
-                  <option value="none">❌ Không tính phí tạm trú</option>
-                </select>
-                <span class="help-text">Dùng "Bắt buộc thêm" khi phòng thuê lâu nhưng chưa thu phí tạm trú.</span>
+              <div class="form-group" id="inv-override-fields" style="display:none;">
+                <label style="font-weight:600; color:var(--primary);"><i class="bi bi-pencil"></i> Chỉnh sửa phí trước khi gửi</label>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px;">
+                  <div>
+                    <label for="inv-override-rent" style="font-size:12px;"><i class="bi bi-house"></i> Tiền thuê</label>
+                    <input type="number" id="inv-override-rent" class="form-control" min="0" placeholder="Tiền thuê">
+                  </div>
+                  <div>
+                    <label for="inv-override-water" style="font-size:12px;"><i class="bi bi-droplet"></i> Tiền nước</label>
+                    <input type="number" id="inv-override-water" class="form-control" min="0" placeholder="Tiền nước">
+                  </div>
+                  <div>
+                    <label for="inv-override-trash" style="font-size:12px;"><i class="bi bi-trash"></i> Tiền rác</label>
+                    <input type="number" id="inv-override-trash" class="form-control" min="0" placeholder="Tiền rác">
+                  </div>
+                  <div>
+                    <label for="inv-override-deposit" style="font-size:12px;"><i class="bi bi-handshake"></i> Tiền cọc</label>
+                    <input type="number" id="inv-override-deposit" class="form-control" min="0" placeholder="Tiền đặt cọc">
+                  </div>
+                  <div>
+                    <label for="inv-override-residence" style="font-size:12px;"><i class="bi bi-person-badge"></i> Phí tạm trú</label>
+                    <input type="number" id="inv-override-residence" class="form-control" min="0" placeholder="Phí tạm trú">
+                  </div>
+                </div>
+                <span class="help-text">Bấm "Xem trước" trước, sau đó chỉnh sửa số tiền nếu cần.</span>
               </div>
 
               <div class="form-group">
@@ -602,14 +626,14 @@
               </div>
 
               <button id="btn-preview-invoice" class="btn btn-primary btn-block" style="margin-top:8px;">
-                👁️ Xem trước hóa đơn
+                <i class="bi bi-eye"></i> Xem trước hóa đơn
               </button>
             </div>
 
             <!-- Panel phải: Xem trước hóa đơn -->
             <div class="invoice-preview-panel">
               <div id="invoice-empty-state" class="invoice-empty">
-                <div class="invoice-empty-icon">🧾</div>
+                <div class="invoice-empty-icon"><i class="bi bi-receipt" style="font-size:48px"></i></div>
                 <h3>Chưa có hóa đơn nào</h3>
                 <p>Chọn phòng và tháng ở bên trái, sau đó bấm "Xem trước" để tạo hóa đơn</p>
               </div>
@@ -618,10 +642,10 @@
               <div id="invoice-preview-container" style="display:none;">
                 <!-- Action buttons -->
                 <div class="invoice-actions-bar">
-                  <button id="btn-print-invoice" class="btn btn-primary">🖨️ In hóa đơn</button>
-                  <button id="btn-download-invoice-img" class="btn btn-success">🖼️ Tải ảnh hóa đơn</button>
-                  <button id="btn-share-zalo" class="btn btn-zalo" onclick="shareInvoiceViaZalo()">💬 Chia sẻ qua Zalo</button>
-                  <button id="btn-share-invoice" class="btn btn-secondary">📋 Sao chép nội dung</button>
+                  <button id="btn-print-invoice" class="btn btn-primary"><i class="bi bi-printer"></i> In hóa đơn</button>
+                  <button id="btn-download-invoice-img" class="btn btn-success"><i class="bi bi-image"></i> Tải ảnh hóa đơn</button>
+                  <button id="btn-share-zalo" class="btn btn-zalo" onclick="shareInvoiceViaZalo()"><i class="bi bi-chat-dots"></i> Chia sẻ qua Zalo</button>
+                  <button id="btn-share-invoice" class="btn btn-secondary"><i class="bi bi-clipboard-data"></i> Sao chép nội dung</button>
                 </div>
 
                 <!-- Hóa đơn thực tế -->
@@ -645,7 +669,7 @@
                   <!-- Room & Tenant Info -->
                   <div class="inv-info-grid">
                     <div class="inv-info-block">
-                      <h4>📦 Thông tin phòng</h4>
+                      <h4><i class="bi bi-box"></i> Thông tin phòng</h4>
                       <table class="inv-info-table">
                         <tr>
                           <td>Phòng</td>
@@ -662,14 +686,14 @@
                       </table>
                     </div>
                     <div class="inv-info-block">
-                      <h4>👤 Người thuê</h4>
+                      <h4><i class="bi bi-person"></i> Người thuê</h4>
                       <div id="inv-tenants-list" class="inv-tenants-list"></div>
                     </div>
                   </div>
 
                   <!-- Chi tiết khoản thu -->
                   <div class="inv-charges-section">
-                    <h4>📋 Chi tiết khoản thu</h4>
+                    <h4><i class="bi bi-clipboard-data"></i> Chi tiết khoản thu</h4>
                     <table class="inv-charges-table">
                       <thead>
                         <tr>
@@ -681,7 +705,7 @@
                       <tbody id="inv-charges-tbody"></tbody>
                       <tfoot>
                         <tr class="inv-total-row">
-                          <td colspan="2"><strong>💰 TỔNG CỘNG</strong></td>
+                          <td colspan="2"><strong><i class="bi bi-cash-stack"></i> TỔNG CỘNG</strong></td>
                           <td class="text-right"><strong id="inv-grand-total">0đ</strong></td>
                         </tr>
                       </tfoot>
@@ -694,11 +718,11 @@
                   <!-- Thông tin CK + Ghi chú -->
                   <div class="inv-footer-grid">
                     <div class="inv-bank-info" id="inv-bank-info-box">
-                      <h4>🏦 Thông tin chuyển khoản</h4>
+                      <h4><i class="bi bi-bank"></i> Thông tin chuyển khoản</h4>
                       <div id="inv-bank-details"></div>
                     </div>
                     <div class="inv-note-box" id="inv-note-display" style="display:none;">
-                      <h4>📝 Ghi chú</h4>
+                      <h4><i class="bi bi-journal-text"></i> Ghi chú</h4>
                       <p id="inv-note-text"></p>
                     </div>
                   </div>
@@ -713,37 +737,37 @@
 
         <section id="tab-settings" class="tab-pane">
           <div class="card card-settings">
-            <h3>⚙️ Cài đặt hệ thống</h3>
+            <h3><i class="bi bi-gear"></i> Cài đặt hệ thống</h3>
             <form id="settings-form">
-              <h4 style="margin-bottom:14px; font-size:14px;">&#x26a1; Phí dịch vụ</h4>
+              <h4 style="margin-bottom:14px; font-size:14px;"><i class="bi bi-lightning"></i> Phí dịch vụ</h4>
               <div class="form-row">
                 <div class="form-group col">
-                  <label for="setting-electric-price">⚡ Giá điện (VNĐ / kWh)</label>
+                  <label for="setting-electric-price"><i class="bi bi-lightning"></i> Giá điện (VNĐ / kWh)</label>
                   <input type="number" id="setting-electric-price" class="form-control" min="0" required>
                   <span class="help-text">Dùng tự động tính tiền điện khi nhập chỉ số.</span>
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group col">
-                  <label for="setting-water-price">&#x1f4a7; Giá nước (VNĐ / người / tháng)</label>
+                  <label for="setting-water-price"><i class="bi bi-droplet"></i> Giá nước (VNĐ / người / tháng)</label>
                   <input type="number" id="setting-water-price" class="form-control" min="0" placeholder="VD: 20000">
                   <span class="help-text">Tự động tính theo số người đang ở trong phòng.</span>
                 </div>
                 <div class="form-group col">
-                  <label for="setting-trash-price">&#x1f5d1;&#xfe0f; Giá rác (VNĐ / người / tháng)</label>
+                  <label for="setting-trash-price"><i class="bi bi-trash"></i> Giá rác (VNĐ / người / tháng)</label>
                   <input type="number" id="setting-trash-price" class="form-control" min="0" placeholder="VD: 10000">
                   <span class="help-text">Tự động tính theo số người đang ở trong phòng.</span>
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group col">
-                  <label for="setting-residence-price">🛂 Phí tạm trú (VNĐ / người / tháng đầu tiên)</label>
+                  <label for="setting-residence-price"><i class="bi bi-person-badge"></i> Phí tạm trú (VNĐ / người / tháng đầu tiên)</label>
                   <input type="number" id="setting-residence-price" class="form-control" min="0" placeholder="VD: 50000">
                   <span class="help-text">Chỉ tự động tính trong tháng đầu tiên khách dời vào.</span>
                 </div>
               </div>
               <hr style="margin: 20px 0; border-color: var(--border-color);">
-              <h4 style="margin-bottom: 14px; font-size: 14px;">&#x1f3e6; Thông tin ngân hàng (dùng trong hóa đơn)</h4>
+              <h4 style="margin-bottom: 14px; font-size: 14px;"><i class="bi bi-bank"></i> Thông tin ngân hàng (dùng trong hóa đơn)</h4>
               <div class="form-group">
                 <label for="setting-bank-name">Tên ngân hàng</label>
                 <input type="text" id="setting-bank-name" class="form-control" placeholder="VD: Vietcombank">
@@ -762,18 +786,18 @@
             <!-- Khối thông báo đẩy -->
             <hr style="margin: 28px 0; border-color: var(--border-color);">
             <div>
-              <h4 style="margin-bottom:6px; font-size:14px;">🔔 Thông báo đẩy (Push Notification)</h4>
+              <h4 style="margin-bottom:6px; font-size:14px;"><i class="bi bi-bell"></i> Thông báo đẩy (Push Notification)</h4>
               <p class="help-text" style="margin-bottom:16px;">Cho phép hệ thống gửi thông báo đến điện thoại / máy tính khi phòng sắp đến hạn đóng tiền.</p>
               <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                 <div id="notif-permission-status" style="display:flex; align-items:center; gap:8px; font-size:14px; font-weight:500; padding:8px 14px; border-radius:8px; background:var(--neutral-light); border:1px solid var(--border-color);">
-                  <span id="notif-perm-icon">⏳</span>
+                  <span id="notif-perm-icon"><i class="bi bi-hourglass-split"></i></span>
                   <span id="notif-perm-text">Đang kiểm tra quyền...</span>
                 </div>
                 <button id="btn-request-notif" class="btn btn-primary" onclick="requestPushPermission()" style="display:none;">
-                  🔔 Bật thông báo
+                  <i class="bi bi-bell"></i> Bật thông báo
                 </button>
                 <button class="btn btn-secondary" onclick="testPushNotification()" id="btn-test-notif">
-                  🧪 Test thông báo
+                  <i class="bi bi-flask"></i> Test thông báo
                 </button>
               </div>
             </div>
@@ -824,7 +848,7 @@
             <span>Đợt thu tiền:</span>
             <strong id="modal-room-billing-day">Ngày 30</strong>
           </div>
-          <button class="btn btn-sm btn-outline-secondary btn-edit-room" id="btn-edit-room-trigger">⚙️ Chỉnh sửa thông
+          <button class="btn btn-sm btn-outline-secondary btn-edit-room" id="btn-edit-room-trigger"><i class="bi bi-gear"></i> Chỉnh sửa thông
             tin phòng</button>
         </div>
 
@@ -845,9 +869,9 @@
             <div class="form-group col">
               <label for="edit-status">Trạng thái phòng</label>
               <select id="edit-status" class="form-control">
-                <option value="vacant">🟢 Trống</option>
-                <option value="occupied">🟠 Đang thuê</option>
-                <option value="maintenance">🔴 Sửa chữa</option>
+                <option value="vacant"><i class="bi bi-circle-fill" style="color:#16a34a"></i> Trống</option>
+                <option value="occupied"><i class="bi bi-circle-fill" style="color:#f97316"></i> Đang thuê</option>
+                <option value="maintenance"><i class="bi bi-circle-fill" style="color:#dc2626"></i> Sửa chữa</option>
               </select>
             </div>
             <div class="form-group col">
@@ -857,7 +881,7 @@
           </div>
           <div class="form-row">
             <div class="form-group col">
-              <label for="edit-billing-day">📅 Đợt thu tiền</label>
+              <label for="edit-billing-day"><i class="bi bi-calendar-event"></i> Đợt thu tiền</label>
               <select id="edit-billing-day" class="form-control">
                 <option value="30">Ngày 30 (Đợt cuối tháng)</option>
                 <option value="15">Ngày 15 (Đợt giữa tháng)</option>
@@ -876,7 +900,7 @@
         <!-- Section: Tenants List -->
         <div class="modal-section">
           <div class="section-header-row">
-            <h3>👥 Danh sách người thuê</h3>
+            <h3><i class="bi bi-people"></i> Danh sách người thuê</h3>
             <button class="btn btn-sm btn-primary" id="btn-add-tenant-trigger">+ Thêm người ở</button>
           </div>
 
@@ -927,7 +951,7 @@
 
         <!-- Section: Billing History -->
         <div class="modal-section">
-          <h3>🗓️ Lịch sử hóa đơn & điện nước (12 tháng gần nhất)</h3>
+          <h3><i class="bi bi-calendar3"></i> Lịch sử hóa đơn & điện nước (12 tháng gần nhất)</h3>
           <div class="table-responsive">
             <table class="table" style="font-size: 13px;">
               <thead>
@@ -936,9 +960,9 @@
                   <th>Người thuê</th>
                   <th>Tiền phòng</th>
                   <th>Tiền điện</th>
-                  <th>💧 Nước</th>
-                  <th>🗑️ Rác</th>
-                  <th>🛂 Tạm trú</th>
+                  <th><i class="bi bi-droplet"></i> Nước</th>
+                  <th><i class="bi bi-trash"></i> Rác</th>
+                  <th><i class="bi bi-person-badge"></i> Tạm trú</th>
                   <th>Tổng cộng</th>
                   <th>Trạng thái</th>
                 </tr>
@@ -994,44 +1018,47 @@
     </div>
   </div>
 
-  <!-- Bottom Navigation for Mobile -->
+  <!-- Bottom Navigation for Mobile — 5-Tab Floating Island with Center Dashboard -->
   <nav class="bottom-nav mobile-only-flex">
-    <a href="#" class="bottom-nav-item active" data-tab="dashboard">
-      <span class="bottom-nav-icon">📊</span>
-      <span class="bottom-nav-text">Dashboard</span>
-    </a>
     <a href="#" class="bottom-nav-item" data-tab="rooms">
-      <span class="bottom-nav-icon">🔑</span>
+      <span class="bottom-nav-icon"><i class="bi bi-key"></i></span>
       <span class="bottom-nav-text">Phòng</span>
     </a>
     <a href="#" class="bottom-nav-item" data-tab="electricity">
-      <span class="bottom-nav-icon">⚡</span>
-      <span class="bottom-nav-text">Số Điện</span>
+      <span class="bottom-nav-icon"><i class="bi bi-lightning"></i></span>
+      <span class="bottom-nav-text">Điện</span>
+    </a>
+    <a href="#" class="bottom-nav-item bottom-nav-center active" data-tab="dashboard" aria-label="Dashboard">
+      <div class="center-btn-bubble">
+        <i class="bi bi-house-door-fill"></i>
+      </div>
+      <span class="bottom-nav-text center-text">Tổng quan</span>
     </a>
     <a href="#" class="bottom-nav-item" data-tab="payments">
-      <span class="bottom-nav-icon">💰</span>
+      <span class="bottom-nav-icon"><i class="bi bi-wallet2"></i></span>
       <span class="bottom-nav-text">Thu Tiền</span>
     </a>
     <a href="#" class="bottom-nav-item" data-tab="invoice">
-      <span class="bottom-nav-icon">🧾</span>
+      <span class="bottom-nav-icon"><i class="bi bi-receipt"></i></span>
       <span class="bottom-nav-text">Hóa Đơn</span>
-    </a>
-    <a href="#" class="bottom-nav-item" data-tab="settings">
-      <span class="bottom-nav-icon">⚙️</span>
-      <span class="bottom-nav-text">Cài đặt</span>
     </a>
   </nav>
 
   <!-- Sidebar Overlay for mobile -->
   <div id="sidebar-overlay" class="sidebar-overlay-bg"></div>
 
+  <!-- WebGL Liquid Glass Canvas (behind bottom nav) -->
+  <canvas id="glass-canvas" class="mobile-only"></canvas>
+
   <!-- html2canvas for downloading invoice as image -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- Three.js for WebGL Liquid Glass effect -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <!-- Floating LISO Assistant Widget -->
   <div id="liso-assistant-widget" class="assistant-widget">
     <!-- Bubble Button -->
     <button id="btn-assistant-toggle" class="assistant-bubble-btn" title="Trò chuyện với Trợ lý LISO">
-      <span class="bubble-icon">💬</span>
+      <span class="bubble-icon"><i class="bi bi-chat-dots"></i></span>
       <span class="bubble-tooltip">Trợ lý LISO</span>
     </button>
 
@@ -1039,10 +1066,10 @@
     <div id="assistant-chat-box" class="assistant-chat-box" style="display: none;">
       <div class="chat-box-header">
         <div class="chat-box-title">
-          <span class="chat-avatar">🤖</span>
+          <span class="chat-avatar"><i class="bi bi-robot"></i></span>
           <div>
             <h4>Trợ lý LISO</h4>
-            <span class="chat-status">🟢 Đang trực tuyến</span>
+            <span class="chat-status"><i class="bi bi-circle-fill" style="color:#16a34a"></i> Đang trực tuyến</span>
           </div>
         </div>
         <button id="btn-assistant-close" class="chat-close-btn">&times;</button>
@@ -1060,18 +1087,18 @@
 
       <!-- Quick Commands Chips -->
       <div class="chat-quick-chips">
-        <button class="chip-btn" data-cmd="/help">❓ Hướng dẫn</button>
-        <button class="chip-btn" data-cmd="/dien">⚡ Chưa nhập điện</button>
-        <button class="chip-btn" data-cmd="/dien15">📅 Lệnh điện đợt 15</button>
-        <button class="chip-btn" data-cmd="/dien30">📅 Lệnh điện đợt 30</button>
-        <button class="chip-btn" data-cmd="/sodien">💡 Xem số điện</button>
-        <button class="chip-btn" data-cmd="/chuathu">💰 Chưa đóng tiền</button>
-        <button class="chip-btn" data-cmd="/baocao">📊 Báo cáo tháng</button>
+        <button class="chip-btn" data-cmd="/help"><i class="bi bi-question-circle"></i> Hướng dẫn</button>
+        <button class="chip-btn" data-cmd="/dien"><i class="bi bi-lightning"></i> Chưa nhập điện</button>
+        <button class="chip-btn" data-cmd="/dien15"><i class="bi bi-calendar-event"></i> Lệnh điện đợt 15</button>
+        <button class="chip-btn" data-cmd="/dien30"><i class="bi bi-calendar-event"></i> Lệnh điện đợt 30</button>
+        <button class="chip-btn" data-cmd="/sodien"><i class="bi bi-lightbulb"></i> Xem số điện</button>
+        <button class="chip-btn" data-cmd="/chuathu"><i class="bi bi-cash-stack"></i> Chưa đóng tiền</button>
+        <button class="chip-btn" data-cmd="/baocao"><i class="bi bi-bar-chart-line"></i> Báo cáo tháng</button>
       </div>
 
       <form id="assistant-chat-form" class="chat-box-footer">
         <input type="text" id="assistant-chat-input" placeholder="Nhập câu lệnh (VD: A101: 2500)..." autocomplete="off" required>
-        <button type="submit" class="chat-send-btn">✈️</button>
+        <button type="submit" class="chat-send-btn"><i class="bi bi-send"></i></button>
       </form>
     </div>
   </div>

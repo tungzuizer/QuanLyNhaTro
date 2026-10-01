@@ -90,8 +90,9 @@ function initApp() {
   // 6. Khởi tạo cài đặt quyền thông báo đẩy
   initPushNotifications();
 
-  // 7. Tải trạng thái Telegram Bot
-  loadTelegramStatus();
+  // 7. Khởi tạo WebGL Liquid Glass cho bottom nav (mobile)
+  initLiquidGlassWebGL();
+
 }
 
 // ==========================================
@@ -99,7 +100,7 @@ function initApp() {
 // ==========================================
 function initTabs() {
   const navItems = document.querySelectorAll('.nav-item');
-  const bottomNavItems = document.querySelectorAll('.bottom-nav-item');
+  const bottomNavItems = document.querySelectorAll('.bottom-nav-item[data-tab]');
 
   const handleTabClick = (item) => {
     const tabId = item.getAttribute('data-tab');
@@ -120,7 +121,44 @@ function initTabs() {
     });
   });
 
+  initMobileDrawer();
+}
 
+function initMobileDrawer() {
+  const btnMore = document.getElementById('btn-more-menu');
+  const overlay = document.getElementById('mobile-drawer-overlay');
+  const drawer = document.getElementById('mobile-drawer');
+  const drawerItems = document.querySelectorAll('.mobile-drawer-item');
+
+  if (!btnMore || !overlay) return;
+
+  const openDrawer = () => {
+    overlay.classList.add('open');
+  };
+
+  const closeDrawer = () => {
+    overlay.classList.remove('open');
+  };
+
+  btnMore.addEventListener('click', (e) => {
+    e.preventDefault();
+    openDrawer();
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeDrawer();
+  });
+
+  drawerItems.forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      const tabId = item.getAttribute('data-tab');
+      if (tabId) {
+        switchTab(tabId);
+        closeDrawer();
+      }
+    });
+  });
 }
 
 function initMobileMenu() {
@@ -150,6 +188,11 @@ function initMobileMenu() {
   }
 }
 
+function initLiquidGlassWebGL() {
+  // Pure CSS Frosted Glass (Floating Island) is used for iOS styling
+  return;
+}
+
 function switchTab(tabId) {
   currentState.currentTab = tabId;
   localStorage.setItem('currentTab', tabId);
@@ -163,14 +206,40 @@ function switchTab(tabId) {
     }
   });
 
-  // Cập nhật Active class trên Bottom Navigation (Mobile)
-  document.querySelectorAll('.bottom-nav-item').forEach(item => {
-    if (item.getAttribute('data-tab') === tabId) {
+  // Cập nhật Active class & icon outline/fill trên Bottom Navigation (iOS Style)
+  const navIconMap = {
+    dashboard: { active: 'bi-house-door-fill', inactive: 'bi-house-door' },
+    rooms: { active: 'bi-key-fill', inactive: 'bi-key' },
+    electricity: { active: 'bi-lightning-charge-fill', inactive: 'bi-lightning' },
+    payments: { active: 'bi-wallet-fill', inactive: 'bi-wallet2' },
+    invoice: { active: 'bi-receipt-cutoff', inactive: 'bi-receipt' }
+  };
+
+  document.querySelectorAll('.bottom-nav-item[data-tab]').forEach(item => {
+    const tId = item.getAttribute('data-tab');
+    const iconEl = item.querySelector('.bottom-nav-icon i, .center-btn-bubble i');
+    if (tId === tabId) {
       item.classList.add('active');
+      if (iconEl && navIconMap[tId]) {
+        iconEl.className = `bi ${navIconMap[tId].active}`;
+      }
     } else {
       item.classList.remove('active');
+      if (iconEl && navIconMap[tId]) {
+        iconEl.className = `bi ${navIconMap[tId].inactive}`;
+      }
     }
   });
+
+  // Cập nhật trạng thái nút Cài đặt trên Mobile Topbar
+  const btnMobileSettings = document.getElementById('btn-mobile-settings');
+  if (btnMobileSettings) {
+    if (tabId === 'settings') {
+      btnMobileSettings.classList.add('active');
+    } else {
+      btnMobileSettings.classList.remove('active');
+    }
+  }
 
   // Cập nhật Page Title
   const titles = {
@@ -377,9 +446,9 @@ function showToast(message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
 
-  let icon = 'ℹ️';
-  if (type === 'success') icon = '✅';
-  if (type === 'error') icon = '❌';
+  let icon = '<i class="bi bi-info-circle"></i>';
+  if (type === 'success') icon = '<i class="bi bi-check-circle" style="color:#16a34a"></i>';
+  if (type === 'error') icon = '<i class="bi bi-x-circle" style="color:#dc2626"></i>';
 
   toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
   container.appendChild(toast);
@@ -626,7 +695,7 @@ function renderRoomsGrid(rooms) {
       <div class="room-code">${room.room_code}</div>
       <div class="room-status">${statusText}</div>
       <div class="room-price">${priceLabel}</div>
-      <div class="room-members">${room.member_count > 0 ? `👥 ${room.member_count} người` : 'Trống'}</div>
+      <div class="room-members">${room.member_count > 0 ? `<i class="bi bi-people"></i> ${room.member_count} người` : 'Trống'}</div>
     `;
 
     card.addEventListener('click', () => openRoomDetailModal(room.id));
@@ -731,7 +800,7 @@ function renderRoomPaymentHistory(paymentHistory) {
       <td><strong>${formatVND(p.total_amount)}</strong></td>
       <td>
         <span class="pay-status-badge ${isPaid ? 'paid' : 'unpaid'}">
-          ${isPaid ? '✅ Đã đóng' : '⏳ Chưa đóng'}
+          ${isPaid ? '<i class="bi bi-check-circle" style="color:#16a34a"></i> Đã đóng' : '<i class="bi bi-hourglass-split" style="color:#f59e0b"></i> Chưa đóng'}
         </span>
       </td>
     `;
@@ -759,9 +828,9 @@ function renderTenantsList(tenants) {
       <div class="tenant-main-info">
         <h4 class="tenant-name-heading"></h4>
         <div class="tenant-meta">
-          <span>📞 SĐT: <strong class="tenant-phone-label"></strong></span>
-          <span>🪪 CCCD: <strong class="tenant-cccd-label"></strong></span>
-          <span>📅 HĐ: ${startDateStr} ➔ ${endDateStr}</span>
+          <span><i class="bi bi-telephone"></i> SĐT: <strong class="tenant-phone-label"></strong></span>
+          <span><i class="bi bi-person-vcard"></i> CCCD: <strong class="tenant-cccd-label"></strong></span>
+          <span><i class="bi bi-calendar-event"></i> HĐ: ${startDateStr} ➔ ${endDateStr}</span>
         </div>
         <div class="tenant-notes-label" style="display: none; margin-top: 5px;"></div>
       </div>
@@ -777,7 +846,8 @@ function renderTenantsList(tenants) {
 
     if (tenant.notes) {
       const notesEl = card.querySelector('.tenant-notes-label');
-      notesEl.textContent = `📝 ${tenant.notes}`;
+      notesEl.textContent = ``;
+      notesEl.innerHTML = `<i class="bi bi-journal-text"></i> ${tenant.notes}`;
       notesEl.style.display = 'block';
     }
 
@@ -1052,7 +1122,7 @@ async function handleElectricitySubmit(e) {
 // (Search tab removed)
 
 // ==========================================
-// 7. THU TIỀN THÁNG (PAYMENTS TAB)  💰
+// 7. THU TIỀN THÁNG (PAYMENTS TAB)
 // ==========================================
 
 let paymentsData = []; // Cache dữ liệu để filter local
@@ -1146,7 +1216,7 @@ function renderPaymentsTable(data) {
     tbody.innerHTML = `
       <tr>
         <td colspan="10" class="text-center text-muted" style="padding: 40px;">
-          ✅ Không có phòng nào đang thuê trong tháng này hoặc chưa có dữ liệu
+          <i class="bi bi-check-circle" style="color:#16a34a"></i> Không có phòng nào đang thuê trong tháng này hoặc chưa có dữ liệu
         </td>
       </tr>
     `;
@@ -1216,13 +1286,13 @@ function renderPaymentsTable(data) {
     let statusBadgeHtml = '';
     if (!isPaid) {
       if (row.daysUntilDue < 0) {
-        statusBadgeHtml = `<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;">⚠️ Trễ ${Math.abs(row.daysUntilDue)} ngày</div>`;
+        statusBadgeHtml = `<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;"><i class="bi bi-exclamation-triangle" style="color:#dc2626"></i> Trễ ${Math.abs(row.daysUntilDue)} ngày</div>`;
       } else if (row.daysUntilDue === 0) {
-        statusBadgeHtml = `<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;">🚨 Hạn hôm nay!</div>`;
+        statusBadgeHtml = `<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;"><i class="bi bi-exclamation-octagon" style="color:#dc2626"></i> Hạn hôm nay!</div>`;
       } else if (row.daysUntilDue <= 3) {
-        statusBadgeHtml = `<div style="font-size:11px;color:#b45309;font-weight:600;margin-top:4px;">⏰ Còn ${row.daysUntilDue} ngày</div>`;
+        statusBadgeHtml = `<div style="font-size:11px;color:#b45309;font-weight:600;margin-top:4px;"><i class="bi bi-alarm" style="color:#b45309"></i> Còn ${row.daysUntilDue} ngày</div>`;
       } else {
-        statusBadgeHtml = `<div style="font-size:11px;color:var(--neutral-gray);margin-top:4px;">📅 Hạn: ${row.dueDateStr}</div>`;
+        statusBadgeHtml = `<div style="font-size:11px;color:var(--neutral-gray);margin-top:4px;"><i class="bi bi-calendar-event"></i> Hạn: ${row.dueDateStr}</div>`;
       }
     }
 
@@ -1233,9 +1303,9 @@ function renderPaymentsTable(data) {
       </td>
       <td>
         <div style="font-weight:500;">${tenantNames}</div>
-        ${tenantPhones ? `<div style="font-size:12px;color:var(--neutral-gray)">📞 ${tenantPhones}</div>` : ''}
-        ${memberCount > 0 ? `<div style="font-size:11px;color:var(--neutral-gray);margin-top:2px;">👥 ${memberCount} người</div>` : ''}
-        ${row.lease_start_date ? `<div style="font-size:11px;color:var(--neutral-gray);margin-top:2px;">📅 Thuê từ: <strong style="color:var(--neutral-dark)">${formatDate(row.lease_start_date)}</strong></div>` : ''}
+        ${tenantPhones ? `<div style="font-size:12px;color:var(--neutral-gray)"><i class="bi bi-telephone"></i> ${tenantPhones}</div>` : ''}
+        ${memberCount > 0 ? `<div style="font-size:11px;color:var(--neutral-gray);margin-top:2px;"><i class="bi bi-people"></i> ${memberCount} người</div>` : ''}
+        ${row.lease_start_date ? `<div style="font-size:11px;color:var(--neutral-gray);margin-top:2px;"><i class="bi bi-calendar-event"></i> Thuê từ: <strong style="color:var(--neutral-dark)">${formatDate(row.lease_start_date)}</strong></div>` : ''}
       </td>
       <td>${formatVND(rentAmt)}</td>
       <td>
@@ -1265,15 +1335,15 @@ function renderPaymentsTable(data) {
       <td><span class="amount-total">${formatVND(totalAmt)}</span></td>
       <td>
         <span class="pay-status-badge ${isPaid ? 'paid' : 'unpaid'}">
-          ${isPaid ? '✅ Đã thu' : '⏳ Chưa thu'}
+          ${isPaid ? '<i class="bi bi-check-circle" style="color:#16a34a"></i> Đã thu' : '<i class="bi bi-hourglass-split" style="color:#f59e0b"></i> Chưa thu'}
         </span>
         ${isPaid && row.paid_at ? `<div style="font-size:10px;color:var(--neutral-gray);margin-top:3px;">Thu lúc: ${formatDateTime(row.paid_at)}</div>` : ''}
         ${statusBadgeHtml}
       </td>
       <td>
         ${isPaid
-        ? `<button class="btn btn-sm btn-outline-secondary" onclick="markPayment(${row.room_id}, ${year}, ${month}, false)">↩ Hoàn trả</button>`
-        : `<button class="btn btn-sm btn-success" onclick="markPayment(${row.room_id}, ${year}, ${month}, true)">✅ Đã thu tiền</button>`
+        ? `<button class="btn btn-sm btn-outline-secondary" onclick="markPayment(${row.room_id}, ${year}, ${month}, false)"><i class="bi bi-arrow-counterclockwise"></i> Hoàn trả</button>`
+        : `<button class="btn btn-sm btn-success" onclick="markPayment(${row.room_id}, ${year}, ${month}, true)"><i class="bi bi-check-circle"></i> Đã thu tiền</button>`
       }
       </td>
     `;
@@ -1342,8 +1412,8 @@ window.markPayment = async function (roomId, year, month, isPaid) {
 
     showToast(
       isPaid
-        ? `✅ Đã thu tiền! Tổng: ${formatVND(result.totalAmount)}`
-        : '↩️ Đã bỏ đánh dấu thu tiền',
+        ? `<i class="bi bi-check-circle" style="color:#16a34a"></i> Đã thu tiền! Tổng: ${formatVND(result.totalAmount)}`
+        : '<i class="bi bi-arrow-counterclockwise"></i> Đã bỏ đánh dấu thu tiền',
       isPaid ? 'success' : 'info'
     );
 
@@ -1488,7 +1558,7 @@ async function loadBulkData() {
   const year = document.getElementById('bulk-year').value;
 
   const btn = document.getElementById('btn-load-bulk');
-  btn.textContent = '⏳ Đang tải...';
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang tải...';
   btn.disabled = true;
 
   try {
@@ -1510,7 +1580,7 @@ async function loadBulkData() {
   } catch (err) {
     console.error(err);
   } finally {
-    btn.textContent = '📋 Tải danh sách phòng';
+    btn.innerHTML = '<i class="bi bi-clipboard-data"></i> Tải danh sách phòng';
     btn.disabled = false;
   }
 }
@@ -1544,10 +1614,10 @@ function renderBulkTable(data, month, year) {
     else tr.className = 'bulk-row-missing';
 
     const statusBadge = isVacant
-      ? `<span class="bulk-status-badge bulk-status-vacant">⬜ ${room.status === 'maintenance' ? 'Sửa chữa' : 'Trống'}</span>`
+      ? `<span class="bulk-status-badge bulk-status-vacant"><i class="bi bi-square"></i> ${room.status === 'maintenance' ? 'Sửa chữa' : 'Trống'}</span>`
       : hasCurrentData
-        ? `<span class="bulk-status-badge bulk-status-done">✅ Đã nhập</span>`
-        : `<span class="bulk-status-badge bulk-status-missing">⚠️ Chưa nhập</span>`;
+        ? `<span class="bulk-status-badge bulk-status-done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</span>`
+        : `<span class="bulk-status-badge bulk-status-missing"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</span>`;
 
     tr.innerHTML = `
       <td><strong>${room.room_code}</strong></td>
@@ -1636,15 +1706,15 @@ function onBulkInputChange(input, roomId) {
     kwhCell.innerHTML = '--';
     costCell.innerHTML = '--';
     costCell.className = 'bulk-cost-cell zero';
-    statusCell.innerHTML = `<span class="bulk-status-badge bulk-status-missing">⚠️ Chưa nhập</span>`;
+    statusCell.innerHTML = `<span class="bulk-status-badge bulk-status-missing"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</span>`;
     tr.className = 'bulk-row-missing';
     tr.setAttribute('data-has-data', '0');
   } else if (newVal < oldVal) {
     input.className = 'bulk-new-reading input-error';
-    kwhCell.innerHTML = `<span style="color:var(--danger);font-size:11px;">❌ Sai</span>`;
+    kwhCell.innerHTML = `<span style="color:var(--danger);font-size:11px;"><i class="bi bi-x-circle" style="color:#dc2626"></i> Sai</span>`;
     costCell.innerHTML = '--';
     costCell.className = 'bulk-cost-cell zero';
-    statusCell.innerHTML = `<span class="bulk-status-badge" style="background:var(--danger-bg);color:var(--danger);">❌ Lỗi</span>`;
+    statusCell.innerHTML = `<span class="bulk-status-badge" style="background:var(--danger-bg);color:var(--danger);"><i class="bi bi-x-circle" style="color:#dc2626"></i> Lỗi</span>`;
     tr.className = '';
   } else {
     const consumption = newVal - oldVal;
@@ -1653,7 +1723,7 @@ function onBulkInputChange(input, roomId) {
     kwhCell.innerHTML = `<span class="text-primary">${consumption.toFixed(1)} kWh</span>`;
     costCell.innerHTML = formatVND(cost);
     costCell.className = 'bulk-cost-cell';
-    statusCell.innerHTML = `<span class="bulk-status-badge bulk-status-done">✅ Đã nhập</span>`;
+    statusCell.innerHTML = `<span class="bulk-status-badge bulk-status-done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</span>`;
     tr.className = 'bulk-row-done';
     tr.setAttribute('data-has-data', '1');
   }
@@ -1749,7 +1819,7 @@ function parseChatReadings() {
   const resultEl = document.getElementById('bulk-chat-result');
 
   if (!chatText.trim()) {
-    resultEl.innerHTML = '<span style="color:var(--warning);">⚠️ Vui lòng dán nội dung tin nhắn vào ô trên.</span>';
+    resultEl.innerHTML = '<span style="color:var(--warning);"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Vui lòng dán nội dung tin nhắn vào ô trên.</span>';
     return;
   }
 
@@ -1777,7 +1847,7 @@ function parseChatReadings() {
   }
 
   if (Object.keys(foundMap).length === 0) {
-    resultEl.innerHTML = '<span style="color:var(--danger);">❌ Không tìm thấy mã phòng và số điện nào trong đoạn text này.</span>';
+    resultEl.innerHTML = '<span style="color:var(--danger);"><i class="bi bi-x-circle" style="color:#dc2626"></i> Không tìm thấy mã phòng và số điện nào trong đoạn text này.</span>';
     return;
   }
 
@@ -1810,10 +1880,10 @@ function parseChatReadings() {
 
   let html = '';
   if (filled > 0) {
-    html += `<div style="color:var(--success);font-weight:600;">✅ Đã điền số điện cho ${filled} phòng thành công!</div>`;
+    html += `<div style="color:var(--success);font-weight:600;"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã điền số điện cho ${filled} phòng thành công!</div>`;
   }
   if (notFound.length > 0) {
-    html += `<div style="color:var(--warning);margin-top:4px;">⚠️ Không tìm thấy trong bảng: <strong>${notFound.join(', ')}</strong> (có thể phòng trống hoặc mã phòng khác)</div>`;
+    html += `<div style="color:var(--warning);margin-top:4px;"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Không tìm thấy trong bảng: <strong>${notFound.join(', ')}</strong> (có thể phòng trống hoặc mã phòng khác)</div>`;
   }
   resultEl.innerHTML = html;
 }
@@ -1856,7 +1926,7 @@ async function saveBulkReadings() {
 
   const btn = document.getElementById('btn-bulk-save');
   const btnBottom = document.getElementById('btn-bulk-save-bottom');
-  btn.textContent = '⏳ Đang lưu...';
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang lưu...';
   btn.disabled = true;
   btnBottom.disabled = true;
 
@@ -1866,13 +1936,13 @@ async function saveBulkReadings() {
       body: JSON.stringify({ year, month, readings })
     });
 
-    showToast(`✅ ${result.message}`, 'success');
+    showToast(`<i class="bi bi-check-circle" style="color:#16a34a"></i> ${result.message}`, 'success');
     // Reload lại bảng để cập nhật trạng thái
     await loadBulkData();
   } catch (err) {
     console.error(err);
   } finally {
-    btn.textContent = '💾 Lưu tất cả';
+    btn.innerHTML = '<i class="bi bi-save"></i> Lưu tất cả';
     btn.disabled = false;
     btnBottom.disabled = false;
   }
@@ -1994,6 +2064,15 @@ async function fetchInvoiceElectricityDefault() {
   const handoverInput = document.getElementById('inv-elec-handover');
 
   if (!oldInput || !newInput) return;
+
+  // Reset override fields khi đổi phòng/tháng
+  const overrideFields = document.getElementById('inv-override-fields');
+  if (overrideFields) overrideFields.style.display = 'none';
+  ['inv-override-rent','inv-override-water','inv-override-trash','inv-override-deposit','inv-override-residence'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = ''; el.disabled = true; }
+  });
+
   if (!roomId || !month || !year) {
     oldInput.value = '';
     newInput.value = '';
@@ -2069,7 +2148,7 @@ async function generateInvoicePreview() {
   const month = document.getElementById('inv-month').value;
   const year = document.getElementById('inv-year').value;
   const note = document.getElementById('inv-note').value.trim();
-  const residenceOption = document.getElementById('inv-residence-option')?.value || 'auto';
+  const residenceOption = 'auto';
 
   // Đọc kỳ thu tiền phòng
   const rentFrom = document.getElementById('inv-rent-from')?.value || '';
@@ -2085,18 +2164,47 @@ async function generateInvoicePreview() {
   const elecHandoverInput = document.getElementById('inv-elec-handover');
   const elecHandover = elecHandoverInput && elecHandoverInput.value !== '' ? parseFloat(elecHandoverInput.value) : null;
 
+  // Đọc override fees (chỉ khi đã được pre-fill sau lần preview đầu)
+  const overrideRentInput = document.getElementById('inv-override-rent');
+  const overrideWaterInput = document.getElementById('inv-override-water');
+  const overrideTrashInput = document.getElementById('inv-override-trash');
+  const overrideDepositInput = document.getElementById('inv-override-deposit');
+  const overrideResidenceInput = document.getElementById('inv-override-residence');
+  const overrideRent = overrideRentInput && overrideRentInput.value !== '' && !overrideRentInput.disabled ? parseFloat(overrideRentInput.value) : null;
+  const overrideWater = overrideWaterInput && overrideWaterInput.value !== '' && !overrideWaterInput.disabled ? parseFloat(overrideWaterInput.value) : null;
+  const overrideTrash = overrideTrashInput && overrideTrashInput.value !== '' && !overrideTrashInput.disabled ? parseFloat(overrideTrashInput.value) : null;
+  const overrideDeposit = overrideDepositInput && overrideDepositInput.value !== '' && !overrideDepositInput.disabled ? parseFloat(overrideDepositInput.value) : null;
+  const overrideResidence = overrideResidenceInput && overrideResidenceInput.value !== '' && !overrideResidenceInput.disabled ? parseFloat(overrideResidenceInput.value) : null;
+
   if (!roomId) {
     showToast('Vui lòng chọn phòng trước', 'error');
     return;
   }
 
   const btn = document.getElementById('btn-preview-invoice');
-  btn.textContent = '⏳ Đang tải...';
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang tải...';
   btn.disabled = true;
 
   try {
     const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}&include_residence=${residenceOption}`);
-    renderInvoiceDocument(data, note, { rentFrom, rentTo, elecOld, elecNew, elecHandover });
+    renderInvoiceDocument(data, note, { rentFrom, rentTo, elecOld, elecNew, elecHandover, overrideRent, overrideWater, overrideTrash, overrideDeposit, overrideResidence });
+
+    // Pre-fill override inputs từ server data và bật chỉnh sửa
+    const s = data.summary;
+    const overrideFields = document.getElementById('inv-override-fields');
+    if (overrideFields) {
+      overrideFields.style.display = '';
+      const fields = [
+        { el: overrideRentInput, val: overrideRent !== null ? overrideRent : s.rentAmount },
+        { el: overrideWaterInput, val: overrideWater !== null ? overrideWater : s.waterAmount },
+        { el: overrideTrashInput, val: overrideTrash !== null ? overrideTrash : s.trashAmount },
+        { el: overrideDepositInput, val: overrideDeposit !== null ? overrideDeposit : s.depositAmount },
+        { el: overrideResidenceInput, val: overrideResidence !== null ? overrideResidence : s.residenceAmount },
+      ];
+      fields.forEach(({ el, val }) => {
+        if (el) { el.value = val || 0; el.disabled = false; }
+      });
+    }
 
     document.getElementById('invoice-empty-state').style.display = 'none';
     document.getElementById('invoice-preview-container').style.display = 'block';
@@ -2106,14 +2214,14 @@ async function generateInvoicePreview() {
   } catch (err) {
     console.error(err);
   } finally {
-    btn.textContent = '👁️ Xem trước hóa đơn';
+    btn.innerHTML = '<i class="bi bi-eye"></i> Xem trước hóa đơn';
     btn.disabled = false;
   }
 }
 
 function renderInvoiceDocument(data, note, options = {}) {
   const { room, tenants, electricity, payment, settings, summary } = data;
-  const { rentFrom, rentTo, elecOld, elecNew, elecHandover } = options;
+  const { rentFrom, rentTo, elecOld, elecNew, elecHandover, overrideRent, overrideWater, overrideTrash, overrideDeposit, overrideResidence } = options;
 
   // Period label
   document.getElementById('inv-period-label').textContent = `Tháng ${summary.month}/${summary.year}`;
@@ -2123,7 +2231,7 @@ function renderInvoiceDocument(data, note, options = {}) {
   if (rentFrom || rentTo) {
     const fromStr = rentFrom ? formatInvoiceDate(rentFrom) : '...';
     const toStr = rentTo ? formatInvoiceDate(rentTo) : '...';
-    rentPeriodDisplay.textContent = `📅 Kỳ thu: ${fromStr} – ${toStr}`;
+    rentPeriodDisplay.innerHTML = `<i class="bi bi-calendar-event"></i> Kỳ thu: ${fromStr} – ${toStr}`;
     rentPeriodDisplay.style.display = 'block';
   } else {
     rentPeriodDisplay.style.display = 'none';
@@ -2132,8 +2240,10 @@ function renderInvoiceDocument(data, note, options = {}) {
   // Room info
   document.getElementById('inv-room-code').textContent = `Phòng ${room.room_code}`;
   document.getElementById('inv-room-zone').textContent = `Khu ${room.zone}`;
-  const statusMap = { vacant: '🟢 Trống', occupied: '🟠 Đang thuê', maintenance: '🔴 Sửa chữa' };
-  document.getElementById('inv-room-status').textContent = statusMap[room.status] || room.status;
+  const statusMap = { vacant: 'Trống', occupied: 'Đang thuê', maintenance: 'Sửa chữa' };
+  const statusColorMap = { vacant: '#16a34a', occupied: '#f97316', maintenance: '#dc2626' };
+  const statusEl = document.getElementById('inv-room-status');
+  statusEl.innerHTML = `<i class="bi bi-circle-fill" style="color:${statusColorMap[room.status] || '#6b7280'}"></i> ${statusMap[room.status] || room.status}`;
 
   // Tenants
   const tenantsList = document.getElementById('inv-tenants-list');
@@ -2146,7 +2256,7 @@ function renderInvoiceDocument(data, note, options = {}) {
       div.className = 'inv-tenant-row';
       div.innerHTML = `
         <span class="inv-tenant-name">${t.full_name}</span>
-        ${t.phone ? `<span class="inv-tenant-phone">📞 ${t.phone}</span>` : ''}
+        ${t.phone ? `<span class="inv-tenant-phone"><i class="bi bi-telephone"></i> ${t.phone}</span>` : ''}
       `;
       tenantsList.appendChild(div);
     });
@@ -2157,16 +2267,17 @@ function renderInvoiceDocument(data, note, options = {}) {
   tbody.innerHTML = '';
 
   // Row: Tiền thuê phòng (chỉ hiện khi có phát sinh)
-  if (summary.rentAmount > 0) {
+  const actualRent = overrideRent !== null && overrideRent !== undefined ? overrideRent : summary.rentAmount;
+  if (actualRent > 0) {
     // Tạo label kỳ thu: ưu tiên ngày người dùng nhập, fallback về Tháng mm/yyyy
     const rentPeriodLabel = (rentFrom || rentTo)
       ? `${rentFrom ? formatInvoiceDate(rentFrom) : '...'} – ${rentTo ? formatInvoiceDate(rentTo) : '...'}`
       : `Tháng ${summary.month}/${summary.year}`;
     tbody.innerHTML += `
       <tr>
-        <td>🏠 Tiền thuê phòng</td>
+        <td><i class="bi bi-house"></i> Tiền thuê phòng</td>
         <td><small>${rentPeriodLabel}</small></td>
-        <td class="text-right">${formatVND(summary.rentAmount)}</td>
+        <td class="text-right">${formatVND(actualRent)}</td>
       </tr>
     `;
   }
@@ -2206,7 +2317,7 @@ function renderInvoiceDocument(data, note, options = {}) {
   if (hasElecInfo) {
     tbody.innerHTML += `
       <tr>
-        <td>⚡ Tiền điện</td>
+        <td><i class="bi bi-lightning"></i> Tiền điện</td>
         <td>
           ${oldReading} → ${newReading} kWh
           <small>${consumption} kWh × ${formatVND(elecUnitPrice)}/kWh</small>
@@ -2217,57 +2328,62 @@ function renderInvoiceDocument(data, note, options = {}) {
   } else if (!summary.isDepositMonth) {
     tbody.innerHTML += `
       <tr>
-        <td>⚡ Tiền điện</td>
-        <td><small style="color:var(--warning)">⚠️ Chưa nhập chỉ số điện tháng này</small></td>
+        <td><i class="bi bi-lightning"></i> Tiền điện</td>
+        <td><small style="color:var(--warning)"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập chỉ số điện tháng này</small></td>
         <td class="text-right">--</td>
       </tr>
     `;
   }
 
-  // Cập nhật lại tổng cộng trên hóa đơn dựa vào tiền điện mới tính toán
-  const diffElec = calculatedElecAmount - (summary.elecAmount || 0);
-  const grandTotal = summary.totalAmount + diffElec;
+  // Tính toán override values
+  const actualWater = overrideWater !== null && overrideWater !== undefined ? overrideWater : summary.waterAmount;
+  const actualTrash = overrideTrash !== null && overrideTrash !== undefined ? overrideTrash : summary.trashAmount;
+  const actualResidence = overrideResidence !== null && overrideResidence !== undefined ? overrideResidence : summary.residenceAmount;
+  const actualDeposit = overrideDeposit !== null && overrideDeposit !== undefined ? overrideDeposit : summary.depositAmount;
+
+  // Cập nhật lại tổng cộng trên hóa đơn dựa vào override values
+  const grandTotal = actualRent + calculatedElecAmount + actualWater + actualTrash + actualResidence + actualDeposit;
 
   // Row: Tiền nước (chỉ hiện khi có phát sinh)
-  if (summary.waterAmount > 0) {
+  if (actualWater > 0) {
     tbody.innerHTML += `
       <tr>
-        <td>💧 Tiền nước</td>
+        <td><i class="bi bi-droplet"></i> Tiền nước</td>
         <td><small>${summary.memberCount || 0} người × ${formatVND(summary.waterPrice || 20000)}/người/tháng</small></td>
-        <td class="text-right">${formatVND(summary.waterAmount)}</td>
+        <td class="text-right">${formatVND(actualWater)}</td>
       </tr>
     `;
   }
 
   // Row: Tiền rác (chỉ hiện khi có phát sinh)
-  if (summary.trashAmount > 0) {
+  if (actualTrash > 0) {
     tbody.innerHTML += `
       <tr>
-        <td>🗑️ Tiền rác</td>
+        <td><i class="bi bi-trash"></i> Tiền rác</td>
         <td><small>${summary.memberCount || 0} người × ${formatVND(summary.trashPrice || 10000)}/người/tháng</small></td>
-        <td class="text-right">${formatVND(summary.trashAmount)}</td>
+        <td class="text-right">${formatVND(actualTrash)}</td>
       </tr>
     `;
   }
 
   // Row: Phí tạm trú (chỉ hiện khi có phát sinh)
-  if (summary.residenceAmount > 0) {
+  if (actualResidence > 0) {
     tbody.innerHTML += `
       <tr>
-        <td>🛂 Phí tạm trú tạm vắng</td>
+        <td><i class="bi bi-person-badge"></i> Phí tạm trú tạm vắng</td>
         <td><small>${summary.memberCount || 0} người × ${formatVND(summary.residencePrice || 50000)} (tháng đầu tiên)</small></td>
-        <td class="text-right">${formatVND(summary.residenceAmount)}</td>
+        <td class="text-right">${formatVND(actualResidence)}</td>
       </tr>
     `;
   }
 
   // Row: Tiền đặt cọc (Tháng đầu cộng vào tổng, tháng sau chỉ hiển thị dưới tổng cộng)
-  if (summary.depositAmount > 0) {
+  if (actualDeposit > 0) {
     tbody.innerHTML += `
       <tr>
-        <td>🤝 Tiền đặt cọc</td>
+        <td><i class="bi bi-handshake"></i> Tiền đặt cọc</td>
         <td><small>Thu tháng đầu tiên</small></td>
-        <td class="text-right">${formatVND(summary.depositAmount)}</td>
+        <td class="text-right">${formatVND(actualDeposit)}</td>
       </tr>
     `;
   }
@@ -2277,7 +2393,7 @@ function renderInvoiceDocument(data, note, options = {}) {
     const handoverVal = elecHandover !== null ? elecHandover : (summary.currentElecIndex || 0);
     tbody.innerHTML += `
       <tr style="border-top: 1px dashed var(--border-color);">
-        <td>🔌 Chỉ số điện bàn giao</td>
+        <td><i class="bi bi-plug"></i> Chỉ số điện bàn giao</td>
         <td><small style="color:var(--success)">Số điện hiện tại khi nhận phòng (Không tính phí)</small></td>
         <td class="text-right" style="color:var(--neutral-gray)">${handoverVal} kWh</td>
       </tr>
@@ -2288,7 +2404,7 @@ function renderInvoiceDocument(data, note, options = {}) {
   const tfoot = document.querySelector('.inv-charges-table tfoot');
   tfoot.innerHTML = `
     <tr class="inv-total-row">
-      <td colspan="2"><strong>💰 TỔNG CỘNG</strong></td>
+      <td colspan="2"><strong><i class="bi bi-cash-stack"></i> TỔNG CỘNG</strong></td>
       <td class="text-right"><strong id="inv-grand-total">${formatVND(grandTotal)}</strong></td>
     </tr>
   `;
@@ -2297,7 +2413,7 @@ function renderInvoiceDocument(data, note, options = {}) {
   if (summary.depositAmount === 0 && room.deposit > 0) {
     tfoot.innerHTML += `
       <tr class="inv-deposit-ref-row" style="font-size: 13px; color: var(--neutral-gray); border-top: 1px dashed var(--border-color);">
-        <td colspan="2">🤝 Tiền cọc đang giữ:</td>
+        <td colspan="2"><i class="bi bi-handshake"></i> Tiền cọc đang giữ:</td>
         <td class="text-right"><strong>${formatVND(room.deposit)}</strong></td>
       </tr>
     `;
@@ -2584,13 +2700,13 @@ async function loadNotifications() {
       const nearCount = _notifData.filter(p => p.daysUntilDue >= 0).length;
       const overdueCount = _notifData.filter(p => p.daysUntilDue < 0).length;
 
-      let pushTitle = `🔔 Cần thu tiền ${_notifData.length} phòng`;
+      let pushTitle = `Cần thu tiền ${_notifData.length} phòng`;
       let pushBody = `Có ${nearCount} phòng sắp đến hạn và ${overdueCount} phòng đã quá hạn đóng tiền.`;
       if (overdueCount > 0 && nearCount === 0) {
-        pushTitle = `⚠️ Đã quá hạn ${_notifData.length} phòng!`;
+        pushTitle = `Đã quá hạn ${_notifData.length} phòng!`;
         pushBody = `Có ${_notifData.length} phòng đã quá hạn đóng tiền trọ tháng này.`;
       } else if (nearCount > 0 && overdueCount === 0) {
-        pushTitle = `⏰ Sắp đến hạn ${nearCount} phòng`;
+        pushTitle = `Sắp đến hạn ${nearCount} phòng`;
         pushBody = `Có ${nearCount} phòng sắp đến hạn đóng tiền trọ trong 3 ngày tới.`;
       }
       showBrowserNotification(pushTitle, pushBody);
@@ -2614,7 +2730,7 @@ function renderNotifications() {
   if (!list) return;
 
   if (_notifData.length === 0) {
-    list.innerHTML = '<div class="notif-all-paid">✅ Không có phòng nào đến hạn/quá hạn chưa đóng tiền!</div>';
+    list.innerHTML = '<div class="notif-all-paid"><i class="bi bi-check-circle" style="color:#16a34a"></i> Không có phòng nào đến hạn/quá hạn chưa đóng tiền!</div>';
     return;
   }
 
@@ -2634,7 +2750,7 @@ function renderNotifications() {
 
   list.innerHTML = `
     <div style="padding:10px 14px;font-size:12px;font-weight:600;background:var(--neutral-light);color:var(--neutral-dark);border-bottom:1px solid var(--border-color);">
-      ⏰ Danh sách phòng đến hạn & quá hạn
+      <i class="bi bi-clock-history"></i> Danh sách phòng đến hạn & quá hạn
     </div>
     ${_notifData.map(p => {
     const tenantName = p.tenant_names || 'Chưa có người thuê';
@@ -2648,33 +2764,33 @@ function renderNotifications() {
     let statusText = '';
     let statusColor = 'var(--neutral-gray)';
     if (p.daysUntilDue > 0) {
-      statusText = `⏰ Còn ${p.daysUntilDue} ngày`;
+      statusText = `<i class="bi bi-clock-history" style="color:#b45309"></i> Còn ${p.daysUntilDue} ngày`;
       statusColor = '#b45309';
     } else if (p.daysUntilDue === 0) {
-      statusText = `🚨 Đến hạn hôm nay!`;
+      statusText = `<i class="bi bi-exclamation-circle" style="color:#dc2626"></i> Đến hạn hôm nay!`;
       statusColor = '#dc2626';
     } else {
-      statusText = `⚠️ Quá hạn ${Math.abs(p.daysUntilDue)} ngày!`;
+      statusText = `<i class="bi bi-exclamation-triangle" style="color:#dc2626"></i> Quá hạn ${Math.abs(p.daysUntilDue)} ngày!`;
       statusColor = '#dc2626';
     }
 
     return `
         <div class="notif-item" onclick="goToPaymentRoom('${p.room_id}')" style="display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 700; color: var(--neutral-dark); font-size: 14px;">🚪 Phòng ${roomCode}</span>
+            <span style="font-weight: 700; color: var(--neutral-dark); font-size: 14px;"><i class="bi bi-door-open"></i> Phòng ${roomCode}</span>
             <span style="font-size: 11px; font-weight: 600; color: ${statusColor};">${statusText}</span>
           </div>
           <div style="font-size: 13px; color: var(--neutral-dark); display: flex; align-items: center; gap: 6px;">
-            <span style="color: var(--neutral-gray); font-size: 12px;">👤</span>
+            <span style="color: var(--neutral-gray); font-size: 12px;"><i class="bi bi-person"></i></span>
             <strong>${tenantName}</strong>
           </div>
           <div style="font-size: 13px; color: var(--danger); font-weight: 700; display: flex; align-items: center; gap: 6px; background: #fff5f5; padding: 4px 8px; border-radius: 6px; border: 1px solid #fed7d7; width: fit-content;">
-            <span>💰 Số tiền:</span>
+            <span><i class="bi bi-cash-stack"></i> Số tiền:</span>
             <span>${total}</span>
           </div>
           <div style="font-size: 11px; color: var(--neutral-gray); display: flex; flex-direction: column; gap: 2px; border-top: 1px dashed #e2e8f0; padding-top: 4px; margin-top: 2px;">
-            <div>📅 Thuê từ: <span style="color: var(--neutral-dark); font-weight: 500;">${leaseStart}</span></div>
-            <div>⏰ Hạn đóng: <span style="color: var(--danger); font-weight: 600;">${dueDateStr}</span></div>
+            <div><i class="bi bi-calendar-event"></i> Thuê từ: <span style="color: var(--neutral-dark); font-weight: 500;">${leaseStart}</span></div>
+            <div><i class="bi bi-clock-history"></i> Hạn đóng: <span style="color: var(--danger); font-weight: 600;">${dueDateStr}</span></div>
           </div>
         </div>
       `;
@@ -2726,7 +2842,7 @@ function updateNotifPermissionUI() {
   if (!icon || !text) return;
 
   if (!('Notification' in window)) {
-    icon.textContent = '❌';
+    icon.innerHTML = '<i class="bi bi-x-circle" style="color:#dc2626"></i>';
     text.textContent = 'Trình duyệt không hỗ trợ thông báo';
     if (box) { box.style.background = 'var(--danger-bg)'; box.style.borderColor = 'var(--danger-border)'; }
     return;
@@ -2734,17 +2850,17 @@ function updateNotifPermissionUI() {
 
   const perm = Notification.permission;
   if (perm === 'granted') {
-    icon.textContent = '✅';
+    icon.innerHTML = '<i class="bi bi-check-circle" style="color:#16a34a"></i>';
     text.textContent = 'Thông báo đã được bật';
     if (box) { box.style.background = 'var(--success-bg)'; box.style.borderColor = 'var(--success-border)'; }
     if (btn) btn.style.display = 'none';
   } else if (perm === 'denied') {
-    icon.textContent = '🚫';
+    icon.innerHTML = '<i class="bi bi-slash-circle" style="color:#dc2626"></i>';
     text.textContent = 'Thông báo bị chặn — vào cài đặt trình duyệt để bật lại';
     if (box) { box.style.background = 'var(--danger-bg)'; box.style.borderColor = 'var(--danger-border)'; }
     if (btn) btn.style.display = 'none';
   } else {
-    icon.textContent = '🔕';
+    icon.innerHTML = '<i class="bi bi-bell-slash"></i>';
     text.textContent = 'Chưa bật thông báo';
     if (box) { box.style.background = 'var(--warning-bg)'; box.style.borderColor = 'var(--warning-border)'; }
     if (btn) btn.style.display = 'inline-flex';
@@ -2760,9 +2876,9 @@ async function requestPushPermission() {
   const result = await Notification.requestPermission();
   updateNotifPermissionUI();
   if (result === 'granted') {
-    showToast('✅ Đã bật thông báo thành công!', 'success');
+    showToast('<i class="bi bi-check-circle" style="color:#16a34a"></i> Đã bật thông báo thành công!', 'success');
     // Gửi ngay thông báo chào mừng
-    new Notification('🏠 Nhà Trọ LISO', {
+    new Notification('Nhà Trọ LISO', {
       body: 'Thông báo đã được bật! Bạn sẽ nhận nhắc nhở khi phòng sắp đến hạn thu tiền.',
       icon: '/logo.png',
       badge: '/logo.png'
@@ -2822,7 +2938,7 @@ function testPushNotification() {
 
   const dueDay = currentState.paymentDueDay || 5;
   try {
-    const n = new Notification('🔔 Nhà Trọ LISO — Test thông báo', {
+    const n = new Notification('Nhà Trọ LISO — Test thông báo', {
       body: `Đây là thông báo thử nghiệm.\nNgày thu tiền được đặt là ngày ${dueDay} hàng tháng.\nHệ thống sẽ nhắc bạn trước 3 ngày.`,
       icon: '/logo.png',
       badge: '/logo.png',
@@ -2830,18 +2946,18 @@ function testPushNotification() {
       requireInteraction: false
     });
     n.onclick = () => { window.focus(); n.close(); };
-    showToast('✅ Đã gửi thông báo test!', 'success');
+    showToast('<i class="bi bi-check-circle" style="color:#16a34a"></i> Đã gửi thông báo test!', 'success');
   } catch (e) {
     showToast('Có lỗi khi gửi thông báo: ' + e.message, 'error');
   }
 }
 
-// Hàm gửi báo cáo thử nghiệm qua Telegram
+// Hàm gửi báo cáo thử nghiệm qua Email
 async function testEmailNotification() {
   const btn = document.getElementById('btn-test-email');
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '⏳ Đang gửi...';
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang gửi...';
   }
 
   // Lưu cài đặt trước khi gửi thử
@@ -2870,7 +2986,7 @@ async function testEmailNotification() {
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = '🧪 Gửi thử báo cáo';
+        btn.innerHTML = '<i class="bi bi-send-check"></i> Gửi thử báo cáo';
       }
     }
   }, 1000);
@@ -2885,14 +3001,6 @@ function initPushNotifications() {
     // Không xin ngay, để người dùng chủ động bấm nút
   }
 }
-
-// ==========================================
-// TELEGRAM BOT (REMOVED)
-// ==========================================
-function updateTelegramUI() {}
-async function loadTelegramStatus() {}
-async function connectTelegramBot() {}
-async function disconnectTelegramBot() {}
 
 // ==========================================
 // 10. WIDGET TRỢ LÝ LISO INTERACTIVITY
@@ -2949,7 +3057,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Add thinking placeholder
     const typingId = 'typing-' + Date.now();
-    appendMessage('⏳ Đang xử lý...', 'bot', typingId);
+    appendMessage('<i class="bi bi-hourglass-split"></i> Đang xử lý...', 'bot', typingId);
     scrollToBottom();
 
     try {
@@ -2973,7 +3081,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       const typingEl = document.getElementById(typingId);
       if (typingEl) typingEl.remove();
-      appendMessage('❌ Lỗi: ' + err.message, 'bot');
+      appendMessage('<i class="bi bi-x-circle" style="color:#dc2626"></i> Lỗi: ' + err.message, 'bot');
     }
     scrollToBottom();
   }
@@ -2998,7 +3106,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function formatBotMessage(text) {
     if (!text) return 'Trợ lý không có phản hồi.';
     
-    // Convert Telegram MarkdownV2 escapes: e.g. \- \. \! to normal
+    // Convert MarkdownV2 escapes: e.g. \- \. \! to normal
     let formatted = text.replace(/\\([_\*\[\]\(\)~`>#\+\-=\|{}\.!\\])/g, '$1');
 
     // Convert *bold* to <strong>
