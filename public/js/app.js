@@ -573,7 +573,14 @@ async function loadSettings() {
     if (emailSender && settings.email_sender) emailSender.value = settings.email_sender;
     if (emailPass && settings.email_pass) emailPass.value = settings.email_pass;
     if (emailReceiver && settings.email_receiver) emailReceiver.value = settings.email_receiver;
-    if (emailEnabled && settings.email_enabled) emailEnabled.value = settings.email_enabled;
+    if (emailEnabled) emailEnabled.checked = (settings.email_enabled === 'true' || settings.email_enabled === true);
+
+    // Update cron URL display
+    const cronSpan = document.getElementById('cron-webhook-url');
+    if (cronSpan) {
+      const host = window.location.origin.includes('localhost') ? 'https://quanlynhatro-10ar.onrender.com' : window.location.origin;
+      cronSpan.innerText = `${host}/api/cron/daily-report`;
+    }
 
     // Store bank info in state for invoice use
     currentState.bankSettings = settings;
@@ -585,18 +592,19 @@ async function loadSettings() {
 
 async function handleSettingsSubmit(e) {
   e.preventDefault();
-  const price = document.getElementById('setting-electric-price').value;
+  const price = document.getElementById('setting-electric-price')?.value || '';
   const waterPrice = document.getElementById('setting-water-price')?.value || '';
   const trashPrice = document.getElementById('setting-trash-price')?.value || '';
   const residencePrice = document.getElementById('setting-residence-price')?.value || '';
+  const dueDay = document.getElementById('setting-due-day')?.value || '5';
   const bankName = document.getElementById('setting-bank-name')?.value || '';
   const bankAccount = document.getElementById('setting-bank-account')?.value || '';
   const bankOwner = document.getElementById('setting-bank-owner')?.value || '';
-  
-  const emailSender = document.getElementById('setting-email-sender')?.value || '';
-  const emailPass = document.getElementById('setting-email-pass')?.value || '';
-  const emailReceiver = document.getElementById('setting-email-receiver')?.value || '';
-  const emailEnabled = document.getElementById('setting-email-enabled')?.value || 'false';
+
+  const emailSender = document.getElementById('setting-email-sender')?.value.trim() || '';
+  const emailPass = document.getElementById('setting-email-pass')?.value.trim() || '';
+  const emailReceiver = document.getElementById('setting-email-receiver')?.value.trim() || '';
+  const emailEnabled = document.getElementById('setting-email-enabled')?.checked ? 'true' : 'false';
 
   try {
     await fetchAPI('/api/settings', {
@@ -606,6 +614,7 @@ async function handleSettingsSubmit(e) {
         water_price: waterPrice,
         trash_price: trashPrice,
         residence_price: residencePrice,
+        payment_due_day: dueDay,
         bank_name: bankName,
         bank_account: bankAccount,
         bank_owner: bankOwner,
@@ -615,18 +624,18 @@ async function handleSettingsSubmit(e) {
         email_enabled: emailEnabled
       })
     });
-    currentState.electricityPrice = parseFloat(price);
+    currentState.electricityPrice = parseFloat(price) || 0;
     currentState.waterPrice = parseFloat(waterPrice) || 20000;
     currentState.trashPrice = parseFloat(trashPrice) || 10000;
     currentState.residencePrice = parseFloat(residencePrice) || 50000;
     currentState.paymentDueDay = parseInt(dueDay) || 5;
-    currentState.bankSettings = { 
-      electricity_price: price, 
-      water_price: waterPrice, 
-      trash_price: trashPrice, 
-      residence_price: residencePrice, 
-      bank_name: bankName, 
-      bank_account: bankAccount, 
+    currentState.bankSettings = {
+      electricity_price: price,
+      water_price: waterPrice,
+      trash_price: trashPrice,
+      residence_price: residencePrice,
+      bank_name: bankName,
+      bank_account: bankAccount,
       bank_owner: bankOwner,
       email_sender: emailSender,
       email_pass: emailPass,
@@ -3189,33 +3198,30 @@ function testPushNotification() {
   }
 }
 
-// Hàm gửi báo cáo thử nghiệm qua Email
+// Hàm gửi email thử nghiệm kết nối Gmail SMTP
 async function testEmailNotification() {
   const btn = document.getElementById('btn-test-email');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang gửi...';
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang kết nối...';
   }
 
-  // Lưu cài đặt trước khi gửi thử
+  // Tự động lưu form cài đặt trước
   const form = document.getElementById('settings-form');
   if (form) {
     const submitBtn = form.querySelector('button[type="submit"]');
-    if (submitBtn) {
-      submitBtn.click();
-    }
+    if (submitBtn) submitBtn.click();
   }
 
-  // Chờ lưu xong rồi gửi test
   setTimeout(async () => {
     try {
-      const res = await fetch('/api/settings/test-report', {
+      const res = await fetch('/api/settings/test-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Lỗi khi gửi báo cáo test');
+        throw new Error(data.error || 'Lỗi khi gửi email test');
       }
       showToast(data.message, 'success');
     } catch (err) {
@@ -3223,10 +3229,70 @@ async function testEmailNotification() {
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-send-check"></i> Gửi thử báo cáo';
+        btn.innerHTML = '<i class="bi bi-envelope-check"></i> Gửi thử Email test';
       }
     }
-  }, 1000);
+  }, 600);
+}
+
+// Hàm gửi báo cáo thu tiền và nhắc nợ ngay lập tức
+async function sendReportNow() {
+  const btn = document.getElementById('btn-send-report-now');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang tổng hợp & gửi...';
+  }
+
+  // Tự động lưu form cài đặt trước
+  const form = document.getElementById('settings-form');
+  if (form) {
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.click();
+  }
+
+  setTimeout(async () => {
+    try {
+      const res = await fetch('/api/settings/send-report-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Lỗi khi gửi báo cáo');
+      }
+      showToast(data.message, 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send-fill"></i> Gửi báo cáo thu tiền ngay';
+      }
+    }
+  }, 600);
+}
+
+// Hàm copy URL webhook Cron
+function copyCronUrl() {
+  const span = document.getElementById('cron-webhook-url');
+  if (!span) return;
+  const url = span.innerText.trim();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('Đã sao chép link Cron webhook!', 'success');
+    }).catch(() => {
+      showToast('Không thể tự động sao chép', 'warning');
+    });
+  } else {
+    // Fallback
+    const input = document.createElement('input');
+    input.value = url;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+    showToast('Đã sao chép link Cron webhook!', 'success');
+  }
 }
 
 // Khởi tạo quyền thông báo khi load app

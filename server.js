@@ -776,6 +776,14 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
+const upsertSetting = async (key, val) => {
+  if (val !== undefined && val !== null) {
+    await db.prepare(
+      "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP"
+    ).run(key, val.toString());
+  }
+};
+
 app.put('/api/settings', async (req, res) => {
   try {
     const {
@@ -783,14 +791,6 @@ app.put('/api/settings', async (req, res) => {
       bank_name, bank_account, bank_owner,
       email_sender, email_pass, email_receiver, email_enabled
     } = req.body;
-
-    const upsertSetting = async (key, val) => {
-      if (val !== undefined && val !== null) {
-        await db.prepare(
-          "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP"
-        ).run(key, val.toString());
-      }
-    };
 
     await upsertSetting('electricity_price', electricity_price);
     await upsertSetting('water_price', water_price);
@@ -810,6 +810,597 @@ app.put('/api/settings', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ==========================================
+// 6.1 GMAIL NOTIFICATIONS & CRON ENGINE
+// ==========================================
+
+function getVietnamDate() {
+  const now = new Date();
+  const vnDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }); // YYYY-MM-DD
+  const [year, month, day] = vnDateStr.split('-').map(Number);
+  return { now, dateStr: vnDateStr, year, month, day };
+}
+
+function formatVND(amount) {
+  return new Intl.NumberFormat('vi-VN').format(Math.round(amount || 0)) + ' đ';
+}
+
+function createEmailTransporter(sender, pass) {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: sender.trim(),
+      pass: pass.replace(/\s+/g, '')
+    }
+  });
+}
+
+async function getDailyReportData(settingsMap, vnDate) {
+  const { year, month, day } = vnDate;
+
+  const waterPrice = parseFloat(settingsMap.water_price || 20000);
+  const trashPrice = parseFloat(settingsMap.trash_price || 10000);
+  const residencePrice = parseFloat(settingsMap.residence_price || 50000);
+  const defaultDueDay = parseInt(settingsMap.payment_due_day || 15);
+
+  const rows = await db.prepare(`
+    SELECT
+      r.id as room_id,
+      r.room_code,
+      r.zone,
+      r.billing_day,
+      COALESCE(p.rent_amount, r.rent_price) as rent_price,
+      r.status as room_status,
+      r.member_count,
+      r.deposit,
+      (SELECT MIN(start_date) FROM tenants WHERE room_id = r.id) as lease_start_date,
+      (SELECT MAX(end_date) FROM tenants WHERE room_id = r.id AND end_date IS NOT NULL) as end_date,
+      COALESCE(p.tenant_name, STRING_AGG(t.full_name, ', ')) as tenant_names,
+      STRING_AGG(t.phone, ', ') as tenant_phones,
+      COALESCE(p.electricity_amount, e.total_cost) as electricity_amount,
+      e.consumption,
+      p.id as payment_id,
+      p.is_paid,
+      p.rent_amount,
+      p.electricity_amount as p_elec_amount,
+      p.water_amount,
+      p.trash_amount,
+      p.residence_amount,
+      p.deposit_amount,
+      p.total_amount,
+      p.paid_at,
+      p.note
+    FROM rooms r
+    LEFT JOIN tenants t ON t.room_id = r.id
+    LEFT JOIN electricity_readings e ON e.room_id = r.id AND e.year = ? AND e.month = ?
+    LEFT JOIN rent_payments p ON p.room_id = r.id AND p.year = ? AND p.month = ?
+    WHERE r.status = 'occupied' OR p.id IS NOT NULL OR e.id IS NOT NULL
+    GROUP BY r.id, p.id, e.id
+    ORDER BY r.room_code ASC
+  `).all(year, month, year, month);
+
+  const filteredRows = rows.filter(row => {
+    if (row.lease_start_date) {
+      const leaseDate = new Date(row.lease_start_date);
+      if (!isNaN(leaseDate.getTime())) {
+        const leaseYear = leaseDate.getFullYear();
+        const leaseMonth = leaseDate.getMonth() + 1;
+        if (leaseYear > year || (leaseYear === year && leaseMonth > month)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  });
+
+  const daysInCurrentMonth = new Date(year, month, 0).getDate();
+
+  let totalPaidMoney = 0;
+  let totalUnpaidMoney = 0;
+  let totalExpectedMoney = 0;
+  let paidCount = 0;
+  let unpaidCount = 0;
+
+  const overdueRooms = [];
+  const dueTodayRooms = [];
+  const upcomingRooms = [];
+  const otherUnpaidRooms = [];
+  const paidRooms = [];
+
+  filteredRows.forEach(row => {
+    const memberCount = row.member_count || 0;
+    const isPaid = row.is_paid === 1;
+
+    let isFirstMonth = false;
+    let isCheckout = false;
+    let proratedRent = row.rent_price || 0;
+
+    if (row.lease_start_date) {
+      const leaseDate = new Date(row.lease_start_date);
+      if (!isNaN(leaseDate.getTime())) {
+        const leaseYear = leaseDate.getFullYear();
+        const leaseMonth = leaseDate.getMonth() + 1;
+        const diffMonths = (year - leaseYear) * 12 + (month - leaseMonth);
+        if (diffMonths === 0) {
+          isFirstMonth = true;
+        }
+      }
+    }
+
+    const endDate = row.end_date;
+    if (endDate) {
+      const ed = new Date(endDate);
+      if (!isNaN(ed.getTime())) {
+        const edYear = ed.getFullYear();
+        const edMonth = ed.getMonth() + 1;
+        if (edYear === year && edMonth === month) {
+          isCheckout = true;
+        }
+      }
+    }
+
+    if (!isPaid) {
+      if (isFirstMonth && row.lease_start_date) {
+        const leaseDate = new Date(row.lease_start_date);
+        const billingDay = row.billing_day || 30;
+        const endOfPeriod = Math.min(billingDay, daysInCurrentMonth);
+        const startDay = leaseDate.getDate();
+        const daysStayed = endOfPeriod - startDay + 1;
+        if (daysStayed <= 0) {
+          proratedRent = 0;
+        } else if (daysStayed <= 15) {
+          proratedRent = (row.rent_price || 0) / 2;
+        } else {
+          proratedRent = row.rent_price || 0;
+        }
+      } else if (isCheckout && endDate) {
+        const ed = new Date(endDate);
+        const dayOfMonth = ed.getDate();
+        if (dayOfMonth <= 15) {
+          proratedRent = (row.rent_price || 0) / 2;
+        } else {
+          proratedRent = row.rent_price || 0;
+        }
+      }
+    }
+
+    const rentAmount = (isPaid && row.rent_amount !== null && row.rent_amount !== undefined)
+      ? row.rent_amount : proratedRent;
+    const elecAmount = (isPaid && row.p_elec_amount !== null && row.p_elec_amount !== undefined)
+      ? row.p_elec_amount : (row.electricity_amount || 0);
+    const waterAmount = (isPaid && row.water_amount !== null && row.water_amount !== undefined)
+      ? row.water_amount : waterPrice * memberCount;
+    const trashAmount = (isPaid && row.trash_amount !== null && row.trash_amount !== undefined)
+      ? row.trash_amount : trashPrice * memberCount;
+    const residenceAmount = (isPaid && row.residence_amount !== null && row.residence_amount !== undefined)
+      ? row.residence_amount : (isFirstMonth ? residencePrice * memberCount : 0);
+    const depositAmount = (isPaid && row.deposit_amount !== null && row.deposit_amount !== undefined)
+      ? row.deposit_amount : (isFirstMonth ? (row.deposit || 0) : 0);
+
+    const totalAmount = isPaid && row.total_amount
+      ? row.total_amount
+      : (rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount);
+
+    totalExpectedMoney += totalAmount;
+
+    const roomDueDay = row.billing_day ? parseInt(row.billing_day) : defaultDueDay;
+    const finalDueDay = Math.min(roomDueDay, daysInCurrentMonth);
+    const daysUntilDue = finalDueDay - day;
+
+    const enriched = {
+      ...row,
+      rent_amount: rentAmount,
+      elec_amount: elecAmount,
+      water_amount: waterAmount,
+      trash_amount: trashAmount,
+      residence_amount: residenceAmount,
+      deposit_amount: depositAmount,
+      total_amount: totalAmount,
+      final_due_day: finalDueDay,
+      days_until_due: daysUntilDue,
+      is_first_month: isFirstMonth,
+      is_checkout: isCheckout
+    };
+
+    if (isPaid) {
+      paidCount++;
+      totalPaidMoney += totalAmount;
+      paidRooms.push(enriched);
+    } else {
+      unpaidCount++;
+      totalUnpaidMoney += totalAmount;
+      if (daysUntilDue < 0) {
+        overdueRooms.push(enriched);
+      } else if (daysUntilDue === 0) {
+        dueTodayRooms.push(enriched);
+      } else if (daysUntilDue > 0 && daysUntilDue <= 3) {
+        upcomingRooms.push(enriched);
+      } else {
+        otherUnpaidRooms.push(enriched);
+      }
+    }
+  });
+
+  return {
+    dateStr: `${day}/${month}/${year}`,
+    year,
+    month,
+    day,
+    totalOccupied: filteredRows.length,
+    paidCount,
+    unpaidCount,
+    totalPaidMoney,
+    totalUnpaidMoney,
+    totalExpectedMoney,
+    overdueRooms,
+    dueTodayRooms,
+    upcomingRooms,
+    otherUnpaidRooms,
+    paidRooms
+  };
+}
+
+function generateDailyEmailHTML(data) {
+  const {
+    dateStr,
+    totalOccupied,
+    paidCount,
+    unpaidCount,
+    totalPaidMoney,
+    totalUnpaidMoney,
+    totalExpectedMoney,
+    overdueRooms,
+    dueTodayRooms,
+    upcomingRooms,
+    otherUnpaidRooms
+  } = data;
+
+  const overdueSection = overdueRooms.length > 0 ? `
+    <div style="margin-bottom: 24px; background: #fff5f5; border: 1px solid #fed7d7; border-radius: 8px; padding: 16px;">
+      <h3 style="color: #c53030; margin: 0 0 12px 0; font-size: 15px;">
+        🔴 Phòng đã quá hạn đóng tiền (${overdueRooms.length} phòng)
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <thead>
+          <tr style="background: #feb2b2; color: #742a2a; text-align: left;">
+            <th style="padding: 8px 10px; border-radius: 4px 0 0 4px;">Phòng</th>
+            <th style="padding: 8px 10px;">Khách thuê / SĐT</th>
+            <th style="padding: 8px 10px;">Kỳ hạn</th>
+            <th style="padding: 8px 10px;">Trễ hạn</th>
+            <th style="padding: 8px 10px; text-align: right; border-radius: 0 4px 4px 0;">Tổng tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${overdueRooms.map((r, idx) => `
+            <tr style="border-bottom: 1px solid #fed7d7; background: ${idx % 2 === 0 ? '#ffffff' : '#fffaf0'};">
+              <td style="padding: 10px; font-weight: bold; color: #9b2c2c;">${r.room_code}</td>
+              <td style="padding: 10px;">${r.tenant_names || 'Chưa cập nhật'} <br/><span style="color: #718096; font-size: 12px;">${r.tenant_phones || ''}</span></td>
+              <td style="padding: 10px;">Ngày ${r.final_due_day}</td>
+              <td style="padding: 10px;"><span style="background: #e53e3e; color: #ffffff; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">Trễ ${Math.abs(r.days_until_due)} ngày</span></td>
+              <td style="padding: 10px; text-align: right; font-weight: bold; color: #c53030;">${formatVND(r.total_amount)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '';
+
+  const dueTodaySection = dueTodayRooms.length > 0 ? `
+    <div style="margin-bottom: 24px; background: #fffaf0; border: 1px solid #feebc8; border-radius: 8px; padding: 16px;">
+      <h3 style="color: #dd6b20; margin: 0 0 12px 0; font-size: 15px;">
+        🟡 Phòng đến hạn hôm nay (${dueTodayRooms.length} phòng)
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <thead>
+          <tr style="background: #fbd38d; color: #7b341e; text-align: left;">
+            <th style="padding: 8px 10px; border-radius: 4px 0 0 4px;">Phòng</th>
+            <th style="padding: 8px 10px;">Khách thuê / SĐT</th>
+            <th style="padding: 8px 10px;">Kỳ hạn</th>
+            <th style="padding: 8px 10px; text-align: right; border-radius: 0 4px 4px 0;">Tổng tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${dueTodayRooms.map((r, idx) => `
+            <tr style="border-bottom: 1px solid #feebc8; background: ${idx % 2 === 0 ? '#ffffff' : '#fffaf0'};">
+              <td style="padding: 10px; font-weight: bold; color: #c05621;">${r.room_code}</td>
+              <td style="padding: 10px;">${r.tenant_names || 'Chưa cập nhật'} <br/><span style="color: #718096; font-size: 12px;">${r.tenant_phones || ''}</span></td>
+              <td style="padding: 10px;">Hôm nay (Ngày ${r.final_due_day})</td>
+              <td style="padding: 10px; text-align: right; font-weight: bold; color: #dd6b20;">${formatVND(r.total_amount)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '';
+
+  const upcomingSection = upcomingRooms.length > 0 ? `
+    <div style="margin-bottom: 24px; background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 8px; padding: 16px;">
+      <h3 style="color: #2b6cb0; margin: 0 0 12px 0; font-size: 15px;">
+        🔵 Phòng sắp đến hạn (${upcomingRooms.length} phòng - Còn 1-3 ngày)
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <thead>
+          <tr style="background: #bee3f8; color: #2c5282; text-align: left;">
+            <th style="padding: 8px 10px; border-radius: 4px 0 0 4px;">Phòng</th>
+            <th style="padding: 8px 10px;">Khách thuê</th>
+            <th style="padding: 8px 10px;">Kỳ hạn</th>
+            <th style="padding: 8px 10px; text-align: right; border-radius: 0 4px 4px 0;">Tổng tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${upcomingRooms.map((r, idx) => `
+            <tr style="border-bottom: 1px solid #bee3f8; background: ${idx % 2 === 0 ? '#ffffff' : '#f7fafc'};">
+              <td style="padding: 10px; font-weight: bold; color: #2b6cb0;">${r.room_code}</td>
+              <td style="padding: 10px;">${r.tenant_names || 'Chưa cập nhật'}</td>
+              <td style="padding: 10px;">Ngày ${r.final_due_day} (Còn ${r.days_until_due} ngày)</td>
+              <td style="padding: 10px; text-align: right; font-weight: bold; color: #2b6cb0;">${formatVND(r.total_amount)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '';
+
+  const allUnpaidRooms = [...overdueRooms, ...dueTodayRooms, ...upcomingRooms, ...otherUnpaidRooms];
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Báo cáo thu tiền nhà trọ</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155;">
+      <div style="max-width: 650px; margin: 20px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 24px; color: #ffffff; text-align: center;">
+          <h1 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">NHÀ TRỌ TIỆN NGHI</h1>
+          <p style="margin: 0; font-size: 14px; color: #94a3b8;">📊 Báo cáo thu tiền & Nhắc hạn ngày <b>${dateStr}</b></p>
+        </div>
+
+        <div style="padding: 24px;">
+          <!-- KPI Summary -->
+          <div style="margin-bottom: 24px;">
+            <table style="width: 100%; border-collapse: separate; border-spacing: 8px 0;">
+              <tr>
+                <td style="width: 33.33%; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; text-align: center;">
+                  <div style="font-size: 11px; font-weight: 600; color: #166534; text-transform: uppercase;">Đã thu (${paidCount}/${totalOccupied})</div>
+                  <div style="font-size: 16px; font-weight: 700; color: #15803d; margin-top: 4px;">${formatVND(totalPaidMoney)}</div>
+                </td>
+                <td style="width: 33.33%; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; text-align: center;">
+                  <div style="font-size: 11px; font-weight: 600; color: #991b1b; text-transform: uppercase;">Còn nợ (${unpaidCount} phòng)</div>
+                  <div style="font-size: 16px; font-weight: 700; color: #b91c1c; margin-top: 4px;">${formatVND(totalUnpaidMoney)}</div>
+                </td>
+                <td style="width: 33.33%; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: center;">
+                  <div style="font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase;">Tổng dự thu</div>
+                  <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 4px;">${formatVND(totalExpectedMoney)}</div>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Alert Sections -->
+          ${overdueSection}
+          ${dueTodaySection}
+          ${upcomingSection}
+
+          ${allUnpaidRooms.length === 0 ? `
+            <div style="text-align: center; padding: 24px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0; color: #166534; margin-bottom: 24px;">
+              <div style="font-size: 24px; margin-bottom: 6px;">🎉</div>
+              <b>Tuyệt vời! Tất cả các phòng đã hoàn tất đóng tiền trọ tháng này!</b>
+            </div>
+          ` : ''}
+
+          <!-- Danh sách phòng còn nợ -->
+          ${allUnpaidRooms.length > 0 ? `
+            <div style="margin-top: 24px;">
+              <h3 style="font-size: 15px; color: #1e293b; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #e2e8f0;">
+                📋 Danh sách chi tiết ${allUnpaidRooms.length} phòng chưa thu tiền
+              </h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                  <tr style="background: #f1f5f9; color: #475569; text-align: left;">
+                    <th style="padding: 8px;">Phòng</th>
+                    <th style="padding: 8px;">Khách đại diện</th>
+                    <th style="padding: 8px;">Kỳ thu</th>
+                    <th style="padding: 8px; text-align: right;">Tiền nhà</th>
+                    <th style="padding: 8px; text-align: right;">Điện/D.vụ</th>
+                    <th style="padding: 8px; text-align: right;">Tổng nợ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${allUnpaidRooms.map((r, idx) => {
+                    const svc = r.elec_amount + r.water_amount + r.trash_amount + r.residence_amount + r.deposit_amount;
+                    return `
+                      <tr style="border-bottom: 1px solid #f1f5f9; background: ${idx % 2 === 0 ? '#ffffff' : '#fafafa'};">
+                        <td style="padding: 8px; font-weight: bold; color: #0f172a;">${r.room_code}</td>
+                        <td style="padding: 8px;">${r.tenant_names || 'Chưa cập nhật'}</td>
+                        <td style="padding: 8px;">Ngày ${r.final_due_day}</td>
+                        <td style="padding: 8px; text-align: right;">${formatVND(r.rent_amount)}</td>
+                        <td style="padding: 8px; text-align: right;">${formatVND(svc)}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48;">${formatVND(r.total_amount)}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : ''}
+
+          <!-- Action Button -->
+          <div style="text-align: center; margin-top: 28px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+            <a href="https://quanlynhatro-10ar.onrender.com" target="_blank" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 10px 24px; border-radius: 6px; font-weight: 600; font-size: 13px;">
+              Mở Trang Quản Lý Nhà Trọ
+            </a>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="background: #f8fafc; padding: 14px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+          Hệ thống Quản lý Nhà Trọ Tiện Nghi • Tự động gửi lúc 12:00 PM mỗi ngày
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+async function sendDailyReportEmail(force = false) {
+  const settings = await db.prepare('SELECT key, value FROM settings').all();
+  const settingsMap = {};
+  settings.forEach(s => { settingsMap[s.key] = s.value; });
+
+  const isEnabled = settingsMap.email_enabled === 'true' || settingsMap.email_enabled === '1' || settingsMap.email_enabled === 1;
+  if (!isEnabled && !force) {
+    return { skipped: true, reason: 'Chức năng tự động gửi email đang bị tắt trong cài đặt.' };
+  }
+
+  const sender = settingsMap.email_sender;
+  const pass = settingsMap.email_pass;
+  const receiver = settingsMap.email_receiver || sender;
+
+  if (!sender || !pass) {
+    return { error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password) trong Cài đặt!' };
+  }
+
+  const vnDate = getVietnamDate();
+  const todayStr = vnDate.dateStr;
+
+  if (!force && settingsMap.last_email_sent_date === todayStr) {
+    return { skipped: true, reason: `Báo cáo ngày ${todayStr} đã được gửi trước đó.` };
+  }
+
+  const reportData = await getDailyReportData(settingsMap, vnDate);
+  const emailHtml = generateDailyEmailHTML(reportData);
+
+  const transporter = createEmailTransporter(sender, pass);
+
+  const overdueCount = reportData.overdueRooms.length;
+  const dueTodayCount = reportData.dueTodayRooms.length;
+  let subjectPrefix = '📊 [Báo cáo thu tiền]';
+  if (overdueCount > 0) {
+    subjectPrefix = `🔴 [Có ${overdueCount} phòng quá hạn]`;
+  } else if (dueTodayCount > 0) {
+    subjectPrefix = `🟡 [Có ${dueTodayCount} phòng đến hạn hôm nay]`;
+  }
+
+  await transporter.sendMail({
+    from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
+    to: receiver.trim(),
+    subject: `${subjectPrefix} Tổng kết ngày ${vnDate.day}/${vnDate.month}/${vnDate.year}`,
+    html: emailHtml
+  });
+
+  await upsertSetting('last_email_sent_date', todayStr);
+
+  return { success: true, message: `Đã gửi báo cáo ngày ${todayStr} tới ${receiver}`, reportData };
+}
+
+// Endpoint gửi email test kết nối SMTP
+app.post('/api/settings/test-email', async (req, res) => {
+  try {
+    const settings = await db.prepare('SELECT key, value FROM settings').all();
+    const settingsMap = {};
+    settings.forEach(s => { settingsMap[s.key] = s.value; });
+
+    const sender = settingsMap.email_sender;
+    const pass = settingsMap.email_pass;
+    const receiver = settingsMap.email_receiver || sender;
+
+    if (!sender || !pass) {
+      return res.status(400).json({ error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password)!' });
+    }
+
+    const transporter = createEmailTransporter(sender, pass);
+    await transporter.verify();
+
+    await transporter.sendMail({
+      from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
+      to: receiver.trim(),
+      subject: '✅ [Nhà Trọ] Kiểm tra kết nối Gmail thành công!',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 500px; margin: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <h2 style="color: #2563eb; margin-top: 0;">🎉 Kết nối Gmail thành công!</h2>
+          <p>Hệ thống Quản lý Nhà Trọ Tiện Nghi đã kết nối thành công với tài khoản Gmail của bạn.</p>
+          <p>Từ bây giờ, hệ thống sẽ tự động tổng hợp báo cáo thu tiền và nhắc nhở phòng quá hạn gửi về email này hàng ngày lúc 12:00 trưa.</p>
+          <div style="background: #f8fafc; padding: 12px; border-radius: 6px; font-size: 13px; color: #64748b; margin-top: 16px;">
+            <b>Thời gian gửi:</b> ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}<br/>
+            <b>Email phát tán:</b> ${sender}<br/>
+            <b>Email nhận:</b> ${receiver}
+          </div>
+        </div>
+      `
+    });
+
+    res.json({ message: `Đã gửi email test thành công đến ${receiver}!` });
+  } catch (err) {
+    let errMsg = err.message;
+    if (err.responseCode === 535 || err.message.includes('Invalid login') || err.message.includes('Username and Password not accepted')) {
+      errMsg = 'Xác thực Gmail thất bại (Mã 535). Vui lòng kiểm tra lại Email và Mật khẩu ứng dụng (Google App Password 16 ký tự, không phải mật khẩu đăng nhập thông thường). Đảm bảo tài khoản Gmail đã bật Xác minh 2 bước!';
+    }
+    res.status(500).json({ error: errMsg });
+  }
+});
+
+// Endpoint gửi ngay báo cáo thu tiền
+app.post('/api/settings/send-report-now', async (req, res) => {
+  try {
+    const result = await sendDailyReportEmail(true);
+    if (result.error) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json({ message: result.message || 'Đã gửi báo cáo thu tiền thành công!' });
+  } catch (err) {
+    let errMsg = err.message;
+    if (err.responseCode === 535 || err.message.includes('Invalid login') || err.message.includes('Username and Password not accepted')) {
+      errMsg = 'Xác thực Gmail thất bại. Vui lòng kiểm tra lại App Password 16 chữ số!';
+    }
+    res.status(500).json({ error: errMsg });
+  }
+});
+
+// Webhook endpoint dành cho cron-job.org hoặc Render cron triggers
+app.all('/api/cron/daily-report', async (req, res) => {
+  try {
+    console.log(`⏰ [CRON] Nhận webhook daily-report lúc ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}`);
+    const force = req.query.force === 'true';
+    const result = await sendDailyReportEmail(force);
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      result
+    });
+  } catch (err) {
+    console.error('❌ [CRON Error]:', err);
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
+function startDailyReportScheduler() {
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const vnTimeStr = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh' }); // HH:MM:SS
+      const [hour, minute] = vnTimeStr.split(':').map(Number);
+
+      // Trigger đúng 12:00 PM (12h trưa) giờ Việt Nam (hoặc 08:00 AM)
+      if ((hour === 12 || hour === 8) && minute === 0) {
+        console.log(`⏰ [Scheduler] ${hour}:00 VN Time - Đang tiến hành gửi email báo cáo tự động...`);
+        const result = await sendDailyReportEmail(false);
+        if (result.skipped) {
+          console.log(`ℹ️ [Scheduler] Bỏ qua: ${result.reason}`);
+        } else if (result.success) {
+          console.log(`✅ [Scheduler] ${result.message}`);
+        }
+      }
+    } catch (err) {
+      console.error('❌ [Scheduler Error]:', err.message);
+    }
+  }, 60000);
+}
 
 // ==========================================
 // 7. API TẠO HÓA ĐƠN
@@ -1005,4 +1596,5 @@ app.listen(PORT, async () => {
   console.log(`✅ Server đang chạy tại http://localhost:${PORT}`);
 
   assistant.setDb(db);
+  startDailyReportScheduler();
 });
