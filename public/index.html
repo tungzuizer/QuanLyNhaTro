@@ -494,7 +494,9 @@
                 <button class="btn btn-sm pay-filter-btn" data-filter="paid"><i class="bi bi-check-circle"></i> Đã thu</button>
               </div>
             </div>
-            <div class="table-responsive">
+
+            <!-- Desktop Table View -->
+            <div class="table-responsive payments-desktop-table">
               <table class="table payments-table">
                 <thead>
                   <tr>
@@ -518,6 +520,13 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <!-- Mobile Cards View -->
+            <div class="payments-mobile-cards" id="payments-cards-body">
+              <div class="text-center text-muted" style="padding: 30px;">
+                Chọn tháng/năm và bấm "Xem danh sách" để tải dữ liệu
+              </div>
             </div>
           </div>
         </section>
@@ -642,10 +651,9 @@
               <div id="invoice-preview-container" style="display:none;">
                 <!-- Action buttons -->
                 <div class="invoice-actions-bar">
-                  <button id="btn-print-invoice" class="btn btn-primary"><i class="bi bi-printer"></i> In hóa đơn</button>
                   <button id="btn-download-invoice-img" class="btn btn-success"><i class="bi bi-image"></i> Tải ảnh hóa đơn</button>
                   <button id="btn-share-zalo" class="btn btn-zalo" onclick="shareInvoiceViaZalo()"><i class="bi bi-chat-dots"></i> Chia sẻ qua Zalo</button>
-                  <button id="btn-share-invoice" class="btn btn-secondary"><i class="bi bi-clipboard-data"></i> Sao chép nội dung</button>
+                  <button id="btn-invoice-toggle-paid" class="btn btn-primary" onclick="toggleInvoicePayment()"><i class="bi bi-check-circle"></i> <span id="btn-invoice-toggle-paid-text">Xác nhận đã nhận tiền</span></button>
                 </div>
 
                 <!-- Hóa đơn thực tế -->

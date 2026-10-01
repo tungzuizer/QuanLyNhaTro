@@ -1230,16 +1230,18 @@ function updatePaymentStats(data) {
 
 function renderPaymentsTable(data) {
   const tbody = document.getElementById('payments-table-body');
+  const cardsBody = document.getElementById('payments-cards-body');
   tbody.innerHTML = '';
+  if (cardsBody) cardsBody.innerHTML = '';
 
   if (data.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="10" class="text-center text-muted" style="padding: 40px;">
-          <i class="bi bi-check-circle" style="color:#16a34a"></i> Không có phòng nào đang thuê trong tháng này hoặc chưa có dữ liệu
-        </td>
-      </tr>
+    const emptyMsg = `
+      <div class="text-center text-muted" style="padding: 40px;">
+        <i class="bi bi-check-circle" style="color:#16a34a"></i> Không có phòng nào đang thuê trong tháng này hoặc chưa có dữ liệu
+      </div>
     `;
+    tbody.innerHTML = `<tr><td colspan="10">${emptyMsg}</td></tr>`;
+    if (cardsBody) cardsBody.innerHTML = emptyMsg;
     return;
   }
 
@@ -1296,13 +1298,13 @@ function renderPaymentsTable(data) {
     const tenantPhones = row.tenant_phones || '';
     const memberCount = row.member_count || 0;
 
+    // --- 1. RENDER DESKTOP TABLE ROW ---
     const tr = document.createElement('tr');
     tr.className = isPaid ? 'row-paid' : 'row-unpaid';
     tr.setAttribute('data-room-id', row.room_id);
     tr.setAttribute('data-paid', isPaid ? '1' : '0');
     tr.setAttribute('data-billing-day', String(row.billing_day || 30));
 
-    // Tạo tag trạng thái thanh toán và quá hạn
     let statusBadgeHtml = '';
     if (!isPaid) {
       if (row.daysUntilDue < 0) {
@@ -1361,14 +1363,90 @@ function renderPaymentsTable(data) {
         ${statusBadgeHtml}
       </td>
       <td>
-        ${isPaid
-        ? `<button class="btn btn-sm btn-outline-secondary" onclick="markPayment(${row.room_id}, ${year}, ${month}, false)"><i class="bi bi-arrow-counterclockwise"></i> Hoàn trả</button>`
-        : `<button class="btn btn-sm btn-success" onclick="markPayment(${row.room_id}, ${year}, ${month}, true)"><i class="bi bi-check-circle"></i> Đã thu tiền</button>`
-      }
+        <div style="display:flex;gap:6px;flex-direction:column;">
+          <button class="btn btn-sm btn-primary" onclick="openInvoiceForRoom(${row.room_id}, ${year}, ${month})">
+            <i class="bi bi-receipt"></i> Xuất HĐ / Thu tiền
+          </button>
+          ${isPaid
+          ? `<button class="btn btn-sm btn-outline-secondary" onclick="markPayment(${row.room_id}, ${year}, ${month}, false)"><i class="bi bi-arrow-counterclockwise"></i> Hoàn trả</button>`
+          : `<button class="btn btn-sm btn-success" onclick="markPayment(${row.room_id}, ${year}, ${month}, true)"><i class="bi bi-check-circle"></i> Đã nhận tiền</button>`
+        }
+        </div>
       </td>
     `;
-
     tbody.appendChild(tr);
+
+    // --- 2. RENDER MOBILE CARD ---
+    if (cardsBody) {
+      const card = document.createElement('div');
+      card.className = `pay-room-card ${isPaid ? 'card-paid' : 'card-unpaid'}`;
+      card.setAttribute('data-room-id', row.room_id);
+      card.setAttribute('data-paid', isPaid ? '1' : '0');
+      card.setAttribute('data-billing-day', String(row.billing_day || 30));
+
+      const firstPhone = tenantPhones ? tenantPhones.split(',')[0].trim() : '';
+
+      card.innerHTML = `
+        <div class="pay-card-top">
+          <div class="pay-card-room-info">
+            <span class="pay-card-room-badge">Phòng ${row.room_code}</span>
+            <span class="pay-card-zone-badge">Khu ${row.zone}</span>
+          </div>
+          <div>
+            <span class="pay-status-badge ${isPaid ? 'paid' : 'unpaid'}">
+              ${isPaid ? '<i class="bi bi-check-circle"></i> Đã thu' : '<i class="bi bi-hourglass-split"></i> Chưa thu'}
+            </span>
+          </div>
+        </div>
+
+        <div class="pay-card-tenant-box">
+          <div class="pay-card-tenant-name"><i class="bi bi-person"></i> ${tenantNames}</div>
+          <div class="pay-card-tenant-meta">
+            ${firstPhone ? `<a href="tel:${firstPhone}" class="pay-card-phone-link"><i class="bi bi-telephone-fill"></i> ${firstPhone}</a>` : '<span class="text-muted" style="font-size:12px;">Không có SĐT</span>'}
+            ${memberCount > 0 ? `<span><i class="bi bi-people"></i> ${memberCount} người</span>` : ''}
+            <span><i class="bi bi-calendar-check"></i> Kỳ ngày ${row.billing_day || 30}</span>
+          </div>
+          ${statusBadgeHtml ? `<div class="pay-card-due-tag">${statusBadgeHtml}</div>` : ''}
+        </div>
+
+        <div class="pay-card-grid">
+          <div class="pay-card-item">
+            <span class="pay-card-label"><i class="bi bi-house"></i> Tiền phòng</span>
+            <span class="pay-card-value">${formatVND(rentAmt)}</span>
+          </div>
+          <div class="pay-card-item">
+            <span class="pay-card-label"><i class="bi bi-lightning"></i> Tiền điện</span>
+            <span class="pay-card-value ${elecAmt > 0 ? 'text-primary' : 'text-muted'}">
+              ${elecAmt > 0 ? formatVND(elecAmt) : 'Chưa nhập'}
+            </span>
+          </div>
+          <div class="pay-card-item">
+            <span class="pay-card-label"><i class="bi bi-droplet"></i> Tiền nước</span>
+            <span class="pay-card-value">${formatVND(waterAmt)}</span>
+          </div>
+          <div class="pay-card-item">
+            <span class="pay-card-label"><i class="bi bi-trash"></i> Tiền rác & TT</span>
+            <span class="pay-card-value">${formatVND(trashAmt + residenceAmt)}</span>
+          </div>
+        </div>
+
+        <div class="pay-card-total-row">
+          <span class="pay-card-total-title">Tổng cần thu:</span>
+          <span class="pay-card-total-val">${formatVND(totalAmt)}</span>
+        </div>
+
+        <div class="pay-card-actions">
+          <button class="btn btn-primary btn-pay-action" onclick="openInvoiceForRoom(${row.room_id}, ${year}, ${month})">
+            <i class="bi bi-receipt"></i> Xuất hóa đơn / Thu tiền
+          </button>
+          ${isPaid
+          ? `<button class="btn btn-outline-secondary btn-pay-toggle" onclick="markPayment(${row.room_id}, ${year}, ${month}, false)"><i class="bi bi-arrow-counterclockwise"></i> Hoàn trả</button>`
+          : `<button class="btn btn-success btn-pay-toggle" onclick="markPayment(${row.room_id}, ${year}, ${month}, true)"><i class="bi bi-check-circle"></i> Đã nhận tiền</button>`
+        }
+        </div>
+      `;
+      cardsBody.appendChild(card);
+    }
   });
 }
 
@@ -1393,6 +1471,23 @@ function filterPaymentRows(filter) {
 
     tr.style.display = (showByStatus && showByBilling) ? '' : 'none';
   });
+
+  const cards = document.querySelectorAll('#payments-cards-body .pay-room-card[data-room-id]');
+  cards.forEach(card => {
+    const isPaid = card.getAttribute('data-paid') === '1';
+    const billingDay = card.getAttribute('data-billing-day');
+
+    let showByStatus = true;
+    if (filter === 'all') showByStatus = true;
+    else if (filter === 'paid') showByStatus = isPaid;
+    else if (filter === 'unpaid') showByStatus = !isPaid;
+
+    let showByBilling = true;
+    if (activeBilling === '15') showByBilling = billingDay === '15';
+    else if (activeBilling === '30') showByBilling = billingDay === '30';
+
+    card.style.display = (showByStatus && showByBilling) ? '' : 'none';
+  });
 }
 
 function filterPaymentsByBilling(billing) {
@@ -1414,6 +1509,23 @@ function filterPaymentsByBilling(billing) {
     else if (billing === '30') showByBilling = billingDay === '30';
 
     tr.style.display = (showByStatus && showByBilling) ? '' : 'none';
+  });
+
+  const cards = document.querySelectorAll('#payments-cards-body .pay-room-card[data-room-id]');
+  cards.forEach(card => {
+    const isPaid = card.getAttribute('data-paid') === '1';
+    const billingDay = card.getAttribute('data-billing-day');
+
+    let showByStatus = true;
+    if (activeFilter === 'all') showByStatus = true;
+    else if (activeFilter === 'paid') showByStatus = isPaid;
+    else if (activeFilter === 'unpaid') showByStatus = !isPaid;
+
+    let showByBilling = true;
+    if (billing === '15') showByBilling = billingDay === '15';
+    else if (billing === '30') showByBilling = billingDay === '30';
+
+    card.style.display = (showByStatus && showByBilling) ? '' : 'none';
   });
 }
 
@@ -1999,18 +2111,20 @@ async function initInvoiceTab() {
     }
 
     // Register preview button
-    document.getElementById('btn-preview-invoice').addEventListener('click', generateInvoicePreview);
+    const btnPreview = document.getElementById('btn-preview-invoice');
+    if (btnPreview) btnPreview.addEventListener('click', generateInvoicePreview);
 
     // Print button
-    document.getElementById('btn-print-invoice').addEventListener('click', () => {
-      window.print();
-    });
+    const btnPrint = document.getElementById('btn-print-invoice');
+    if (btnPrint) btnPrint.addEventListener('click', () => window.print());
 
     // Copy text button
-    document.getElementById('btn-share-invoice').addEventListener('click', copyInvoiceText);
+    const btnShareInv = document.getElementById('btn-share-invoice');
+    if (btnShareInv) btnShareInv.addEventListener('click', copyInvoiceText);
 
     // Download image button
-    document.getElementById('btn-download-invoice-img').addEventListener('click', downloadInvoiceAsImage);
+    const btnDownloadImg = document.getElementById('btn-download-invoice-img');
+    if (btnDownloadImg) btnDownloadImg.addEventListener('click', downloadInvoiceAsImage);
 
     // Đăng ký sự kiện tự động điền ngày khi thay đổi tháng/năm
     function autoFillInvoiceDates(forceUpdate = false) {
@@ -2474,6 +2588,27 @@ function renderInvoiceDocument(data, note, options = {}) {
   // Generated timestamp
   const now = new Date();
   document.getElementById('inv-gen-time').textContent = now.toLocaleString('vi-VN');
+
+  // Lưu context hóa đơn hiện tại để toggle thu tiền
+  window._currentInvoiceContext = {
+    roomId: room.id,
+    year: summary.year,
+    month: summary.month,
+    isPaid: payment ? !!payment.is_paid : false
+  };
+
+  // Cập nhật nút xác nhận / hủy thu tiền trên thanh công cụ hóa đơn
+  const btnTogglePaid = document.getElementById('btn-invoice-toggle-paid');
+  if (btnTogglePaid) {
+    const isPaid = payment && payment.is_paid;
+    if (isPaid) {
+      btnTogglePaid.className = 'btn btn-outline-warning';
+      btnTogglePaid.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> <span id="btn-invoice-toggle-paid-text">Hủy xác nhận thu tiền</span>';
+    } else {
+      btnTogglePaid.className = 'btn btn-primary';
+      btnTogglePaid.innerHTML = '<i class="bi bi-check-circle"></i> <span id="btn-invoice-toggle-paid-text">Xác nhận đã nhận tiền</span>';
+    }
+  }
 }
 
 function copyInvoiceText() {
@@ -2644,6 +2779,88 @@ function _downloadBlobAsFile(blob, filename) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
+
+// Mở hóa đơn từ bảng thu tiền / thẻ phòng
+window.openInvoiceForRoom = async function (roomId, year, month) {
+  // 1. Chuyển sang tab Xuất hóa đơn
+  switchTab('invoice');
+
+  // 2. Khởi tạo tab hóa đơn nếu chưa
+  await initInvoiceTab();
+
+  const roomSelect = document.getElementById('inv-room-select');
+  const monthSelect = document.getElementById('inv-month');
+  const yearSelect = document.getElementById('inv-year');
+
+  if (monthSelect && month) monthSelect.value = month;
+  if (yearSelect && year) yearSelect.value = year;
+
+  // Cập nhật kỳ thu tiền phòng (từ ngày 1 đến ngày cuối tháng)
+  const rentFrom = document.getElementById('inv-rent-from');
+  const rentTo = document.getElementById('inv-rent-to');
+  if (rentFrom && rentTo && month && year) {
+    const firstDay = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDayDate = new Date(year, month, 0);
+    const lastDay = `${year}-${String(month).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`;
+    rentFrom.value = firstDay;
+    rentTo.value = lastDay;
+  }
+
+  if (roomSelect && roomId) {
+    roomSelect.value = roomId;
+  }
+
+  // 3. Tải số điện mặc định của phòng
+  await fetchInvoiceElectricityDefault();
+
+  // 4. Tự động xuất xem trước hóa đơn
+  await generateInvoicePreview();
+};
+
+// Xác nhận / Hủy thu tiền trực tiếp trên hóa đơn
+window.toggleInvoicePayment = async function () {
+  const ctx = window._currentInvoiceContext;
+  const roomId = ctx ? ctx.roomId : document.getElementById('inv-room-select')?.value;
+  const year = ctx ? ctx.year : parseInt(document.getElementById('inv-year')?.value);
+  const month = ctx ? ctx.month : parseInt(document.getElementById('inv-month')?.value);
+  const isPaid = ctx ? ctx.isPaid : false;
+
+  if (!roomId || !year || !month) {
+    showToast('Chưa có thông tin hóa đơn để xác nhận', 'error');
+    return;
+  }
+
+  const newPaidStatus = !isPaid;
+
+  if (!newPaidStatus) {
+    const isConfirmed = await showConfirm(`Bỏ đánh dấu đã thu tiền phòng này tháng ${month}/${year}?`);
+    if (!isConfirmed) return;
+  }
+
+  try {
+    const result = await fetchAPI('/api/payments/mark', {
+      method: 'POST',
+      body: JSON.stringify({ room_id: roomId, year: parseInt(year), month: parseInt(month), is_paid: newPaidStatus })
+    });
+
+    showToast(
+      newPaidStatus
+        ? `<i class="bi bi-check-circle" style="color:#16a34a"></i> Đã xác nhận nhận tiền phòng thành công!`
+        : '<i class="bi bi-arrow-counterclockwise"></i> Đã hủy xác nhận thu tiền',
+      newPaidStatus ? 'success' : 'info'
+    );
+
+    // Tạo lại preview hóa đơn để cập nhật trạng thái
+    await generateInvoicePreview();
+
+    // Đồng bộ lại bảng thu tiền và thông báo
+    if (typeof loadPaymentsData === 'function') loadPaymentsData();
+    if (typeof loadNotifications === 'function') loadNotifications();
+  } catch (err) {
+    console.error(err);
+    showToast('Lỗi khi cập nhật trạng thái thanh toán', 'error');
+  }
+};
 
 // ==========================================
 // NOTIFICATION BELL — PHÒNG ĐẾN HẠN ĐÓNG TIỀN

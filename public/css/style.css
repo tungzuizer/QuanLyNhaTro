@@ -1863,8 +1863,194 @@ body {
   background-color: hsl(35, 90%, 40%);
 }
 
+/* Dual views for payments (Desktop Table vs Mobile Cards) */
+.payments-desktop-table {
+  display: block;
+}
+
+.payments-mobile-cards {
+  display: none;
+}
+
+/* Pay Room Card (Mobile View) */
+.pay-room-card {
+  background: var(--white);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pay-room-card.card-paid {
+  border-left: 5px solid var(--success);
+  background: linear-gradient(to right, hsl(142, 70%, 99%), #ffffff);
+}
+
+.pay-room-card.card-unpaid {
+  border-left: 5px solid var(--warning);
+  background: linear-gradient(to right, hsl(38, 92%, 99%), #ffffff);
+}
+
+.pay-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.pay-card-room-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pay-card-room-badge {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--neutral-dark);
+}
+
+.pay-card-zone-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--neutral-light);
+  color: var(--neutral-gray);
+  border: 1px solid var(--border-color);
+}
+
+.pay-card-tenant-box {
+  background: #f8fafc;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid #f1f5f9;
+}
+
+.pay-card-tenant-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neutral-dark);
+  margin-bottom: 4px;
+}
+
+.pay-card-tenant-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--neutral-gray);
+}
+
+.pay-card-phone-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pay-card-due-tag {
+  margin-top: 6px;
+}
+
+.pay-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pay-card-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-radius: var(--radius-sm);
+  border: 1px solid #f1f5f9;
+}
+
+.pay-card-label {
+  font-size: 11px;
+  color: var(--neutral-gray);
+  margin-bottom: 2px;
+}
+
+.pay-card-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neutral-dark);
+}
+
+.pay-card-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #eff6ff;
+  border-radius: var(--radius-sm);
+  border: 1px solid #dbeafe;
+  margin-bottom: 12px;
+}
+
+.pay-card-total-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.pay-card-total-val {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.pay-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pay-card-actions .btn-pay-action {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pay-card-actions .btn-pay-toggle {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 /* Responsive for payments */
 @media (max-width: 768px) {
+  .payments-desktop-table {
+    display: none !important;
+  }
+
+  .payments-mobile-cards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+  }
+
   .payment-summary-grid {
     grid-template-columns: 1fr;
   }
