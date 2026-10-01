@@ -2223,26 +2223,6 @@ async function initInvoiceTab() {
     const btnDownloadImg = document.getElementById('btn-download-invoice-img');
     if (btnDownloadImg) btnDownloadImg.addEventListener('click', downloadInvoiceAsImage);
 
-    // Đăng ký sự kiện tự động điền ngày khi thay đổi tháng/năm
-    function autoFillInvoiceDates(forceUpdate = false) {
-      const m = parseInt(document.getElementById('inv-month').value);
-      const y = parseInt(document.getElementById('inv-year').value);
-      if (!m || !y) return;
-
-      // Ngày đầu tháng và ngày cuối tháng
-      const firstDay = `${y}-${String(m).padStart(2, '0')}-01`;
-      const lastDayDate = new Date(y, m, 0); // ngày 0 của tháng sau = ngày cuối tháng này
-      const lastDay = `${y}-${String(m).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`;
-
-      const rentFrom = document.getElementById('inv-rent-from');
-      const rentTo = document.getElementById('inv-rent-to');
-
-      // Nếu forceUpdate (khi đổi tháng/năm) thì luôn ghi đè
-      // Nếu là lần đầu mở thì chỉ điền khi đang trống
-      if (forceUpdate || !rentFrom.value) rentFrom.value = firstDay;
-      if (forceUpdate || !rentTo.value) rentTo.value = lastDay;
-    }
-
     mSelect.addEventListener('change', () => {
       autoFillInvoiceDates(true);  // force cập nhật ngày khi đổi tháng
       // Reset chỉ số điện để tải lại cho tháng mới
@@ -2266,22 +2246,60 @@ async function initInvoiceTab() {
       fetchInvoiceElectricityDefault();
     });
 
-    // Tự điền lần đầu khi mở tab
-    autoFillInvoiceDates(false);
-
     invoiceTabInited = true;
   }
 
   // Load rooms dropdown
   await loadInvoiceRoomsDropdown();
 
-  // Đăng ký sự kiện khi đổi phòng để tải số điện mặc định
+  // Đăng ký sự kiện khi đổi phòng để tải số điện mặc định & tự động điền ngày
   const roomSelect = document.getElementById('inv-room-select');
-  roomSelect.removeEventListener('change', fetchInvoiceElectricityDefault);
-  roomSelect.addEventListener('change', fetchInvoiceElectricityDefault);
-  
-  // Tải mặc định lần đầu
+  if (roomSelect) {
+    const onRoomSelectChange = () => {
+      autoFillInvoiceDates(true);
+      fetchInvoiceElectricityDefault();
+    };
+    roomSelect.onchange = onRoomSelectChange;
+  }
+
+  // Tự điền ngày và số điện mặc định lần đầu
+  autoFillInvoiceDates(false);
   fetchInvoiceElectricityDefault();
+}
+
+// Tự động điền ngày theo kỳ thu tiền phòng (Đợt 15 hoặc Đợt 30)
+function autoFillInvoiceDates(forceUpdate = false) {
+  const m = parseInt(document.getElementById('inv-month')?.value);
+  const y = parseInt(document.getElementById('inv-year')?.value);
+  if (!m || !y) return;
+
+  const roomSelect = document.getElementById('inv-room-select');
+  const selectedOpt = roomSelect?.selectedOptions?.[0];
+  const billingDay = selectedOpt?.getAttribute('data-billing-day')
+    ? parseInt(selectedOpt.getAttribute('data-billing-day'))
+    : 30;
+
+  let firstDay, lastDay;
+  if (billingDay === 15) {
+    // Đợt 15: Từ ngày 16 tháng trước đến 15 tháng này
+    const prevM = m === 1 ? 12 : m - 1;
+    const prevY = m === 1 ? y - 1 : y;
+    firstDay = `${prevY}-${String(prevM).padStart(2, '0')}-16`;
+    lastDay = `${y}-${String(m).padStart(2, '0')}-15`;
+  } else {
+    // Đợt 30 / cuối tháng: Từ ngày 01 đến ngày cuối tháng
+    firstDay = `${y}-${String(m).padStart(2, '0')}-01`;
+    const lastDayDate = new Date(y, m, 0);
+    lastDay = `${y}-${String(m).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`;
+  }
+
+  const rentFrom = document.getElementById('inv-rent-from');
+  const rentTo = document.getElementById('inv-rent-to');
+
+  if (rentFrom && rentTo) {
+    if (forceUpdate || !rentFrom.value) rentFrom.value = firstDay;
+    if (forceUpdate || !rentTo.value) rentTo.value = lastDay;
+  }
 }
 
 async function fetchInvoiceElectricityDefault() {
@@ -2358,6 +2376,7 @@ async function loadInvoiceRoomsDropdown() {
       const opt = document.createElement('option');
       opt.value = room.id;
       opt.textContent = `Phòng ${room.room_code} (Khu ${room.zone})`;
+      opt.setAttribute('data-billing-day', room.billing_day || 30);
       select.appendChild(opt);
     });
     if (currentVal) select.value = currentVal;
@@ -2892,20 +2911,12 @@ window.openInvoiceForRoom = async function (roomId, year, month) {
   if (monthSelect && month) monthSelect.value = month;
   if (yearSelect && year) yearSelect.value = year;
 
-  // Cập nhật kỳ thu tiền phòng (từ ngày 1 đến ngày cuối tháng)
-  const rentFrom = document.getElementById('inv-rent-from');
-  const rentTo = document.getElementById('inv-rent-to');
-  if (rentFrom && rentTo && month && year) {
-    const firstDay = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDayDate = new Date(year, month, 0);
-    const lastDay = `${year}-${String(month).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`;
-    rentFrom.value = firstDay;
-    rentTo.value = lastDay;
-  }
-
   if (roomSelect && roomId) {
     roomSelect.value = roomId;
   }
+
+  // Cập nhật kỳ thu tiền phòng theo chu kỳ thu của phòng
+  autoFillInvoiceDates(true);
 
   // 3. Tải số điện mặc định của phòng
   await fetchInvoiceElectricityDefault();

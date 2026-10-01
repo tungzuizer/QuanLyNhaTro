@@ -2515,6 +2515,77 @@ body {
   top: 24px;
 }
 
+/* Invoice Date Range and Inputs Optimization */
+.inv-date-range-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+}
+
+.inv-date-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inv-date-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--neutral-gray);
+}
+
+.inv-date-input,
+input[type="date"].inv-date-input {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 8px 6px !important;
+  font-size: 13.5px !important;
+  height: 38px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--white);
+  color: var(--neutral-dark);
+  text-align: center;
+  outline: none;
+  font-family: inherit;
+  transition: var(--transition);
+}
+
+.inv-date-input:focus,
+input[type="date"].inv-date-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.inv-date-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  font-size: 14px;
+  margin-top: 18px;
+  flex-shrink: 0;
+}
+
+/* Global date input sizing safeguard */
+input[type="date"] {
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: center;
+  margin: 0;
+}
+
 .invoice-preview-panel {
   min-height: 300px;
 }
