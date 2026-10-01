@@ -2490,7 +2490,7 @@ function copyInvoiceText() {
   if (bankDetails) {
     text += `\nThông tin chuyển khoản:\n${bankDetails}\n`;
   }
-  text += `\n— Nhà Trọ LISO —`;
+  text += `\n— Nhà Trọ LISO • Không gian sống tiện nghi & văn minh —`;
 
   navigator.clipboard.writeText(text).then(() => {
     showToast('Đã sao chép nội dung hóa đơn!', 'success');
@@ -2611,7 +2611,7 @@ async function shareInvoiceViaZalo() {
           await navigator.share({
             files: [file],
             title: `Hóa đơn ${roomCode}`,
-            text: `Hóa đơn tiền thuê ${roomCode} — ${period} từ Nhà Trọ LISO`
+            text: `Hóa đơn tiền thuê ${roomCode} — ${period} • Nhà Trọ LISO (Không gian sống tiện nghi & văn minh)`
           });
           showToast('Chia sẻ hóa đơn thành công!', 'success');
         } catch (shareErr) {
