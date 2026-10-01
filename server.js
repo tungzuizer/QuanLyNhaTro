@@ -1312,9 +1312,9 @@ app.post('/api/settings/test-email', async (req, res) => {
     const settingsMap = {};
     settings.forEach(s => { settingsMap[s.key] = s.value; });
 
-    const sender = settingsMap.email_sender;
-    const pass = settingsMap.email_pass;
-    const receiver = settingsMap.email_receiver || sender;
+    const sender = settingsMap.email_sender || DEFAULT_EMAIL_SENDER;
+    const pass = settingsMap.email_pass || DEFAULT_EMAIL_PASS;
+    const receiver = settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
 
     if (!sender || !pass) {
       return res.status(400).json({ error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password)!' });

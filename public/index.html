@@ -797,7 +797,16 @@
                 <span class="help-text">Hệ thống sẽ tự động gửi danh sách phòng đến hạn, nợ tiền và doanh thu về email này mỗi ngày.</span>
               </div>
 
-              <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Lưu cài đặt</button>
+              <div style="display: flex; gap: 10px; margin-top: 10px; margin-bottom: 16px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary" id="btn-test-email" onclick="testEmailNotification()">
+                  <i class="bi bi-envelope-check"></i> Gửi thử Email test
+                </button>
+                <button type="button" class="btn btn-secondary" id="btn-send-report-now" onclick="sendReportNow()">
+                  <i class="bi bi-send-fill"></i> Gửi báo cáo thu tiền ngay
+                </button>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Lưu cài đặt</button>
             </form>
 
             <!-- Khối thông báo đẩy -->
