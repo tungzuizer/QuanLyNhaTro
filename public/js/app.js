@@ -565,15 +565,9 @@ async function loadSettings() {
     if (bankAccount && settings.bank_account) bankAccount.value = settings.bank_account;
     if (bankOwner && settings.bank_owner) bankOwner.value = settings.bank_owner;
 
-    // Load email config info
-    const emailSender = document.getElementById('setting-email-sender');
-    const emailPass = document.getElementById('setting-email-pass');
+    // Load email receiver info
     const emailReceiver = document.getElementById('setting-email-receiver');
-    const emailEnabled = document.getElementById('setting-email-enabled');
-    if (emailSender && settings.email_sender) emailSender.value = settings.email_sender;
-    if (emailPass && settings.email_pass) emailPass.value = settings.email_pass;
-    if (emailReceiver && settings.email_receiver) emailReceiver.value = settings.email_receiver;
-    if (emailEnabled) emailEnabled.checked = (settings.email_enabled === 'true' || settings.email_enabled === true);
+    if (emailReceiver) emailReceiver.value = settings.email_receiver || 'nhatroliso@gmail.com';
 
     // Update cron URL display
     const cronSpan = document.getElementById('cron-webhook-url');
@@ -612,11 +606,18 @@ async function handleSettingsSubmit(e) {
     bank_owner: bankOwner
   };
 
+  const emailReceiverEl = document.getElementById('setting-email-receiver');
+  if (emailReceiverEl) {
+    const val = emailReceiverEl.value.trim();
+    if (val) {
+      payload.email_receiver = val;
+    }
+  }
+
   const emailSenderEl = document.getElementById('setting-email-sender');
   if (emailSenderEl) {
     payload.email_sender = emailSenderEl.value.trim();
     payload.email_pass = document.getElementById('setting-email-pass')?.value.trim() || '';
-    payload.email_receiver = document.getElementById('setting-email-receiver')?.value.trim() || '';
     payload.email_enabled = document.getElementById('setting-email-enabled')?.checked ? 'true' : 'false';
   }
 
