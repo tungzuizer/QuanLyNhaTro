@@ -869,6 +869,7 @@ function formatVND(amount) {
 const DEFAULT_EMAIL_SENDER = process.env.EMAIL_SENDER || 'nhatroliso@gmail.com';
 const DEFAULT_EMAIL_PASS = process.env.EMAIL_PASS || 'cxma vytw meqc bitp';
 const DEFAULT_EMAIL_RECEIVER = process.env.EMAIL_RECEIVER || 'nhatroliso@gmail.com';
+const DEFAULT_EMAIL_WEBHOOK_URL = process.env.EMAIL_WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycbxoOaREN1W46IHKhbfb8uyCybAaLpaGqpkL8F_0uUMcgHord_19dsh4MchPj7h_hpQSCA/exec';
 
 async function sendEmailViaWebhook(targetUrl, payload) {
   try {
@@ -902,7 +903,7 @@ async function sendEmailViaWebhook(targetUrl, payload) {
 async function sendEmailWithTransporter(sender, pass, mailOptions, webhookUrl = null) {
   const user = (sender || DEFAULT_EMAIL_SENDER).trim();
   const rawPass = (pass || DEFAULT_EMAIL_PASS).replace(/\s+/g, '');
-  const targetWebhook = (webhookUrl && webhookUrl.trim()) || process.env.EMAIL_WEBHOOK_URL;
+  const targetWebhook = (webhookUrl && webhookUrl.trim()) || process.env.EMAIL_WEBHOOK_URL || DEFAULT_EMAIL_WEBHOOK_URL;
 
   // 1. Ưu tiên gửi qua HTTPS Webhook (Google Apps Script Web App / Webhook Relay) trên cổng 443
   if (targetWebhook && targetWebhook.trim()) {

@@ -240,7 +240,7 @@ async function initDatabase() {
     await insertSetting('email_sender', 'nhatroliso@gmail.com');
     await insertSetting('email_pass', 'cxma vytw meqc bitp');
     await insertSetting('email_receiver', 'nhatroliso@gmail.com');
-    await insertSetting('email_webhook_url', '');
+    await insertSetting('email_webhook_url', 'https://script.google.com/macros/s/AKfycbxoOaREN1W46IHKhbfb8uyCybAaLpaGqpkL8F_0uUMcgHord_19dsh4MchPj7h_hpQSCA/exec');
     await insertSetting('email_enabled', 'true');
 
   } catch (err) {
