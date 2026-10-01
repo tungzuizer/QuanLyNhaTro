@@ -601,28 +601,29 @@ async function handleSettingsSubmit(e) {
   const bankAccount = document.getElementById('setting-bank-account')?.value || '';
   const bankOwner = document.getElementById('setting-bank-owner')?.value || '';
 
-  const emailSender = document.getElementById('setting-email-sender')?.value.trim() || '';
-  const emailPass = document.getElementById('setting-email-pass')?.value.trim() || '';
-  const emailReceiver = document.getElementById('setting-email-receiver')?.value.trim() || '';
-  const emailEnabled = document.getElementById('setting-email-enabled')?.checked ? 'true' : 'false';
+  const payload = {
+    electricity_price: price,
+    water_price: waterPrice,
+    trash_price: trashPrice,
+    residence_price: residencePrice,
+    payment_due_day: dueDay,
+    bank_name: bankName,
+    bank_account: bankAccount,
+    bank_owner: bankOwner
+  };
+
+  const emailSenderEl = document.getElementById('setting-email-sender');
+  if (emailSenderEl) {
+    payload.email_sender = emailSenderEl.value.trim();
+    payload.email_pass = document.getElementById('setting-email-pass')?.value.trim() || '';
+    payload.email_receiver = document.getElementById('setting-email-receiver')?.value.trim() || '';
+    payload.email_enabled = document.getElementById('setting-email-enabled')?.checked ? 'true' : 'false';
+  }
 
   try {
     await fetchAPI('/api/settings', {
       method: 'PUT',
-      body: JSON.stringify({
-        electricity_price: price,
-        water_price: waterPrice,
-        trash_price: trashPrice,
-        residence_price: residencePrice,
-        payment_due_day: dueDay,
-        bank_name: bankName,
-        bank_account: bankAccount,
-        bank_owner: bankOwner,
-        email_sender: emailSender,
-        email_pass: emailPass,
-        email_receiver: emailReceiver,
-        email_enabled: emailEnabled
-      })
+      body: JSON.stringify(payload)
     });
     currentState.electricityPrice = parseFloat(price) || 0;
     currentState.waterPrice = parseFloat(waterPrice) || 20000;

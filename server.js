@@ -826,12 +826,18 @@ function formatVND(amount) {
   return new Intl.NumberFormat('vi-VN').format(Math.round(amount || 0)) + ' đ';
 }
 
+const DEFAULT_EMAIL_SENDER = process.env.EMAIL_SENDER || 'nhatroliso@gmail.com';
+const DEFAULT_EMAIL_PASS = process.env.EMAIL_PASS || 'cxma vytw meqc bitp';
+const DEFAULT_EMAIL_RECEIVER = process.env.EMAIL_RECEIVER || 'nhatroliso@gmail.com';
+
 function createEmailTransporter(sender, pass) {
+  const user = (sender || DEFAULT_EMAIL_SENDER).trim();
+  const rawPass = (pass || DEFAULT_EMAIL_PASS).replace(/\s+/g, '');
   return nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: sender.trim(),
-      pass: pass.replace(/\s+/g, '')
+      user,
+      pass: rawPass
     }
   });
 }
@@ -1253,17 +1259,17 @@ async function sendDailyReportEmail(force = false) {
   const settingsMap = {};
   settings.forEach(s => { settingsMap[s.key] = s.value; });
 
-  const isEnabled = settingsMap.email_enabled === 'true' || settingsMap.email_enabled === '1' || settingsMap.email_enabled === 1;
+  const isEnabled = settingsMap.email_enabled === undefined || settingsMap.email_enabled === 'true' || settingsMap.email_enabled === '1' || settingsMap.email_enabled === 1 || settingsMap.email_enabled === true;
   if (!isEnabled && !force) {
     return { skipped: true, reason: 'Chức năng tự động gửi email đang bị tắt trong cài đặt.' };
   }
 
-  const sender = settingsMap.email_sender;
-  const pass = settingsMap.email_pass;
-  const receiver = settingsMap.email_receiver || sender;
+  const sender = settingsMap.email_sender || DEFAULT_EMAIL_SENDER;
+  const pass = settingsMap.email_pass || DEFAULT_EMAIL_PASS;
+  const receiver = settingsMap.email_receiver || DEFAULT_EMAIL_RECEIVER || sender;
 
   if (!sender || !pass) {
-    return { error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password) trong Cài đặt!' };
+    return { error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password)!' };
   }
 
   const vnDate = getVietnamDate();

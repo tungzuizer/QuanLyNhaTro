@@ -237,6 +237,10 @@ async function initDatabase() {
     await insertSetting('bank_name', 'MBBank');
     await insertSetting('bank_account', '099999999999');
     await insertSetting('bank_owner', 'NGUYEN VAN A');
+    await insertSetting('email_sender', 'nhatroliso@gmail.com');
+    await insertSetting('email_pass', 'cxma vytw meqc bitp');
+    await insertSetting('email_receiver', 'nhatroliso@gmail.com');
+    await insertSetting('email_enabled', 'true');
 
   } catch (err) {
     await client.query('ROLLBACK');
