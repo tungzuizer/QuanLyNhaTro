@@ -334,23 +334,29 @@
                     <button id="btn-open-chat-panel" class="btn btn-secondary" style="white-space:nowrap;">
                       <i class="bi bi-chat-dots"></i> Dán tin nhắn
                     </button>
+                    <div id="ai-ocr-status-badge" class="ai-status-badge checking" title="Bấm để kiểm tra lại kết nối AI trên điện thoại">
+                      <span class="ai-status-dot"></span>
+                      <span id="ai-ocr-status-text">AI: Đang kiểm tra...</span>
+                    </div>
                   </div>
                 </div>
               </div>
               <div class="bulk-toolbar-right" id="bulk-filter-bar" style="display:none;">
-                <label style="font-size:12px; font-weight:600; white-space:nowrap;">Hiển thị:</label>
-                <div class="bulk-filter-pills">
-                  <button class="bulk-pill active" data-filter="all">Tất cả</button>
-                  <button class="bulk-pill" data-filter="occupied">Đang thuê</button>
-                  <button class="bulk-pill" data-filter="missing"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</button>
-                  <button class="bulk-pill" data-filter="done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</button>
+                <div class="bulk-filter-group">
+                  <label style="font-size:12px; font-weight:600; white-space:nowrap;">Hiển thị:</label>
+                  <div class="bulk-filter-pills">
+                    <button class="bulk-pill active" data-filter="all">Tất cả</button>
+                    <button class="bulk-pill" data-filter="occupied">Đang thuê</button>
+                    <button class="bulk-pill" data-filter="missing"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</button>
+                    <button class="bulk-pill" data-filter="done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</button>
+                  </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
+                <div class="bulk-filter-group" style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
                   <label style="font-size:12px;font-weight:600;white-space:nowrap;">Đợt thu:</label>
                   <div class="bulk-filter-pills">
-                    <button class="bulk-billing-pill active" data-billing="all">Tất cả</button>
-                    <button class="bulk-billing-pill" data-billing="15"><i class="bi bi-calendar-event"></i> Đợt 15</button>
-                    <button class="bulk-billing-pill" data-billing="30"><i class="bi bi-calendar-event"></i> Đợt 30</button>
+                    <button class="bulk-billing-pill active" data-billing="all">Tất cả <span class="bulk-count-badge" id="bulk-count-billing-all"></span></button>
+                    <button class="bulk-billing-pill billing-15-btn" data-billing="15"><i class="bi bi-calendar-event"></i> Đợt 15 <span class="bulk-count-badge" id="bulk-count-billing-15"></span></button>
+                    <button class="bulk-billing-pill billing-30-btn" data-billing="30"><i class="bi bi-calendar-check"></i> Đợt 30 <span class="bulk-count-badge" id="bulk-count-billing-30"></span></button>
                   </div>
                 </div>
               </div>
@@ -1054,6 +1060,137 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Chụp ảnh AI OCR Công Tơ Điện -->
+  <div id="modal-ocr-camera" class="modal">
+    <div class="modal-content ocr-modal-content">
+      <div class="modal-header">
+        <h2><i class="bi bi-camera"></i> AI Đọc Công Tơ Điện — <span id="ocr-cam-room-code">Phòng ...</span></h2>
+        <span class="close-btn" onclick="closeOcrCameraModal()">&times;</span>
+      </div>
+
+      <div class="modal-body ocr-modal-body">
+        <!-- Live Camera Viewport -->
+        <div id="ocr-camera-viewport" class="ocr-viewport">
+          <video id="ocr-cam-video" autoplay playsinline muted></video>
+          <canvas id="ocr-cam-canvas" style="display:none;"></canvas>
+
+          <!-- Khung ngắm căn chỉnh 6 ô số công tơ điện cơ khí -->
+          <div class="ocr-viewfinder">
+            <div class="ocr-guide-box">
+              <div class="ocr-guide-corner top-left"></div>
+              <div class="ocr-guide-corner top-right"></div>
+              <div class="ocr-guide-corner bottom-left"></div>
+              <div class="ocr-guide-corner bottom-right"></div>
+              <div class="ocr-digits-guide">
+                <div class="ocr-guide-col black">Đen</div>
+                <div class="ocr-guide-col black">Đen</div>
+                <div class="ocr-guide-col black">Đen</div>
+                <div class="ocr-guide-col black">Đen</div>
+                <div class="ocr-guide-col black">Đen</div>
+                <div class="ocr-guide-col red">Đỏ</div>
+              </div>
+            </div>
+            <div class="ocr-guide-hint"><i class="bi bi-bullseye"></i> Căn 5 số đen & 1 số đỏ vào khung</div>
+          </div>
+
+          <!-- Nút điều khiển nhanh trên camera -->
+          <div class="ocr-camera-controls-overlay">
+            <button type="button" id="ocr-btn-switch-cam" class="ocr-icon-btn" title="Đổi camera trước/sau">
+              <i class="bi bi-arrow-repeat"></i>
+            </button>
+            <button type="button" id="ocr-btn-torch" class="ocr-icon-btn" title="Bật/Tắt đèn Flash" style="display:none;">
+              <i class="bi bi-lightbulb"></i>
+            </button>
+            <label for="ocr-file-fallback" class="ocr-icon-btn" title="Chọn ảnh có sẵn từ máy" style="margin:0;cursor:pointer;">
+              <i class="bi bi-image"></i>
+            </label>
+            <input type="file" id="ocr-file-fallback" accept="image/*" style="display:none;">
+          </div>
+        </div>
+
+        <!-- Vùng xem trước ảnh chụp/tải lên -->
+        <div id="ocr-preview-container" class="ocr-preview-container" style="display:none;">
+          <img id="ocr-preview-img" src="" alt="Ảnh chụp công tơ">
+        </div>
+
+        <!-- Trạng thái Loading phân tích AI -->
+        <div id="ocr-loading-state" class="ocr-loading-state" style="display:none;">
+          <div class="ocr-spinner"></div>
+          <h4>🤖 AI đang phân tích bánh xe công tơ...</h4>
+          <p>Model antigravity/gemini-3.7-flash-high qua OmniRoute</p>
+        </div>
+
+        <!-- Kết quả nhận diện AI OCR -->
+        <div id="ocr-result-card" class="ocr-result-card" style="display:none;">
+          <div class="ocr-result-header">
+            <span class="ocr-badge-success"><i class="bi bi-check-circle-fill"></i> Đã nhận diện</span>
+            <span id="ocr-result-confidence" class="ocr-confidence">Độ tin cậy: --%</span>
+          </div>
+
+          <!-- Hiển thị 6 ô số trực quan (5 đen + 1 đỏ) -->
+          <div class="ocr-display-digits-wrap">
+            <div class="ocr-digit-box-container">
+              <div class="ocr-digit-box black" id="ocr-digit-0">-</div>
+              <div class="ocr-digit-box black" id="ocr-digit-1">-</div>
+              <div class="ocr-digit-box black" id="ocr-digit-2">-</div>
+              <div class="ocr-digit-box black" id="ocr-digit-3">-</div>
+              <div class="ocr-digit-box black" id="ocr-digit-4">-</div>
+              <div class="ocr-digit-box red" id="ocr-digit-5">-</div>
+            </div>
+            <div class="ocr-digit-legend">
+              <span><i class="bi bi-square-fill" style="color:#1e293b"></i> 5 số đen (kWh)</span>
+              <span><i class="bi bi-square-fill" style="color:#dc2626"></i> 1 số đỏ (0.1 kWh)</span>
+            </div>
+          </div>
+
+          <!-- Ô nhập để người dùng xác nhận / chỉnh sửa -->
+          <div class="ocr-edit-reading-row">
+            <div class="ocr-reading-input-wrap">
+              <label for="ocr-input-final-reading"><i class="bi bi-pencil-square"></i> Số điện ghi nhận (kWh):</label>
+              <input type="number" id="ocr-input-final-reading" class="form-control ocr-big-input" step="1" min="0">
+            </div>
+            <div class="ocr-old-reading-info">
+              <span>Số cũ:</span>
+              <strong id="ocr-label-old-reading">0 kWh</strong>
+            </div>
+          </div>
+
+          <!-- Thông tin giải thích Rollover & Cảnh báo -->
+          <div id="ocr-rollover-box" class="ocr-info-box" style="display:none;">
+            <i class="bi bi-info-circle-fill"></i>
+            <span id="ocr-rollover-text"></span>
+          </div>
+          <div id="ocr-warning-box" class="ocr-warning-box" style="display:none;">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span id="ocr-warning-text"></span>
+          </div>
+        </div>
+
+        <!-- Khối nút bấm hành động -->
+        <div class="ocr-modal-actions">
+          <div id="ocr-actions-capture" class="ocr-action-group">
+            <button type="button" id="ocr-btn-capture" class="btn btn-primary btn-capture-large">
+              <i class="bi bi-camera-fill"></i> Chụp ảnh nhận diện
+            </button>
+          </div>
+
+          <div id="ocr-actions-confirm" class="ocr-action-group" style="display:none;">
+            <button type="button" id="ocr-btn-retake" class="btn btn-secondary">
+              <i class="bi bi-arrow-counterclockwise"></i> Chụp lại
+            </button>
+            <button type="button" id="ocr-btn-apply-only" class="btn btn-outline-primary">
+              <i class="bi bi-check-lg"></i> Điền vào bảng
+            </button>
+            <button type="button" id="ocr-btn-save-and-next" class="btn btn-success btn-pulse">
+              <i class="bi bi-floppy-fill"></i> Lưu & Sang phòng tiếp theo <i class="bi bi-arrow-right"></i>
+            </button>
           </div>
         </div>
 

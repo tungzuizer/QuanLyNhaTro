@@ -464,6 +464,28 @@ function registerEventListeners() {
       setPaymentGridMode(nextMode);
     });
   }
+
+  // --- MODAL AI OCR CAMERA EVENT LISTENERS ---
+  const ocrSwitchBtn = document.getElementById('ocr-btn-switch-cam');
+  if (ocrSwitchBtn) ocrSwitchBtn.addEventListener('click', switchOcrCamera);
+
+  const ocrTorchBtn = document.getElementById('ocr-btn-torch');
+  if (ocrTorchBtn) ocrTorchBtn.addEventListener('click', toggleOcrTorch);
+
+  const ocrFileInput = document.getElementById('ocr-file-fallback');
+  if (ocrFileInput) ocrFileInput.addEventListener('change', handleOcrFileFallback);
+
+  const ocrCaptureBtn = document.getElementById('ocr-btn-capture');
+  if (ocrCaptureBtn) ocrCaptureBtn.addEventListener('click', captureOcrPhoto);
+
+  const ocrRetakeBtn = document.getElementById('ocr-btn-retake');
+  if (ocrRetakeBtn) ocrRetakeBtn.addEventListener('click', retakeOcrPhoto);
+
+  const ocrApplyBtn = document.getElementById('ocr-btn-apply-only');
+  if (ocrApplyBtn) ocrApplyBtn.addEventListener('click', handleOcrApplyOnly);
+
+  const ocrSaveNextBtn = document.getElementById('ocr-btn-save-and-next');
+  if (ocrSaveNextBtn) ocrSaveNextBtn.addEventListener('click', handleOcrSaveAndNext);
 }
 
 // ==========================================
@@ -1740,6 +1762,13 @@ function initElectricityModeTabs() {
     btnParseChat.addEventListener('click', parseChatReadings);
   }
 
+  // AI OCR status check button
+  const aiStatusBadge = document.getElementById('ai-ocr-status-badge');
+  if (aiStatusBadge) {
+    aiStatusBadge.addEventListener('click', () => checkAiOcrStatus(true));
+  }
+  checkAiOcrStatus();
+
   // Clear chat button
   const btnClearChat = document.getElementById('btn-clear-chat');
   if (btnClearChat) {
@@ -1803,7 +1832,11 @@ async function loadBulkData() {
 
     // Reset filter về "Tất cả"
     document.querySelectorAll('.bulk-pill').forEach(p => p.classList.remove('active'));
-    document.querySelector('.bulk-pill[data-filter="all"]').classList.add('active');
+    document.querySelector('.bulk-pill[data-filter="all"]')?.classList.add('active');
+    document.querySelectorAll('.bulk-billing-pill').forEach(p => p.classList.remove('active'));
+    document.querySelector('.bulk-billing-pill[data-billing="all"]')?.classList.add('active');
+
+    updateBulkBillingCounts(data);
 
     showToast(`Đã tải ${data.length} phòng cho tháng ${month}/${year}`, 'success');
   } catch (err) {
@@ -1849,12 +1882,16 @@ function renderBulkTable(data, month, year) {
         ? `<span class="bulk-status-badge bulk-status-done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã lưu</span>`
         : `<span class="bulk-status-badge bulk-status-missing"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</span>`;
 
+    const billingBadge = room.billing_day == 15
+      ? `<span class="bulk-badge-billing billing-15"><i class="bi bi-calendar-event"></i> Đợt 15</span>`
+      : `<span class="bulk-badge-billing billing-30"><i class="bi bi-calendar-check"></i> Đợt 30</span>`;
+
     tr.innerHTML = `
       <td class="bulk-td-room">
         <div class="bulk-room-meta">
           <span class="bulk-room-code">${room.room_code}</span>
-          <span class="bulk-badge-pill">${room.zone}</span>
-          <span class="bulk-badge-pill light">Đợt ${room.billing_day || 30}</span>
+          <span class="bulk-badge-pill">Khu ${room.zone}</span>
+          ${billingBadge}
           <span class="bulk-status-mobile-holder">${statusBadge}</span>
         </div>
       </td>
@@ -1880,18 +1917,21 @@ function renderBulkTable(data, month, year) {
       <td class="bulk-td-new">
         <div class="bulk-input-block">
           <label class="bulk-mobile-label">Số mới *:</label>
-          <input
-            type="number"
-            class="bulk-new-reading ${hasCurrentData ? 'input-valid' : ''}"
-            data-room-id="${room.id}"
-            data-idx="${idx}"
-            value="${savedNewReading}"
-            step="1"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            placeholder="${isVacant ? 'Trống' : 'Nhập số mới'}"
-            ${isVacant ? 'disabled style="opacity:0.4;"' : ''}
-          >
+          <div class="bulk-input-with-cam">
+            <input
+              type="number"
+              class="bulk-new-reading ${hasCurrentData ? 'input-valid' : ''}"
+              data-room-id="${room.id}"
+              data-idx="${idx}"
+              value="${savedNewReading}"
+              step="1"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="${isVacant ? 'Trống' : 'Nhập số mới'}"
+              ${isVacant ? 'disabled style="opacity:0.4;"' : ''}
+            >
+            ${!isVacant ? `<button type="button" class="btn-bulk-cam" data-room-id="${room.id}" data-room-code="${room.room_code}" title="Chụp ảnh công tơ bằng AI"><i class="bi bi-camera"></i></button>` : ''}
+          </div>
         </div>
       </td>
       <td class="bulk-td-kwh text-center" id="bulk-kwh-${room.id}">
@@ -1922,9 +1962,16 @@ function renderBulkTable(data, month, year) {
     const oldInput = tr.querySelector('.bulk-old-reading');
     const newInput = tr.querySelector('.bulk-new-reading');
     const saveBtn = tr.querySelector('.btn-save-room-reading');
+    const camBtn = tr.querySelector('.btn-bulk-cam');
 
     if (!isVacant) {
       if (oldInput) oldInput.addEventListener('input', () => onBulkInputChange(newInput, room.id));
+      if (camBtn) {
+        camBtn.addEventListener('click', () => {
+          const currentOld = parseFloat(oldInput?.value) || oldReading || 0;
+          openOcrCameraModal(room.id, room.room_code, currentOld);
+        });
+      }
       if (newInput) {
         newInput.addEventListener('input', () => onBulkInputChange(newInput, room.id));
 
@@ -2181,6 +2228,24 @@ function applyBulkBillingFilter(billing) {
 
     tr.style.display = (showByStatus && showByBilling) ? '' : 'none';
   });
+}
+
+function updateBulkBillingCounts(data) {
+  let countAll = 0, count15 = 0, count30 = 0;
+  data.forEach(room => {
+    if (room.status === 'occupied') {
+      countAll++;
+      if (room.billing_day == 15) count15++;
+      else count30++;
+    }
+  });
+
+  const elAll = document.getElementById('bulk-count-billing-all');
+  const el15 = document.getElementById('bulk-count-billing-15');
+  const el30 = document.getElementById('bulk-count-billing-30');
+  if (elAll) elAll.textContent = countAll > 0 ? `(${countAll})` : '';
+  if (el15) el15.textContent = count15 > 0 ? `(${count15})` : '';
+  if (el30) el30.textContent = count30 > 0 ? `(${count30})` : '';
 }
 
 // ==========================================
@@ -3661,3 +3726,545 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 });
+
+// ==========================================
+// 11. AI OCR CÔNG TƠ ĐIỆN (OMNIROUTE & TERMUX)
+// ==========================================
+
+const ocrState = {
+  stream: null,
+  currentRoomId: null,
+  currentRoomCode: '',
+  currentOldReading: 0,
+  facingMode: 'environment', // 'environment' (camera sau) hoặc 'user' (camera trước)
+  torchOn: false,
+  capturedImageBase64: null,
+  currentOcrResult: null,
+  isAnalyzing: false
+};
+
+// Mở modal Camera AI OCR cho 1 phòng
+async function openOcrCameraModal(roomId, roomCode, oldReading) {
+  ocrState.currentRoomId = roomId;
+  ocrState.currentRoomCode = roomCode || `P${roomId}`;
+  ocrState.currentOldReading = typeof oldReading === 'number' ? oldReading : parseFloat(oldReading) || 0;
+  ocrState.capturedImageBase64 = null;
+  ocrState.currentOcrResult = null;
+  ocrState.isAnalyzing = false;
+
+  // Cập nhật thông tin giao diện modal
+  const roomCodeEl = document.getElementById('ocr-cam-room-code');
+  if (roomCodeEl) roomCodeEl.textContent = `Phòng ${ocrState.currentRoomCode}`;
+
+  const oldReadingLabel = document.getElementById('ocr-label-old-reading');
+  if (oldReadingLabel) oldReadingLabel.textContent = `${ocrState.currentOldReading} kWh`;
+
+  // Reset các ô hiển thị số
+  for (let i = 0; i <= 5; i++) {
+    const digitEl = document.getElementById(`ocr-digit-${i}`);
+    if (digitEl) digitEl.textContent = '-';
+  }
+
+  const inputFinal = document.getElementById('ocr-input-final-reading');
+  if (inputFinal) inputFinal.value = '';
+
+  const confEl = document.getElementById('ocr-result-confidence');
+  if (confEl) confEl.textContent = 'Độ tin cậy: --%';
+
+  const rolloverBox = document.getElementById('ocr-rollover-box');
+  if (rolloverBox) rolloverBox.style.display = 'none';
+
+  const warningBox = document.getElementById('ocr-warning-box');
+  if (warningBox) warningBox.style.display = 'none';
+
+  // Hiển thị khung camera và nút chụp, ẩn kết quả & preview
+  const viewport = document.getElementById('ocr-camera-viewport');
+  if (viewport) viewport.style.display = 'flex';
+
+  const previewWrap = document.getElementById('ocr-preview-container');
+  if (previewWrap) previewWrap.style.display = 'none';
+
+  const loadingState = document.getElementById('ocr-loading-state');
+  if (loadingState) loadingState.style.display = 'none';
+
+  const resultCard = document.getElementById('ocr-result-card');
+  if (resultCard) resultCard.style.display = 'none';
+
+  const actionsCapture = document.getElementById('ocr-actions-capture');
+  if (actionsCapture) actionsCapture.style.display = 'flex';
+
+  const actionsConfirm = document.getElementById('ocr-actions-confirm');
+  if (actionsConfirm) actionsConfirm.style.display = 'none';
+
+  const modal = document.getElementById('modal-ocr-camera');
+  if (modal) {
+    modal.style.display = 'flex';
+  }
+
+  // Khởi động Camera stream
+  await startOcrCamera();
+}
+
+// Khởi chạy luồng Camera từ thiết bị
+async function startOcrCamera() {
+  stopOcrCamera();
+
+  const videoEl = document.getElementById('ocr-cam-video');
+  if (!videoEl) return;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Trình duyệt không hỗ trợ trực tiếp Camera, vui lòng chọn tải ảnh lên', 'warning');
+    return;
+  }
+
+  try {
+    const constraints = {
+      video: {
+        facingMode: { ideal: ocrState.facingMode },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    ocrState.stream = stream;
+    videoEl.srcObject = stream;
+    await videoEl.play().catch(() => {});
+
+    // Kiểm tra tính năng đèn Flash / Torch nếu có
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track && track.getCapabilities ? track.getCapabilities() : {};
+    const torchBtn = document.getElementById('ocr-btn-torch');
+    if (torchBtn) {
+      if (capabilities.torch) {
+        torchBtn.style.display = 'inline-flex';
+        torchBtn.style.color = '';
+        ocrState.torchOn = false;
+      } else {
+        torchBtn.style.display = 'none';
+      }
+    }
+  } catch (err) {
+    console.warn('Không thể mở camera:', err);
+    showToast('Không thể mở camera: ' + (err.message || 'Vui lòng cấp quyền'), 'warning');
+  }
+}
+
+// Tắt Camera giải phóng tài nguyên
+function stopOcrCamera() {
+  if (ocrState.stream) {
+    ocrState.stream.getTracks().forEach(t => t.stop());
+    ocrState.stream = null;
+  }
+  const videoEl = document.getElementById('ocr-cam-video');
+  if (videoEl) {
+    videoEl.srcObject = null;
+  }
+  ocrState.torchOn = false;
+  const torchBtn = document.getElementById('ocr-btn-torch');
+  if (torchBtn) {
+    torchBtn.style.color = '';
+  }
+}
+
+// Chuyển đổi camera trước/sau
+async function switchOcrCamera() {
+  ocrState.facingMode = (ocrState.facingMode === 'environment') ? 'user' : 'environment';
+  await startOcrCamera();
+}
+
+// Bật/tắt đèn Flash
+async function toggleOcrTorch() {
+  if (!ocrState.stream) return;
+  const track = ocrState.stream.getVideoTracks()[0];
+  if (track && track.applyConstraints) {
+    try {
+      ocrState.torchOn = !ocrState.torchOn;
+      await track.applyConstraints({
+        advanced: [{ torch: ocrState.torchOn }]
+      });
+      const torchBtn = document.getElementById('ocr-btn-torch');
+      if (torchBtn) {
+        torchBtn.style.color = ocrState.torchOn ? '#f59e0b' : '';
+      }
+    } catch (e) {
+      console.warn('Torch toggle error:', e);
+      ocrState.torchOn = false;
+    }
+  }
+}
+
+// Tải ảnh từ thư viện thiết bị (Fallback)
+function handleOcrFileFallback(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const dataUrl = event.target.result;
+    ocrState.capturedImageBase64 = dataUrl;
+
+    // Tắt camera stream và hiển thị preview
+    stopOcrCamera();
+
+    const viewport = document.getElementById('ocr-camera-viewport');
+    if (viewport) viewport.style.display = 'none';
+
+    const previewWrap = document.getElementById('ocr-preview-container');
+    const previewImg = document.getElementById('ocr-preview-img');
+    if (previewImg) previewImg.src = dataUrl;
+    if (previewWrap) previewWrap.style.display = 'flex';
+
+    // Gửi ảnh sang AI OCR
+    sendOcrRequest(dataUrl);
+  };
+  reader.readAsDataURL(file);
+
+  // Reset input để có thể chọn lại ảnh cùng tên
+  e.target.value = '';
+}
+
+// Chụp ảnh từ khung video camera
+function captureOcrPhoto() {
+  const videoEl = document.getElementById('ocr-cam-video');
+  const canvasEl = document.getElementById('ocr-cam-canvas');
+  if (!videoEl || !canvasEl) return;
+
+  const vw = videoEl.videoWidth || 640;
+  const vh = videoEl.videoHeight || 480;
+  canvasEl.width = vw;
+  canvasEl.height = vh;
+
+  const ctx = canvasEl.getContext('2d');
+  ctx.drawImage(videoEl, 0, 0, vw, vh);
+
+  const dataUrl = canvasEl.toDataURL('image/jpeg', 0.85);
+  ocrState.capturedImageBase64 = dataUrl;
+
+  // Dừng camera
+  stopOcrCamera();
+
+  // Hiển thị ảnh chụp tĩnh trong preview
+  const viewport = document.getElementById('ocr-camera-viewport');
+  if (viewport) viewport.style.display = 'none';
+
+  const previewWrap = document.getElementById('ocr-preview-container');
+  const previewImg = document.getElementById('ocr-preview-img');
+  if (previewImg) previewImg.src = dataUrl;
+  if (previewWrap) previewWrap.style.display = 'flex';
+
+  // Gửi ảnh sang AI OCR
+  sendOcrRequest(dataUrl);
+}
+
+// Chụp lại
+async function retakeOcrPhoto() {
+  ocrState.capturedImageBase64 = null;
+  ocrState.currentOcrResult = null;
+  ocrState.isAnalyzing = false;
+
+  const previewWrap = document.getElementById('ocr-preview-container');
+  if (previewWrap) previewWrap.style.display = 'none';
+
+  const loadingState = document.getElementById('ocr-loading-state');
+  if (loadingState) loadingState.style.display = 'none';
+
+  const resultCard = document.getElementById('ocr-result-card');
+  if (resultCard) resultCard.style.display = 'none';
+
+  const actionsCapture = document.getElementById('ocr-actions-capture');
+  if (actionsCapture) actionsCapture.style.display = 'flex';
+
+  const actionsConfirm = document.getElementById('ocr-actions-confirm');
+  if (actionsConfirm) actionsConfirm.style.display = 'none';
+
+  const viewport = document.getElementById('ocr-camera-viewport');
+  if (viewport) viewport.style.display = 'flex';
+
+  await startOcrCamera();
+}
+
+// Gửi ảnh đến API AI OCR Backend
+async function sendOcrRequest(base64Image) {
+  if (ocrState.isAnalyzing) return;
+  ocrState.isAnalyzing = true;
+
+  const loadingState = document.getElementById('ocr-loading-state');
+  if (loadingState) loadingState.style.display = 'flex';
+
+  const resultCard = document.getElementById('ocr-result-card');
+  if (resultCard) resultCard.style.display = 'none';
+
+  const actionsCapture = document.getElementById('ocr-actions-capture');
+  if (actionsCapture) actionsCapture.style.display = 'none';
+
+  const actionsConfirm = document.getElementById('ocr-actions-confirm');
+  if (actionsConfirm) actionsConfirm.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/ocr-meter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: base64Image,
+        room_id: ocrState.currentRoomId,
+        old_reading: ocrState.currentOldReading,
+        room_code: ocrState.currentRoomCode
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Lỗi khi gọi AI nhận diện công tơ');
+    }
+
+    renderOcrResult(data);
+  } catch (err) {
+    console.error('OCR Error:', err);
+    showToast(err.message || 'Không thể nhận diện ảnh', 'error');
+
+    // Mở lại các nút điều khiển để chụp lại
+    if (actionsConfirm) actionsConfirm.style.display = 'flex';
+  } finally {
+    ocrState.isAnalyzing = false;
+    if (loadingState) loadingState.style.display = 'none';
+  }
+}
+
+// Hiển thị kết quả AI OCR lên giao diện
+function renderOcrResult(data) {
+  ocrState.currentOcrResult = data;
+
+  const resultCard = document.getElementById('ocr-result-card');
+  if (resultCard) resultCard.style.display = 'block';
+
+  const actionsConfirm = document.getElementById('ocr-actions-confirm');
+  if (actionsConfirm) actionsConfirm.style.display = 'flex';
+
+  // Hiển thị độ tin cậy
+  const confEl = document.getElementById('ocr-result-confidence');
+  if (confEl) {
+    const confVal = (data.confidence !== undefined) ? Math.round(data.confidence * 100) : 95;
+    confEl.textContent = `Độ tin cậy: ${confVal}%`;
+  }
+
+  // Tách và hiển thị 6 ô số (5 đen + 1 đỏ)
+  let raw = data.raw_digits || '';
+  if (!raw || raw.length < 6) {
+    const rdStr = String(data.reading || 0).padStart(5, '0');
+    const decStr = (data.decimal_reading !== undefined) ? String(data.decimal_reading) : '';
+    const lastDec = decStr.includes('.') ? decStr.split('.')[1][0] || '0' : '0';
+    raw = rdStr + lastDec;
+  }
+
+  for (let i = 0; i <= 5; i++) {
+    const digitEl = document.getElementById(`ocr-digit-${i}`);
+    if (digitEl) {
+      digitEl.textContent = raw[i] || '-';
+    }
+  }
+
+  // Điền vào ô input xác nhận
+  const inputFinal = document.getElementById('ocr-input-final-reading');
+  if (inputFinal) {
+    inputFinal.value = data.reading;
+  }
+
+  // Hiển thị thông báo Odometer Rollover nếu có
+  const rolloverBox = document.getElementById('ocr-rollover-box');
+  const rolloverText = document.getElementById('ocr-rollover-text');
+  if (rolloverBox && rolloverText) {
+    if (data.rollover_detected || (data.details && data.details.rollover_explanation)) {
+      rolloverText.textContent = (data.details && data.details.rollover_explanation)
+        ? data.details.rollover_explanation
+        : 'Phát hiện bánh xe số đang quay lơ lửng — AI đã đối chiếu số đỏ để chọn số chính xác!';
+      rolloverBox.style.display = 'flex';
+    } else {
+      rolloverBox.style.display = 'none';
+    }
+  }
+
+  // Cảnh báo nếu số mới < số cũ
+  const warningBox = document.getElementById('ocr-warning-box');
+  const warningText = document.getElementById('ocr-warning-text');
+  if (warningBox && warningText) {
+    if (data.warning || (parseFloat(data.reading) < ocrState.currentOldReading)) {
+      warningText.textContent = data.warning || `Chỉ số mới (${data.reading}) nhỏ hơn chỉ số cũ (${ocrState.currentOldReading}). Vui lòng kiểm tra lại!`;
+      warningBox.style.display = 'flex';
+    } else {
+      warningBox.style.display = 'none';
+    }
+  }
+}
+
+// Áp dụng số điện vào bảng nhưng không lưu ngay (chỉ điền)
+function handleOcrApplyOnly() {
+  const inputFinal = document.getElementById('ocr-input-final-reading');
+  const finalVal = inputFinal ? parseFloat(inputFinal.value) : NaN;
+
+  if (isNaN(finalVal) || finalVal < 0) {
+    showToast('Vui lòng kiểm tra lại chỉ số điện hợp lệ', 'warning');
+    return;
+  }
+
+  const tr = document.querySelector(`#bulk-elec-tbody tr[data-room-id="${ocrState.currentRoomId}"]`);
+  if (tr) {
+    const newInput = tr.querySelector('.bulk-new-reading');
+    if (newInput) {
+      newInput.value = finalVal;
+      onBulkInputChange(newInput, ocrState.currentRoomId);
+      newInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  showToast(`Đã điền chỉ số ${finalVal} kWh cho phòng ${ocrState.currentRoomCode}`, 'success');
+  closeOcrCameraModal();
+}
+
+// Lưu số điện của phòng hiện tại và tự động chuyển sang phòng tiếp theo
+async function handleOcrSaveAndNext() {
+  const inputFinal = document.getElementById('ocr-input-final-reading');
+  const finalVal = inputFinal ? parseFloat(inputFinal.value) : NaN;
+
+  if (isNaN(finalVal) || finalVal < 0) {
+    showToast('Vui lòng kiểm tra lại chỉ số điện hợp lệ', 'warning');
+    return;
+  }
+
+  if (finalVal < ocrState.currentOldReading) {
+    const confirmProceed = confirm(`Chỉ số mới (${finalVal}) nhỏ hơn chỉ số cũ (${ocrState.currentOldReading}). Bạn có chắc chắn muốn lưu?`);
+    if (!confirmProceed) return;
+  }
+
+  const tr = document.querySelector(`#bulk-elec-tbody tr[data-room-id="${ocrState.currentRoomId}"]`);
+  if (tr) {
+    const newInput = tr.querySelector('.bulk-new-reading');
+    if (newInput) {
+      newInput.value = finalVal;
+      onBulkInputChange(newInput, ocrState.currentRoomId);
+    }
+  }
+
+  // Lưu vào database
+  await saveSingleRoomReading(ocrState.currentRoomId, ocrState.currentRoomCode);
+
+  // Tự động tìm phòng kế tiếp
+  moveToNextOcrRoom();
+}
+
+// Tự động chuyển sang phòng tiếp theo trong bảng nhập hàng loạt
+function moveToNextOcrRoom() {
+  const allRows = Array.from(document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]'));
+  if (!allRows || allRows.length === 0) {
+    closeOcrCameraModal();
+    return;
+  }
+
+  const currentIdx = allRows.findIndex(r => r.getAttribute('data-room-id') === String(ocrState.currentRoomId));
+
+  // Tìm phòng kế tiếp chưa nhập hoặc phòng tiếp theo trong danh sách (không phải phòng trống)
+  let nextRow = null;
+  for (let i = currentIdx + 1; i < allRows.length; i++) {
+    const r = allRows[i];
+    const isVacant = r.querySelector('.bulk-new-reading')?.disabled;
+    if (!isVacant) {
+      nextRow = r;
+      break;
+    }
+  }
+
+  // Nếu không tìm thấy ở phía sau, tìm từ đầu danh sách các phòng chưa lưu
+  if (!nextRow) {
+    for (let i = 0; i < currentIdx; i++) {
+      const r = allRows[i];
+      const isVacant = r.querySelector('.bulk-new-reading')?.disabled;
+      const isDone = r.classList.contains('bulk-row-done');
+      if (!isVacant && !isDone) {
+        nextRow = r;
+        break;
+      }
+    }
+  }
+
+  if (nextRow) {
+    const nextRoomId = parseInt(nextRow.getAttribute('data-room-id'));
+    const roomCodeBadge = nextRow.querySelector('.bulk-room-badge');
+    const nextRoomCode = roomCodeBadge ? roomCodeBadge.textContent.trim() : `P${nextRoomId}`;
+    const oldInput = nextRow.querySelector('.bulk-old-reading');
+    const nextOldReading = parseFloat(oldInput?.value) || 0;
+
+    showToast(`📸 Tiếp tục chụp công tơ: Phòng ${nextRoomCode}`, 'info');
+
+    // Mở tiếp phòng mới trên modal hiện tại
+    openOcrCameraModal(nextRoomId, nextRoomCode, nextOldReading);
+  } else {
+    showToast('🎉 Đã hoàn thành ghi số điện cho tất cả các phòng!', 'success');
+    closeOcrCameraModal();
+  }
+}
+
+// Đóng modal Camera AI OCR
+function closeOcrCameraModal() {
+  stopOcrCamera();
+  const modal = document.getElementById('modal-ocr-camera');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+// Kiểm tra trạng thái máy chủ AI OCR trên điện thoại Samsung
+async function checkAiOcrStatus(showToastOnManual = false) {
+  const badge = document.getElementById('ai-ocr-status-badge');
+  const textEl = document.getElementById('ai-ocr-status-text');
+  if (!badge) return;
+
+  badge.className = 'ai-status-badge checking';
+  if (textEl) textEl.textContent = 'AI: Đang kiểm tra...';
+
+  try {
+    const res = await fetch('/api/ocr-meter/status');
+    const data = await res.json();
+
+    if (data.connected) {
+      badge.className = 'ai-status-badge online';
+      if (textEl) textEl.textContent = 'AI OCR: Online 🟢';
+      badge.title = `Máy chủ AI trên điện thoại đã kết nối (${data.tunnelUrl || ''}) - Bấm để kiểm tra lại`;
+      if (showToastOnManual) {
+        showToast('🟢 Máy chủ AI OCR trên điện thoại đang hoạt động tốt!', 'success');
+      }
+    } else {
+      badge.className = 'ai-status-badge offline';
+      if (textEl) textEl.textContent = 'AI OCR: Offline 🔴';
+      badge.title = `${data.message || 'Chưa kết nối máy chủ AI trên điện thoại'} - Bấm để kiểm tra lại`;
+      if (showToastOnManual) {
+        showToast(data.message || 'Chưa thể kết nối tới máy chủ AI trên điện thoại', 'warning');
+      }
+    }
+  } catch (err) {
+    badge.className = 'ai-status-badge offline';
+    if (textEl) textEl.textContent = 'AI OCR: Offline 🔴';
+    badge.title = 'Lỗi kết nối tới máy chủ (Bấm để kiểm tra lại)';
+    if (showToastOnManual) {
+      showToast('Lỗi kiểm tra kết nối AI', 'error');
+    }
+  }
+}
+
+// Expose toàn bộ các hàm ra window scope
+window.checkAiOcrStatus = checkAiOcrStatus;
+window.openOcrCameraModal = openOcrCameraModal;
+window.closeOcrCameraModal = closeOcrCameraModal;
+window.startOcrCamera = startOcrCamera;
+window.stopOcrCamera = stopOcrCamera;
+window.switchOcrCamera = switchOcrCamera;
+window.toggleOcrTorch = toggleOcrTorch;
+window.handleOcrFileFallback = handleOcrFileFallback;
+window.captureOcrPhoto = captureOcrPhoto;
+window.retakeOcrPhoto = retakeOcrPhoto;
+window.sendOcrRequest = sendOcrRequest;
+window.renderOcrResult = renderOcrResult;
+window.handleOcrApplyOnly = handleOcrApplyOnly;
+window.handleOcrSaveAndNext = handleOcrSaveAndNext;
+window.moveToNextOcrRoom = moveToNextOcrRoom;
+

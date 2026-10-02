@@ -6,6 +6,7 @@ data/nha-tro.db
 data/nha-tro.db-journal
 data/nha-tro.db-wal
 data/nha-tro.db-shm
+nhatro.db*
 
 # Log files
 *.log

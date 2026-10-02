@@ -13,7 +13,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Route ping nhẹ để giữ server luôn thức trên Render
@@ -847,9 +848,121 @@ app.put('/api/settings', async (req, res) => {
       await upsertSetting('email_receiver', recipientList.length > 0 ? recipientList.join(', ') : email_receiver.trim());
     }
     await upsertSetting('email_enabled', email_enabled);
+    if (req.body.ai_ocr_tunnel_url !== undefined) {
+      await upsertSetting('ai_ocr_tunnel_url', req.body.ai_ocr_tunnel_url);
+    }
 
     res.json({ message: 'Cập nhật cài đặt thành công' });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint cho script Termux trên điện thoại tự động đồng bộ Cloudflare Quick Tunnel URL
+app.post('/api/settings/ai-tunnel-url', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'URL không được để trống' });
+    }
+    const cleanUrl = url.trim().replace(/\/+$/, '');
+    await upsertSetting('ai_ocr_tunnel_url', cleanUrl);
+    console.log(`🤖 [AI OCR] Đã cập nhật Cloudflare Tunnel URL từ Termux: ${cleanUrl}`);
+    res.json({ success: true, message: 'Đã cập nhật AI Tunnel URL thành công', url: cleanUrl });
+  } catch (err) {
+    console.error('❌ Lỗi cập nhật AI Tunnel URL:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint kiểm tra trạng thái kết nối tới máy chủ AI trên điện thoại Samsung
+app.get('/api/ocr-meter/status', async (req, res) => {
+  try {
+    const row = await db.prepare("SELECT value FROM settings WHERE key = 'ai_ocr_tunnel_url'").get();
+    const tunnelUrl = row ? (row.value || '').trim() : '';
+    if (!tunnelUrl) {
+      return res.json({ connected: false, message: 'Chưa cấu hình URL AI trên điện thoại' });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    try {
+      const pingRes = await fetch(`${tunnelUrl}/health`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (pingRes.ok) {
+        const info = await pingRes.json().catch(() => ({}));
+        return res.json({ connected: true, tunnelUrl, info });
+      }
+    } catch (pingErr) {
+      clearTimeout(timeout);
+    }
+    res.json({ connected: false, tunnelUrl, message: 'Không thể kết nối tới điện thoại (Offline/Đang tắt)' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint Proxy nhận ảnh công tơ điện từ web client và chuyển tiếp sang điện thoại Samsung qua Cloudflare Tunnel
+app.post('/api/ocr-meter', async (req, res) => {
+  try {
+    const { image, room_id, old_reading, room_code } = req.body;
+    if (!image) {
+      return res.status(400).json({ error: 'Không tìm thấy dữ liệu ảnh (image base64)' });
+    }
+
+    const row = await db.prepare("SELECT value FROM settings WHERE key = 'ai_ocr_tunnel_url'").get();
+    const tunnelUrl = row ? (row.value || '').trim() : '';
+    if (!tunnelUrl) {
+      return res.status(503).json({
+        error: 'Chưa kết nối máy chủ AI trên điện thoại Samsung. Vui lòng mở Termux và chạy script khởi động.'
+      });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout cho AI OCR
+
+    let ocrResponse;
+    try {
+      ocrResponse = await fetch(`${tunnelUrl}/ocr-meter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image,
+          room_id: room_id || null,
+          old_reading: old_reading !== undefined ? parseFloat(old_reading) : null,
+          room_code: room_code || ''
+        }),
+        signal: controller.signal
+      });
+    } catch (fetchErr) {
+      clearTimeout(timeout);
+      console.error('❌ Lỗi kết nối tới AI OCR Tunnel:', fetchErr.message);
+      return res.status(502).json({
+        error: `Không thể kết nối tới máy chủ AI điện thoại (${tunnelUrl}). Vui lòng kiểm tra Termux / Cloudflare Tunnel.`
+      });
+    }
+    clearTimeout(timeout);
+
+    if (!ocrResponse.ok) {
+      const errData = await ocrResponse.json().catch(() => ({}));
+      return res.status(ocrResponse.status).json({
+        error: errData.error || `Lỗi từ AI OCR backend (${ocrResponse.status})`
+      });
+    }
+
+    const data = await ocrResponse.json();
+
+    // Logic nghiệp vụ: Cảnh báo nếu số mới < số cũ
+    const numOld = parseFloat(old_reading);
+    const numNew = parseFloat(data.reading);
+    if (!isNaN(numOld) && !isNaN(numNew) && numNew < numOld) {
+      data.is_anomalous = true;
+      data.warning = `Chỉ số mới (${numNew}) nhỏ hơn chỉ số cũ (${numOld}). Vui lòng kiểm tra lại!`;
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error('❌ Lỗi Proxy /api/ocr-meter:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -1,42 +1,39 @@
-const { Pool } = require('pg');
+const { neon } = require('@neondatabase/serverless');
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_dnlszBw4T2HV@ep-jolly-mode-atgnmc0h-pooler.c-9.us-east-1.aws.neon.tech/neondb?sslmode=require';
 
-const pool = new Pool({
-  connectionString,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
+const sql = neon(connectionString, { fullResults: true });
 
-// Xử lý lỗi ngắt kết nối client nhàn rỗi để tránh crash tiến trình Node.js (đặc thù của serverless Neon Postgres)
-pool.on('error', (err, client) => {
-  console.warn('⚠️ [Postgres Pool] Lỗi kết nối client nhàn rỗi (idle connection):', err.message);
-});
+async function execQuery(queryText, params = []) {
+  let cleanedSql = queryText;
+  // Chuyển GROUP_CONCAT của SQLite sang STRING_AGG của Postgres
+  cleanedSql = cleanedSql.replace(/\bGROUP_CONCAT\(([^,]+),\s*([^)]+)\)/gi, 'STRING_AGG($1, $2)');
 
-// Hàm khởi tạo cơ sở dữ liệu
+  // Tách query theo các placeholder ? hoặc $1, $2
+  const parts = cleanedSql.split(/\$\d+|\?/);
+  parts.raw = parts;
+  return await sql(parts, ...params);
+}
+
+// Khởi tạo các bảng & migrations cần thiết nếu chưa có
 async function initDatabase() {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-
-    // Tạo các bảng
-    await client.query(`
+    await execQuery(`
       CREATE TABLE IF NOT EXISTS rooms (
         id SERIAL PRIMARY KEY,
         room_code TEXT UNIQUE NOT NULL,
-        zone TEXT NOT NULL, -- 'A' hoặc 'B'
+        zone TEXT NOT NULL,
         rent_price REAL DEFAULT 0,
         deposit REAL DEFAULT 0,
-        status TEXT NOT NULL DEFAULT 'vacant', -- 'vacant', 'occupied', 'maintenance'
+        status TEXT NOT NULL DEFAULT 'vacant',
         member_count INTEGER DEFAULT 0,
-        billing_day INTEGER DEFAULT 30, -- ngày thu tiền: 15 hoặc 30
+        billing_day INTEGER DEFAULT 30,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    await client.query(`
+    await execQuery(`
       CREATE TABLE IF NOT EXISTS tenants (
         id SERIAL PRIMARY KEY,
         room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
@@ -51,7 +48,7 @@ async function initDatabase() {
       );
     `);
 
-    await client.query(`
+    await execQuery(`
       CREATE TABLE IF NOT EXISTS electricity_readings (
         id SERIAL PRIMARY KEY,
         room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
@@ -67,7 +64,7 @@ async function initDatabase() {
       );
     `);
 
-    await client.query(`
+    await execQuery(`
       CREATE TABLE IF NOT EXISTS settings (
         id SERIAL PRIMARY KEY,
         key TEXT UNIQUE NOT NULL,
@@ -76,7 +73,7 @@ async function initDatabase() {
       );
     `);
 
-    await client.query(`
+    await execQuery(`
       CREATE TABLE IF NOT EXISTS rent_payments (
         id SERIAL PRIMARY KEY,
         room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
@@ -89,7 +86,7 @@ async function initDatabase() {
         residence_amount REAL NOT NULL DEFAULT 0,
         deposit_amount REAL NOT NULL DEFAULT 0,
         total_amount REAL NOT NULL DEFAULT 0,
-        is_paid INTEGER NOT NULL DEFAULT 0,  -- 0 = chưa thu, 1 = đã thu
+        is_paid INTEGER NOT NULL DEFAULT 0,
         paid_at TIMESTAMP,
         note TEXT,
         tenant_name TEXT,
@@ -99,184 +96,36 @@ async function initDatabase() {
       );
     `);
 
-    // Migration: thêm cột water_amount, trash_amount, residence_amount, và deposit_amount nếu chưa có (cho DB cũ)
+    // Migrations
     try {
-      await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS water_amount REAL NOT NULL DEFAULT 0`);
-      await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS trash_amount REAL NOT NULL DEFAULT 0`);
-      await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS residence_amount REAL NOT NULL DEFAULT 0`);
-      await client.query(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS deposit_amount REAL NOT NULL DEFAULT 0`);
-    } catch(e) { /* columns already exist */ }
+      await execQuery(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS water_amount REAL NOT NULL DEFAULT 0`);
+      await execQuery(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS trash_amount REAL NOT NULL DEFAULT 0`);
+      await execQuery(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS residence_amount REAL NOT NULL DEFAULT 0`);
+      await execQuery(`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS deposit_amount REAL NOT NULL DEFAULT 0`);
+    } catch (e) { }
 
-    // Migration: thêm cột billing_day (ngày thu tiền: 15 hoặc 30) nếu chưa có
     try {
-      await client.query(`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS billing_day INTEGER DEFAULT 30`);
-      console.log('✅ Migration: Đã đảm bảo cột billing_day tồn tại trong bảng rooms.');
-    } catch(e) { /* column already exists */ }
+      await execQuery(`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS billing_day INTEGER DEFAULT 30`);
+    } catch (e) { }
 
-    // Migration: Đổi tên các phòng Khu B cũ (B01 - B15) sang định dạng tầng mới (B101 - B305) để giữ dữ liệu
-    try {
-      const bRooms = await client.query("SELECT id, room_code FROM rooms WHERE zone = 'B' AND LENGTH(room_code) <= 3 ORDER BY room_code ASC");
-      for (const r of bRooms.rows) {
-        const match = r.room_code.match(/^B(\d+)$/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num >= 1 && num <= 15) {
-            const floor = Math.floor((num - 1) / 5) + 1;
-            const idx = ((num - 1) % 5) + 1;
-            const newCode = `B${floor}0${idx}`;
-            await client.query("UPDATE rooms SET room_code = $1 WHERE id = $2", [newCode, r.id]);
-            console.log(`Đã chuyển đổi phòng ${r.room_code} -> ${newCode}`);
-          }
-        }
-      }
-    } catch(e) {
-      console.error("Lỗi khi chạy migration đổi tên phòng khu B:", e);
-    }
-
-    // Migration / Auto-sync: Đồng bộ phòng không có người thuê về trạng thái vacant & member_count = 0
-    try {
-      const syncVacRes = await client.query(`
-        UPDATE rooms
-        SET status = 'vacant', member_count = 0, updated_at = CURRENT_TIMESTAMP
-        WHERE id NOT IN (SELECT DISTINCT room_id FROM tenants)
-          AND status = 'occupied'
-      `);
-      if (syncVacRes.rowCount > 0) {
-        console.log(`✅ Đã đồng bộ ${syncVacRes.rowCount} phòng không có người thuê về trạng thái Trống (vacant).`);
-      }
-
-      const syncOccRes = await client.query(`
-        UPDATE rooms
-        SET status = 'occupied',
-            member_count = CASE WHEN member_count <= 0 THEN 1 ELSE member_count END,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id IN (SELECT DISTINCT room_id FROM tenants)
-          AND status = 'vacant'
-      `);
-      if (syncOccRes.rowCount > 0) {
-        console.log(`✅ Đã đồng bộ ${syncOccRes.rowCount} phòng có người thuê về trạng thái Đang thuê (occupied).`);
-      }
-    } catch(e) {
-      console.error("Lỗi khi đồng bộ trạng thái phòng:", e);
-    }
-
-    await client.query('COMMIT');
-    console.log('✅ Đã tạo các bảng dữ liệu trên Postgres thành công.');
-
-    // Seed data nếu chưa có phòng hoặc chưa có người thuê (reset danh sách phòng chuẩn)
-    const resRooms = await client.query('SELECT COUNT(*) as count FROM rooms');
-    const roomCount = parseInt(resRooms.rows[0].count, 10);
-    const resTenants = await client.query('SELECT COUNT(*) as count FROM tenants');
-    const tenantCount = parseInt(resTenants.rows[0].count, 10);
-
-    if (roomCount === 0) {
-      console.log('Đang khởi tạo/cập nhật lại danh sách phòng chuẩn mới...');
-      
-      // Xóa sạch phòng cũ nếu trống để nạp lại danh sách mới
-      await client.query('TRUNCATE TABLE rooms RESTART IDENTITY CASCADE');
-      
-      // 1. Khu A:
-      // Tầng 1: A101 - A114 (14 phòng)
-      for (let i = 1; i <= 14; i++) {
-        const num = i < 10 ? `0${i}` : `${i}`;
-        await client.query(
-          `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [`A1${num}`, 'A', 0, 0, 'vacant', 0]
-        );
-      }
-
-      // Tầng 2: A201 - A208 (8 phòng)
-      for (let i = 1; i <= 8; i++) {
-        const num = i < 10 ? `0${i}` : `${i}`;
-        await client.query(
-          `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [`A2${num}`, 'A', 0, 0, 'vacant', 0]
-        );
-      }
-
-      // Tầng 3: A301 - A308 (8 phòng)
-      for (let i = 1; i <= 8; i++) {
-        const num = i < 10 ? `0${i}` : `${i}`;
-        await client.query(
-          `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [`A3${num}`, 'A', 0, 0, 'vacant', 0]
-        );
-      }
-
-      // Tầng 4: A401 - A406 (6 phòng)
-      for (let i = 1; i <= 6; i++) {
-        const num = i < 10 ? `0${i}` : `${i}`;
-        await client.query(
-          `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [`A4${num}`, 'A', 0, 0, 'vacant', 0]
-        );
-      }
-
-      // 2. Khu B: 15 phòng, mỗi tầng 5 phòng (B101-B105, B201-B205, B301-B305)
-      for (let floor = 1; floor <= 3; floor++) {
-        for (let i = 1; i <= 5; i++) {
-          const roomCode = `B${floor}0${i}`;
-          await client.query(
-            `INSERT INTO rooms (room_code, zone, rent_price, deposit, status, member_count) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [roomCode, 'B', 0, 0, 'vacant', 0]
-          );
-        }
-      }
-      console.log('✅ Khởi tạo thành công danh sách phòng chuẩn mới.');
-    }
-
-    // Seed cài đặt mặc định nếu chưa có
-    const insertSetting = async (key, defaultValue) => {
-      const res = await client.query('SELECT COUNT(*) FROM settings WHERE key = $1', [key]);
-      if (parseInt(res.rows[0].count, 10) === 0) {
-        await client.query('INSERT INTO settings (key, value) VALUES ($1, $2)', [key, defaultValue]);
-        console.log(`Đã khởi tạo cài đặt: ${key} = ${defaultValue}`);
-      }
-    };
-    
-    await insertSetting('electricity_price', '3500');
-    await insertSetting('water_price', '20000');    // VNĐ/người/tháng
-    await insertSetting('trash_price', '10000');    // VNĐ/người/tháng
-    await insertSetting('residence_price', '50000'); // VNĐ/người (tháng đầu tiên)
-    await insertSetting('payment_due_day', '5');     // Ngày thu tiền hàng tháng (mặc định ngày 5)
-    await insertSetting('bank_name', 'MBBank');
-    await insertSetting('bank_account', '099999999999');
-    await insertSetting('bank_owner', 'NGUYEN VAN A');
-    await insertSetting('email_sender', 'nhatroliso@gmail.com');
-    await insertSetting('email_pass', 'cxma vytw meqc bitp');
-    await insertSetting('email_receiver', 'nhatroliso@gmail.com');
-    await insertSetting('email_webhook_url', 'https://script.google.com/macros/s/AKfycbxoOaREN1W46IHKhbfb8uyCybAaLpaGqpkL8F_0uUMcgHord_19dsh4MchPj7h_hpQSCA/exec');
-    await insertSetting('email_enabled', 'true');
-
+    console.log('✅ [Database] Kết nối thành công tới PostgreSQL Cloud (Neon). Toàn bộ dữ liệu trực tiếp đã sẵn sàng!');
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('❌ Lỗi khởi tạo database Postgres:', err);
-  } finally {
-    client.release();
   }
 }
 
-// Khởi chạy đồng bộ database
-initDatabase().catch(err => console.error(err));
+const initPromise = initDatabase();
 
-// Wrapper mô phỏng API đồng bộ của better-sqlite3 bằng hàm bất đồng bộ
-class PostgresStatement {
-  constructor(sql) {
-    // Chuyển ? của SQLite sang $1, $2 của Postgres
-    let index = 1;
-    let newSql = sql.replace(/\?/g, () => `$${index++}`);
-    
-    // Một số từ khóa đặc trưng của SQLite sang Postgres
-    newSql = newSql.replace(/\bGROUP_CONCAT\(([^,]+),\s*([^)]+)\)/gi, 'STRING_AGG($1, $2)');
-    this.sql = newSql;
+class DatabaseStatement {
+  constructor(sqlQuery) {
+    this.sql = sqlQuery;
   }
 
-  // Parse chuỗi số tự động từ Postgres sang kiểu số trong JS
   parseRow(row) {
     if (!row) return null;
     for (const key in row) {
       if (typeof row[key] === 'string' && /^\d+$/.test(row[key])) {
-        // Không chuyển đổi nếu chuỗi bắt đầu bằng '0' và dài hơn 1 ký tự (như số tài khoản, số điện thoại, CCCD)
+        // Không convert nếu chuỗi bắt đầu bằng '0' và dài hơn 1 ký tự (như SĐT, CCCD, STK)
         if (row[key].startsWith('0') && row[key].length > 1) {
           continue;
         }
@@ -291,25 +140,27 @@ class PostgresStatement {
   }
 
   async get(...params) {
-    const res = await pool.query(this.sql, params);
+    await initPromise;
+    const res = await execQuery(this.sql, params);
     return this.parseRow(res.rows[0]) || null;
   }
 
   async all(...params) {
-    const res = await pool.query(this.sql, params);
+    await initPromise;
+    const res = await execQuery(this.sql, params);
     return res.rows.map(row => this.parseRow(row));
   }
 
   async run(...params) {
-    const res = await pool.query(this.sql, params);
+    await initPromise;
+    const res = await execQuery(this.sql, params);
     return {
       changes: res.rowCount,
-      lastInsertRowid: res.rows[0] ? res.rows[0].id : null
+      lastInsertRowid: res.rows[0] ? (res.rows[0].id || null) : null
     };
   }
 }
 
 module.exports = {
-  prepare: (sql) => new PostgresStatement(sql),
-  pool
+  prepare: (sqlQuery) => new DatabaseStatement(sqlQuery)
 };
