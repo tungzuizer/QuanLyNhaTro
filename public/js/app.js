@@ -270,6 +270,9 @@ function switchTab(tabId) {
   } else if (tabId === 'electricity') {
     loadRoomsDropdown();
     initElectricityModeTabs();
+    if (bulkElecMode === 'bulk') {
+      initBulkDropdowns();
+    }
   } else if (tabId === 'payments') {
     initPaymentsTab();
   } else if (tabId === 'invoice') {
@@ -1692,11 +1695,16 @@ function formatDateTime(dtString) {
 // ==========================================
 
 let bulkRoomsData = []; // Cache data từ API
-let bulkElecMode = 'single'; // 'single' | 'bulk'
+let bulkElecMode = 'bulk'; // Mặc định ưu tiên nhập hàng loạt ('bulk' | 'single')
 let bulkInited = false;
 
 function initElectricityModeTabs() {
-  if (bulkInited) return;
+  if (bulkInited) {
+    if (bulkElecMode === 'bulk') {
+      initBulkDropdowns();
+    }
+    return;
+  }
   bulkInited = true;
 
   const modeBtns = document.querySelectorAll('.elec-mode-btn');
@@ -1716,8 +1724,16 @@ function initElectricityModeTabs() {
     });
   });
 
-  // Bulk load button
-  document.getElementById('btn-load-bulk').addEventListener('click', loadBulkData);
+  // Tự động load dữ liệu nhập hàng loạt khi mở
+  if (bulkElecMode === 'bulk') {
+    initBulkDropdowns();
+  }
+
+  // Bulk load button (nếu có)
+  const btnLoadBulk = document.getElementById('btn-load-bulk');
+  if (btnLoadBulk) {
+    btnLoadBulk.addEventListener('click', loadBulkData);
+  }
 
   // Bulk save buttons
   document.getElementById('btn-bulk-save').addEventListener('click', saveBulkReadings);
@@ -1741,48 +1757,21 @@ function initElectricityModeTabs() {
     });
   });
 
-  // Chat panel toggle
-  const btnOpenChat = document.getElementById('btn-open-chat-panel');
-  const btnCloseChat = document.getElementById('btn-close-chat-panel');
-  const chatPanel = document.getElementById('bulk-chat-panel');
-  if (btnOpenChat && chatPanel) {
-    btnOpenChat.addEventListener('click', () => {
-      chatPanel.style.display = chatPanel.style.display === 'none' ? 'block' : 'none';
-    });
-  }
-  if (btnCloseChat && chatPanel) {
-    btnCloseChat.addEventListener('click', () => {
-      chatPanel.style.display = 'none';
-    });
-  }
-
-  // Chat parse button
-  const btnParseChat = document.getElementById('btn-parse-chat');
-  if (btnParseChat) {
-    btnParseChat.addEventListener('click', parseChatReadings);
-  }
-
   // AI OCR status check button
   const aiStatusBadge = document.getElementById('ai-ocr-status-badge');
   if (aiStatusBadge) {
     aiStatusBadge.addEventListener('click', () => checkAiOcrStatus(true));
   }
   checkAiOcrStatus();
-
-  // Clear chat button
-  const btnClearChat = document.getElementById('btn-clear-chat');
-  if (btnClearChat) {
-    btnClearChat.addEventListener('click', () => {
-      document.getElementById('bulk-chat-input').value = '';
-      document.getElementById('bulk-chat-result').innerHTML = '';
-    });
-  }
 }
 
 function initBulkDropdowns() {
   const mSelect = document.getElementById('bulk-month');
   const ySelect = document.getElementById('bulk-year');
-  if (mSelect.options.length > 0) return; // Already inited
+  if (mSelect.options.length > 0) {
+    loadBulkData();
+    return;
+  }
 
   const now = new Date();
   const cm = now.getMonth() + 1;
@@ -1816,8 +1805,10 @@ async function loadBulkData() {
   const year = document.getElementById('bulk-year').value;
 
   const btn = document.getElementById('btn-load-bulk');
-  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang tải...';
-  btn.disabled = true;
+  if (btn) {
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang tải...';
+    btn.disabled = true;
+  }
 
   try {
     const data = await fetchAPI(`/api/electricity/bulk-data?year=${year}&month=${month}`);
@@ -1842,8 +1833,10 @@ async function loadBulkData() {
   } catch (err) {
     console.error(err);
   } finally {
-    btn.innerHTML = '<i class="bi bi-clipboard-data"></i> Tải danh sách phòng';
-    btn.disabled = false;
+    if (btn) {
+      btn.innerHTML = '<i class="bi bi-clipboard-data"></i> Tải danh sách phòng';
+      btn.disabled = false;
+    }
   }
 }
 
@@ -2247,84 +2240,6 @@ function updateBulkBillingCounts(data) {
   if (el15) el15.textContent = count15 > 0 ? `(${count15})` : '';
   if (el30) el30.textContent = count30 > 0 ? `(${count30})` : '';
 }
-
-// ==========================================
-// PARSE SỐ ĐIỆN TỪ TIN NHẮN CHAT
-// ==========================================
-function parseChatReadings() {
-  const chatText = document.getElementById('bulk-chat-input').value;
-  const resultEl = document.getElementById('bulk-chat-result');
-
-  if (!chatText.trim()) {
-    resultEl.innerHTML = '<span style="color:var(--warning);"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Vui lòng dán nội dung tin nhắn vào ô trên.</span>';
-    return;
-  }
-
-  // Regex linh hoạt để nhận dạng: "A101: 2500", "A101 - 2500", "phòng A101 số 2500", "A101 2500", v.v.
-  // Hỗ trợ: Khu A, Khu B, dạng A101, B201, B301... và số điện là số nguyên >= 1
-  const patterns = [
-    // Dạng: A101: 2500 hoặc A101 - 2500 hoặc A101=2500
-    /(?:ph[oòó]ng\s*)?([A-Ba-b]\d{3})\s*[:\-=]\s*(\d+)/gi,
-    // Dạng: A101 số 2500 hoặc phòng A101 số điện 2500
-    /(?:ph[oòó]ng\s*)?([A-Ba-b]\d{3})\s+(?:s[oốố]\s*(?:\u0111i[eệ]n)?\s*)?(\d+)/gi,
-  ];
-
-  // Gom tất cả kết quả từ mọi pattern, ưu tiên lấy kết quả từ pattern trước
-  const foundMap = {}; // roomCode -> reading
-  for (const pattern of patterns) {
-    let match;
-    pattern.lastIndex = 0;
-    while ((match = pattern.exec(chatText)) !== null) {
-      const rawCode = match[1].toUpperCase();
-      const reading = parseInt(match[2], 10);
-      if (!foundMap[rawCode] && !isNaN(reading) && reading > 0) {
-        foundMap[rawCode] = reading;
-      }
-    }
-  }
-
-  if (Object.keys(foundMap).length === 0) {
-    resultEl.innerHTML = '<span style="color:var(--danger);"><i class="bi bi-x-circle" style="color:#dc2626"></i> Không tìm thấy mã phòng và số điện nào trong đoạn text này.</span>';
-    return;
-  }
-
-  // Tìm các input trong bảng và điền vào
-  let filled = 0;
-  let notFound = [];
-
-  for (const [roomCode, newReading] of Object.entries(foundMap)) {
-    // Tìm hàng tr có data-room-id tương ứng với mã phòng
-    const allRows = document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]');
-    let matched = false;
-    allRows.forEach(tr => {
-      const codeCell = tr.querySelector('td:first-child strong');
-      if (codeCell && codeCell.textContent.trim().toUpperCase() === roomCode) {
-        const newInput = tr.querySelector('.bulk-new-reading');
-        const oldInput = tr.querySelector('.bulk-old-reading');
-        if (newInput && !newInput.disabled) {
-          newInput.value = newReading;
-          // Kích hoạt sự kiện input để tự động tính toán
-          newInput.dispatchEvent(new Event('input', { bubbles: true }));
-          // Focus + highlight
-          newInput.classList.add('input-valid');
-          matched = true;
-          filled++;
-        }
-      }
-    });
-    if (!matched) notFound.push(roomCode);
-  }
-
-  let html = '';
-  if (filled > 0) {
-    html += `<div style="color:var(--success);font-weight:600;"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã điền số điện cho ${filled} phòng thành công!</div>`;
-  }
-  if (notFound.length > 0) {
-    html += `<div style="color:var(--warning);margin-top:4px;"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Không tìm thấy trong bảng: <strong>${notFound.join(', ')}</strong> (có thể phòng trống hoặc mã phòng khác)</div>`;
-  }
-  resultEl.innerHTML = html;
-}
-
 
 async function saveBulkReadings() {
   const month = document.getElementById('bulk-month').value;
@@ -3798,6 +3713,7 @@ async function openOcrCameraModal(roomId, roomCode, oldReading) {
 
   const modal = document.getElementById('modal-ocr-camera');
   if (modal) {
+    modal.classList.add('active');
     modal.style.display = 'flex';
   }
 
@@ -4209,6 +4125,7 @@ function closeOcrCameraModal() {
   stopOcrCamera();
   const modal = document.getElementById('modal-ocr-camera');
   if (modal) {
+    modal.classList.remove('active');
     modal.style.display = 'none';
   }
 }

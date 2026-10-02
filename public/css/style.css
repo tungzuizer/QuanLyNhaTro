@@ -1363,16 +1363,41 @@ body {
   }
 
   .bulk-summary-bar {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    display: grid !important;
+    grid-template-columns: repeat(6, 1fr) !important;
+    gap: 6px !important;
+    margin-bottom: 10px !important;
   }
 
   .bulk-sum-item {
-    padding: 10px 12px;
+    padding: 6px 8px !important;
+    border-radius: 8px !important;
+    gap: 1px !important;
+    min-width: 0 !important;
+  }
+
+  .bulk-summary-bar .bulk-sum-item:nth-child(1),
+  .bulk-summary-bar .bulk-sum-item:nth-child(2),
+  .bulk-summary-bar .bulk-sum-item:nth-child(3) {
+    grid-column: span 2 !important;
+  }
+
+  .bulk-summary-bar .bulk-sum-item:nth-child(4),
+  .bulk-summary-bar .bulk-sum-item:nth-child(5) {
+    grid-column: span 3 !important;
+  }
+
+  .bulk-sum-item span {
+    font-size: 10px !important;
+    gap: 2px !important;
+  }
+
+  .bulk-sum-item span i {
+    font-size: 10px !important;
   }
 
   .bulk-sum-item strong {
-    font-size: 16px;
+    font-size: 13px !important;
   }
 
   .bulk-elec-table th,
@@ -1714,22 +1739,21 @@ body {
 
 /* Stats bar for payments tab */
 .payments-stats-bar {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .pay-stat-item {
   background: var(--white);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 16px 20px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 150px;
+  gap: 2px;
+  min-width: 0;
   transition: var(--transition);
 }
 
@@ -1744,21 +1768,31 @@ body {
 }
 
 .pay-stat-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--neutral-gray);
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .pay-stat-item strong {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--neutral-dark);
+  line-height: 1.2;
 }
 
 .pay-money {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--neutral-gray);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Payments table card */
@@ -2379,8 +2413,34 @@ body {
   }
 
   .payments-stats-bar {
-    flex-direction: column;
-    gap: 8px;
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .pay-stat-item {
+    padding: 6px 6px !important;
+    border-radius: 8px !important;
+    gap: 1px !important;
+    min-width: 0 !important;
+  }
+
+  .pay-stat-label {
+    font-size: 10px !important;
+    gap: 2px !important;
+  }
+
+  .pay-stat-label i {
+    font-size: 10px !important;
+  }
+
+  .pay-stat-item strong {
+    font-size: 13px !important;
+  }
+
+  .pay-money {
+    font-size: 10px !important;
   }
 
   .payments-header {
@@ -3217,41 +3277,52 @@ input[type="date"]::-webkit-date-and-time-value {
 /* Summary Bar */
 .bulk-summary-bar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .bulk-sum-item {
   background: var(--white);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 
 .bulk-sum-item span {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--neutral-gray);
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .bulk-sum-item strong {
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--neutral-dark);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.bulk-sum-item.green { border-left: 4px solid var(--success); }
+.bulk-sum-item.green { border-left: 3px solid var(--success); }
 .bulk-sum-item.green strong { color: var(--success); }
-.bulk-sum-item.orange { border-left: 4px solid var(--warning); }
+.bulk-sum-item.orange { border-left: 3px solid var(--warning); }
 .bulk-sum-item.orange strong { color: var(--warning); }
-.bulk-sum-item.blue { border-left: 4px solid var(--primary); }
+.bulk-sum-item.blue { border-left: 3px solid var(--primary); }
 .bulk-sum-item.blue strong { color: var(--primary); }
-.bulk-sum-item.purple { border-left: 4px solid hsl(270, 70%, 55%); }
+.bulk-sum-item.purple { border-left: 3px solid hsl(270, 70%, 55%); }
 .bulk-sum-item.purple strong { color: hsl(270, 70%, 55%); }
 
 /* Bulk Table Container */
@@ -3479,13 +3550,43 @@ input[type="date"]::-webkit-date-and-time-value {
   }
 
   .bulk-summary-bar {
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    padding: 10px;
+    display: grid !important;
+    grid-template-columns: repeat(6, 1fr) !important;
+    gap: 6px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    margin-bottom: 10px !important;
   }
 
-  .bulk-summary-item {
-    padding: 6px 8px;
+  .bulk-sum-item {
+    padding: 6px 8px !important;
+    border-radius: 8px !important;
+    gap: 1px !important;
+    min-width: 0 !important;
+  }
+
+  .bulk-summary-bar .bulk-sum-item:nth-child(1),
+  .bulk-summary-bar .bulk-sum-item:nth-child(2),
+  .bulk-summary-bar .bulk-sum-item:nth-child(3) {
+    grid-column: span 2 !important;
+  }
+
+  .bulk-summary-bar .bulk-sum-item:nth-child(4),
+  .bulk-summary-bar .bulk-sum-item:nth-child(5) {
+    grid-column: span 3 !important;
+  }
+
+  .bulk-sum-item span {
+    font-size: 10px !important;
+    gap: 2px !important;
+  }
+
+  .bulk-sum-item span i {
+    font-size: 10px !important;
+  }
+
+  .bulk-sum-item strong {
+    font-size: 13px !important;
   }
 
   /* Khắc phục hoàn toàn tràn ngang & biến table thành Card trên Mobile */
@@ -4197,11 +4298,50 @@ input[type="date"]::-webkit-date-and-time-value {
   transform: scale(1.05);
 }
 
+/* Đưa modal camera OCR lên chính giữa màn hình */
+#modal-ocr-camera {
+  display: none;
+  position: fixed;
+  z-index: 1050;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+}
+
+#modal-ocr-camera.active,
+#modal-ocr-camera[style*="display: flex"] {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
 .ocr-modal-content {
-  max-width: 520px;
-  border-radius: var(--radius-lg, 16px);
+  max-width: 480px;
+  width: 100%;
+  border-radius: var(--radius-xl, 18px);
   overflow: hidden;
   padding: 0;
+  margin: auto !important;
+  max-height: 92vh;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  animation: ocrModalCenterPop 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ocrModalCenterPop {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .ocr-modal-content .modal-header {
@@ -4221,10 +4361,12 @@ input[type="date"]::-webkit-date-and-time-value {
 }
 
 .ocr-modal-body {
-  padding: 18px 20px 22px;
+  padding: 16px 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+  max-height: calc(92vh - 65px);
+  overflow-y: auto;
 }
 
 /* Camera Live Viewport */
@@ -4630,6 +4772,26 @@ input[type="date"]::-webkit-date-and-time-value {
 }
 
 @media (max-width: 768px) {
+  #modal-ocr-camera {
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 12px !important;
+  }
+
+  #modal-ocr-camera .modal-content,
+  #modal-ocr-camera .ocr-modal-content {
+    width: 95% !important;
+    max-width: 440px !important;
+    max-height: 90vh !important;
+    margin: auto !important;
+    border-radius: var(--radius-xl, 18px) !important;
+    animation: ocrModalCenterPop 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+
+  #modal-ocr-camera .modal-header::before {
+    display: none !important;
+  }
+
   .btn-bulk-cam {
     width: 40px;
     height: 42px;

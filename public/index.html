@@ -236,16 +236,16 @@
 
           <!-- Mode toggle tabs -->
           <div class="elec-mode-tabs">
-            <button class="elec-mode-btn active" data-mode="single">
-              <i class="bi bi-lightning"></i> Nhập từng phòng
-            </button>
-            <button class="elec-mode-btn" data-mode="bulk">
+            <button class="elec-mode-btn active" data-mode="bulk">
               <i class="bi bi-clipboard-data"></i> Nhập hàng loạt
+            </button>
+            <button class="elec-mode-btn" data-mode="single">
+              <i class="bi bi-lightning"></i> Nhập từng phòng
             </button>
           </div>
 
           <!-- === MODE 1: NHẬP TỪNG PHÒNG === -->
-          <div id="elec-mode-single" class="elec-mode-panel">
+          <div id="elec-mode-single" class="elec-mode-panel" style="display:none;">
             <div class="electric-management-container">
               <!-- Form nhập số điện -->
               <div class="card card-form">
@@ -313,7 +313,7 @@
           </div>
 
           <!-- === MODE 2: NHẬP HÀNG LOẠT === -->
-          <div id="elec-mode-bulk" class="elec-mode-panel" style="display:none;">
+          <div id="elec-mode-bulk" class="elec-mode-panel">
 
             <!-- Toolbar -->
             <div class="bulk-toolbar card">
@@ -328,12 +328,6 @@
                     <select id="bulk-year" class="form-control form-control-sm"></select>
                   </div>
                   <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap: wrap;">
-                    <button id="btn-load-bulk" class="btn btn-primary" style="white-space:nowrap;">
-                      <i class="bi bi-clipboard-data"></i> Tải danh sách phòng
-                    </button>
-                    <button id="btn-open-chat-panel" class="btn btn-secondary" style="white-space:nowrap;">
-                      <i class="bi bi-chat-dots"></i> Dán tin nhắn
-                    </button>
                     <div id="ai-ocr-status-badge" class="ai-status-badge checking" title="Bấm để kiểm tra lại kết nối AI trên điện thoại">
                       <span class="ai-status-dot"></span>
                       <span id="ai-ocr-status-text">AI: Đang kiểm tra...</span>
@@ -425,23 +419,6 @@
                   <i class="bi bi-save"></i> Lưu tất cả chỉ số điện đã nhập
                 </button>
               </div>
-            </div>
-
-            <!-- === KHU VỰC DÁN TIN NHẮN CHAT NHẬP SỐ ĐIỆN === -->
-            <div id="bulk-chat-panel" class="card" style="display:none; margin-bottom: 0; padding: 16px 20px; border: 2px dashed var(--primary); background: var(--primary-soft, #f0f4ff);">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                <span style="font-size:18px;"><i class="bi bi-chat-dots"></i></span>
-                <h4 style="margin:0;font-size:14px;font-weight:600;color:var(--primary);">Nhập số điện từ tin nhắn chat</h4>
-                <button id="btn-close-chat-panel" style="margin-left:auto;background:none;border:none;font-size:18px;cursor:pointer;color:var(--neutral-gray);" title="Đóng">✕</button>
-              </div>
-              <p style="font-size:12px;color:var(--neutral-gray);margin-bottom:8px;">Dán nội dung tin nhắn vào ô bên dưới. Hệ thống sẽ tự động tìm mã phòng và chỉ số điện để điền vào bảng.</p>
-              <p style="font-size:12px;color:var(--neutral-gray);margin-bottom:10px;"><i class="bi bi-pin-angle"></i> Ví dụ: <em>A101: 2500, A102 - 2640, phòng B101 số 905</em></p>
-              <textarea id="bulk-chat-input" class="form-control" rows="5" placeholder="Dán tin nhắn chat vào đây..."></textarea>
-              <div style="display:flex;gap:8px;margin-top:10px;">
-                <button id="btn-parse-chat" class="btn btn-primary"><i class="bi bi-lightning"></i> Tự động điền số điện</button>
-                <button id="btn-clear-chat" class="btn btn-secondary"><i class="bi bi-trash"></i> Xóa</button>
-              </div>
-              <div id="bulk-chat-result" style="margin-top:10px;font-size:13px;"></div>
             </div>
 
           </div>
