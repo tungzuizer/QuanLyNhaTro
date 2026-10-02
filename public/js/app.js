@@ -1832,6 +1832,7 @@ function renderBulkTable(data, month, year) {
 
     const tr = document.createElement('tr');
     tr.setAttribute('data-room-id', room.id);
+    tr.setAttribute('data-room-code', room.room_code);
     tr.setAttribute('data-old-reading', oldReading);
     tr.setAttribute('data-status', room.status);
     tr.setAttribute('data-has-data', hasCurrentData ? '1' : '0');
@@ -1845,46 +1846,74 @@ function renderBulkTable(data, month, year) {
     const statusBadge = isVacant
       ? `<span class="bulk-status-badge bulk-status-vacant"><i class="bi bi-square"></i> ${room.status === 'maintenance' ? 'Sửa chữa' : 'Trống'}</span>`
       : hasCurrentData
-        ? `<span class="bulk-status-badge bulk-status-done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</span>`
+        ? `<span class="bulk-status-badge bulk-status-done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã lưu</span>`
         : `<span class="bulk-status-badge bulk-status-missing"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</span>`;
 
     tr.innerHTML = `
-      <td><strong>${room.room_code}</strong></td>
-      <td>${room.zone}</td>
-      <td class="text-center">
-        <input
-          type="number"
-          class="bulk-old-reading"
+      <td class="bulk-td-room">
+        <div class="bulk-room-meta">
+          <span class="bulk-room-code">${room.room_code}</span>
+          <span class="bulk-badge-pill">${room.zone}</span>
+          <span class="bulk-badge-pill light">Đợt ${room.billing_day || 30}</span>
+          <span class="bulk-status-mobile-holder">${statusBadge}</span>
+        </div>
+      </td>
+      <td class="bulk-td-zone desktop-only">${room.zone}</td>
+      <td class="bulk-td-old text-center">
+        <div class="bulk-input-block">
+          <label class="bulk-mobile-label">Số cũ:</label>
+          <input
+            type="number"
+            class="bulk-old-reading"
+            data-room-id="${room.id}"
+            data-idx="${idx}"
+            value="${oldReading}"
+            step="1"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            title="${oldReadingSource}"
+            ${isVacant ? 'disabled' : ''}
+          >
+          ${!hasCurrentData && room.last_reading > 0 ? `<div class="bulk-hint-old">↑ tháng trước</div>` : ''}
+        </div>
+      </td>
+      <td class="bulk-td-new">
+        <div class="bulk-input-block">
+          <label class="bulk-mobile-label">Số mới *:</label>
+          <input
+            type="number"
+            class="bulk-new-reading ${hasCurrentData ? 'input-valid' : ''}"
+            data-room-id="${room.id}"
+            data-idx="${idx}"
+            value="${savedNewReading}"
+            step="1"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            placeholder="${isVacant ? 'Trống' : 'Nhập số mới'}"
+            ${isVacant ? 'disabled style="opacity:0.4;"' : ''}
+          >
+        </div>
+      </td>
+      <td class="bulk-td-kwh text-center" id="bulk-kwh-${room.id}">
+        <span class="bulk-mobile-label">Dùng:</span>
+        <span class="bulk-val-kwh ${hasCurrentData ? 'text-primary' : ''}">${hasCurrentData ? `${room.current.consumption} kWh` : '--'}</span>
+      </td>
+      <td class="bulk-td-cost bulk-cost-cell ${hasCurrentData ? '' : 'zero'}" id="bulk-cost-${room.id}">
+        <span class="bulk-mobile-label">Tiền:</span>
+        <span class="bulk-val-cost">${hasCurrentData ? formatVND(room.current.total_cost) : '--'}</span>
+      </td>
+      <td class="bulk-td-status desktop-only" id="bulk-status-${room.id}">${statusBadge}</td>
+      <td class="bulk-td-action text-center">
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-primary btn-save-room-reading"
           data-room-id="${room.id}"
-          data-idx="${idx}"
-          value="${oldReading}"
-          step="1"
-          title="${oldReadingSource}"
-          style="width: 85px; text-align: center; border: 1px solid ${hasCurrentData ? 'var(--border-color)' : '#f59e0b'}; border-radius: var(--radius-md); padding: 5px 8px; font-weight: 500; background: ${hasCurrentData ? '' : '#fffbeb'};"
+          title="Lưu chỉ số điện phòng ${room.room_code}"
           ${isVacant ? 'disabled' : ''}
         >
-        ${!hasCurrentData && room.last_reading > 0 ? `<div style="font-size:10px;color:#92400e;margin-top:2px;">↑ từ tháng trước</div>` : ''}
+          <i class="bi bi-floppy"></i> <span class="btn-save-text">Lưu</span>
+        </button>
       </td>
-      <td>
-        <input
-          type="number"
-          class="bulk-new-reading ${hasCurrentData ? 'input-valid' : ''}"
-          data-room-id="${room.id}"
-          data-idx="${idx}"
-          value="${savedNewReading}"
-          step="1"
-          placeholder="${isVacant ? 'Bỏ qua' : 'Nhập số mới'}"
-          style="width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 5px 8px;"
-          ${isVacant ? 'disabled style="opacity:0.4;"' : ''}
-        >
-      </td>
-      <td class="text-center bulk-kwh-cell" id="bulk-kwh-${room.id}">
-        ${hasCurrentData ? `<span class="text-primary">${room.current.consumption} kWh</span>` : '--'}
-      </td>
-      <td class="bulk-cost-cell ${hasCurrentData ? '' : 'zero'}" id="bulk-cost-${room.id}">
-        ${hasCurrentData ? formatVND(room.current.total_cost) : '--'}
-      </td>
-      <td id="bulk-status-${room.id}">${statusBadge}</td>
     `;
 
     tbody.appendChild(tr);
@@ -1892,6 +1921,7 @@ function renderBulkTable(data, month, year) {
     // Real-time calculation on input
     const oldInput = tr.querySelector('.bulk-old-reading');
     const newInput = tr.querySelector('.bulk-new-reading');
+    const saveBtn = tr.querySelector('.btn-save-room-reading');
 
     if (!isVacant) {
       if (oldInput) oldInput.addEventListener('input', () => onBulkInputChange(newInput, room.id));
@@ -1902,15 +1932,20 @@ function renderBulkTable(data, month, year) {
         newInput.addEventListener('keydown', (e) => {
           if (e.key === 'Tab' || e.key === 'Enter') {
             e.preventDefault();
-            const allInputs = Array.from(document.querySelectorAll('.bulk-new-reading:not([disabled])'));
+            const allInputs = Array.from(document.querySelectorAll('.bulk-new-reading:not([disabled])'))
+              .filter(inp => inp.offsetParent !== null);
             const currentIdx = allInputs.indexOf(newInput);
             const nextInput = allInputs[currentIdx + 1];
             if (nextInput) {
+              nextInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
               nextInput.focus();
               nextInput.select();
             }
           }
         });
+      }
+      if (saveBtn) {
+        saveBtn.addEventListener('click', () => saveSingleRoomReading(room.id, room.room_code));
       }
     }
   });
@@ -1926,38 +1961,146 @@ function onBulkInputChange(input, roomId) {
   const kwhCell = document.getElementById(`bulk-kwh-${roomId}`);
   const costCell = document.getElementById(`bulk-cost-${roomId}`);
   const statusCell = document.getElementById(`bulk-status-${roomId}`);
+  const mobileStatusHolder = tr.querySelector('.bulk-status-mobile-holder');
 
   // Cập nhật thuộc tính để hàm thống kê dùng đúng số cũ mới sửa
   tr.setAttribute('data-old-reading', oldVal);
 
+  const kwhVal = kwhCell?.querySelector('.bulk-val-kwh') || kwhCell;
+  const costVal = costCell?.querySelector('.bulk-val-cost') || costCell;
+
+  const setStatus = (html) => {
+    if (statusCell) statusCell.innerHTML = html;
+    if (mobileStatusHolder) mobileStatusHolder.innerHTML = html;
+  };
+
   if (input.value === '' || isNaN(newVal)) {
     input.className = 'bulk-new-reading';
-    kwhCell.innerHTML = '--';
-    costCell.innerHTML = '--';
-    costCell.className = 'bulk-cost-cell zero';
-    statusCell.innerHTML = `<span class="bulk-status-badge bulk-status-missing"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</span>`;
+    if (kwhVal) kwhVal.innerHTML = '--';
+    if (costVal) costVal.innerHTML = '--';
+    if (costCell) costCell.className = 'bulk-td-cost bulk-cost-cell zero';
+    setStatus(`<span class="bulk-status-badge bulk-status-missing"><i class="bi bi-exclamation-triangle" style="color:#f59e0b"></i> Chưa nhập</span>`);
     tr.className = 'bulk-row-missing';
     tr.setAttribute('data-has-data', '0');
   } else if (newVal < oldVal) {
     input.className = 'bulk-new-reading input-error';
-    kwhCell.innerHTML = `<span style="color:var(--danger);font-size:11px;"><i class="bi bi-x-circle" style="color:#dc2626"></i> Sai</span>`;
-    costCell.innerHTML = '--';
-    costCell.className = 'bulk-cost-cell zero';
-    statusCell.innerHTML = `<span class="bulk-status-badge" style="background:var(--danger-bg);color:var(--danger);"><i class="bi bi-x-circle" style="color:#dc2626"></i> Lỗi</span>`;
+    if (kwhVal) kwhVal.innerHTML = `<span style="color:var(--danger);font-size:12px;"><i class="bi bi-x-circle" style="color:#dc2626"></i> Sai</span>`;
+    if (costVal) costVal.innerHTML = '--';
+    if (costCell) costCell.className = 'bulk-td-cost bulk-cost-cell zero';
+    setStatus(`<span class="bulk-status-badge" style="background:var(--danger-bg);color:var(--danger);"><i class="bi bi-x-circle" style="color:#dc2626"></i> Lỗi</span>`);
     tr.className = '';
   } else {
     const consumption = newVal - oldVal;
     const cost = consumption * price;
     input.className = 'bulk-new-reading input-valid';
-    kwhCell.innerHTML = `<span class="text-primary">${consumption.toFixed(1)} kWh</span>`;
-    costCell.innerHTML = formatVND(cost);
-    costCell.className = 'bulk-cost-cell';
-    statusCell.innerHTML = `<span class="bulk-status-badge bulk-status-done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</span>`;
+    if (kwhVal) kwhVal.innerHTML = `<span class="text-primary font-weight-bold">${consumption.toFixed(1)} kWh</span>`;
+    if (costVal) costVal.innerHTML = formatVND(cost);
+    if (costCell) costCell.className = 'bulk-td-cost bulk-cost-cell';
+    setStatus(`<span class="bulk-status-badge bulk-status-done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</span>`);
     tr.className = 'bulk-row-done';
     tr.setAttribute('data-has-data', '1');
   }
 
   updateBulkSummary();
+}
+
+async function saveSingleRoomReading(roomId, roomCode) {
+  const month = document.getElementById('bulk-month').value;
+  const year = document.getElementById('bulk-year').value;
+  const tr = document.querySelector(`#bulk-elec-tbody tr[data-room-id="${roomId}"]`);
+  if (!tr) return;
+
+  const oldInput = tr.querySelector('.bulk-old-reading');
+  const newInput = tr.querySelector('.bulk-new-reading');
+  const saveBtn = tr.querySelector('.btn-save-room-reading');
+
+  const oldReading = parseFloat(oldInput?.value) || 0;
+  const newVal = newInput?.value;
+
+  if (newVal === '' || newVal === null || newVal === undefined || isNaN(parseFloat(newVal))) {
+    showToast(`Vui lòng nhập chỉ số mới cho phòng ${roomCode}`, 'warning');
+    if (newInput) { newInput.focus(); }
+    return;
+  }
+
+  const newReading = parseFloat(newVal);
+  if (newReading < oldReading) {
+    showToast(`Phòng ${roomCode}: Chỉ số mới (${newReading}) không được nhỏ hơn chỉ số cũ (${oldReading})`, 'error');
+    if (newInput) {
+      newInput.classList.add('input-error');
+      newInput.focus();
+    }
+    return;
+  }
+
+  const origBtnHtml = saveBtn ? saveBtn.innerHTML : '';
+  if (saveBtn) {
+    saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span class="btn-save-text">Đang lưu...</span>';
+    saveBtn.disabled = true;
+  }
+
+  try {
+    const result = await fetchAPI('/api/electricity', {
+      method: 'POST',
+      body: JSON.stringify({
+        room_id: roomId,
+        year: parseInt(year),
+        month: parseInt(month),
+        old_reading: oldReading,
+        new_reading: newReading
+      })
+    });
+
+    showToast(`Đã lưu số điện phòng ${roomCode} (${result.consumption} kWh = ${formatVND(result.totalCost)})`, 'success');
+
+    // Cập nhật trạng thái của thẻ/hàng
+    if (newInput) {
+      newInput.classList.remove('input-error');
+      newInput.classList.add('input-valid');
+    }
+    tr.className = 'bulk-row-done';
+    tr.setAttribute('data-has-data', '1');
+
+    const kwhCell = document.getElementById(`bulk-kwh-${roomId}`);
+    if (kwhCell) {
+      const valEl = kwhCell.querySelector('.bulk-val-kwh') || kwhCell;
+      valEl.innerHTML = `<span class="text-primary font-weight-bold">${result.consumption.toFixed(1)} kWh</span>`;
+    }
+
+    const costCell = document.getElementById(`bulk-cost-${roomId}`);
+    if (costCell) {
+      const valEl = costCell.querySelector('.bulk-val-cost') || costCell;
+      valEl.innerHTML = formatVND(result.totalCost);
+      costCell.className = 'bulk-td-cost bulk-cost-cell';
+    }
+
+    const statusBadgeDone = `<span class="bulk-status-badge bulk-status-done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã lưu</span>`;
+    const deskStatus = document.getElementById(`bulk-status-${roomId}`);
+    if (deskStatus) deskStatus.innerHTML = statusBadgeDone;
+    const mobileStatus = tr.querySelector('.bulk-status-mobile-holder');
+    if (mobileStatus) mobileStatus.innerHTML = statusBadgeDone;
+
+    if (saveBtn) {
+      saveBtn.innerHTML = '<i class="bi bi-check-lg" style="color:#16a34a"></i> <span class="btn-save-text" style="color:#16a34a">Đã lưu</span>';
+      saveBtn.classList.remove('btn-outline-primary');
+      saveBtn.classList.add('btn-outline-success');
+
+      setTimeout(() => {
+        saveBtn.innerHTML = '<i class="bi bi-floppy"></i> <span class="btn-save-text">Lưu</span>';
+        saveBtn.classList.remove('btn-outline-success');
+        saveBtn.classList.add('btn-outline-primary');
+        saveBtn.disabled = false;
+      }, 2000);
+    }
+
+    updateBulkSummary();
+  } catch (err) {
+    console.error(err);
+    if (saveBtn) {
+      saveBtn.innerHTML = origBtnHtml;
+      saveBtn.disabled = false;
+    }
+  }
 }
 
 function updateBulkSummary() {

@@ -270,11 +270,11 @@
                   <div class="form-row">
                     <div class="form-group col">
                       <label for="elec-old">Chỉ số cũ (kWh)</label>
-                      <input type="number" id="elec-old" class="form-control" min="0" step="any" required>
+                      <input type="number" id="elec-old" class="form-control" min="0" step="any" inputmode="numeric" pattern="[0-9]*" required>
                     </div>
                     <div class="form-group col">
                       <label for="elec-new">Chỉ số mới (kWh)</label>
-                      <input type="number" id="elec-new" class="form-control" min="0" step="any" required>
+                      <input type="number" id="elec-new" class="form-control" min="0" step="any" inputmode="numeric" pattern="[0-9]*" required>
                     </div>
                   </div>
                   <div class="calculation-summary" id="elec-calc-summary" style="display: none;">
@@ -327,9 +327,12 @@
                     <label for="bulk-year" style="font-size:12px; margin-bottom:4px;">Năm</label>
                     <select id="bulk-year" class="form-control form-control-sm"></select>
                   </div>
-                  <div style="display:flex; gap:8px; align-items:flex-end;">
+                  <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap: wrap;">
                     <button id="btn-load-bulk" class="btn btn-primary" style="white-space:nowrap;">
                       <i class="bi bi-clipboard-data"></i> Tải danh sách phòng
+                    </button>
+                    <button id="btn-open-chat-panel" class="btn btn-secondary" style="white-space:nowrap;">
+                      <i class="bi bi-chat-dots"></i> Dán tin nhắn
                     </button>
                   </div>
                 </div>
@@ -391,18 +394,19 @@
                 <table class="table bulk-elec-table">
                   <thead>
                     <tr>
-                      <th style="width:100px;">Phòng</th>
-                      <th style="width:60px;">Khu</th>
-                      <th style="width:100px;">Chỉ số cũ</th>
+                      <th style="width:110px;">Phòng</th>
+                      <th style="width:70px;" class="desktop-only">Khu</th>
+                      <th style="width:110px;">Chỉ số cũ</th>
                       <th style="width:140px;">Chỉ số mới <i class="bi bi-pencil"></i></th>
-                      <th style="width:90px;">Tiêu thụ</th>
+                      <th style="width:100px;">Tiêu thụ</th>
                       <th>Tiền điện</th>
-                      <th style="width:90px;">Trạng thái</th>
+                      <th style="width:100px;" class="desktop-only">Trạng thái</th>
+                      <th style="width:90px;" class="text-center">Lưu</th>
                     </tr>
                   </thead>
                   <tbody id="bulk-elec-tbody">
                     <tr>
-                      <td colspan="7" class="text-center text-muted" style="padding:40px;">
+                      <td colspan="8" class="text-center text-muted" style="padding:40px;">
                         Chọn tháng/năm và bấm "Tải danh sách phòng"
                       </td>
                     </tr>

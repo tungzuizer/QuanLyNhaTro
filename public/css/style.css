@@ -3249,6 +3249,78 @@ input[type="date"]::-webkit-date-and-time-value {
 }
 
 /* Inline number input in table */
+.bulk-old-reading {
+  width: 90px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  background: hsl(220, 14%, 98%);
+  color: var(--text-color);
+  box-sizing: border-box;
+}
+
+.bulk-old-reading:focus {
+  border-color: var(--primary);
+  background: var(--white);
+  outline: none;
+}
+
+.bulk-hint-old {
+  font-size: 10px;
+  color: var(--neutral-gray);
+  margin-top: 2px;
+}
+
+.bulk-room-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bulk-room-code {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-dark);
+}
+
+.bulk-badge-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 12px;
+  background: hsl(220, 14%, 92%);
+  color: var(--text-dark);
+}
+
+.bulk-badge-pill.light {
+  background: hsl(210, 100%, 96%);
+  color: var(--primary);
+}
+
+.bulk-mobile-label {
+  display: none;
+}
+
+.bulk-status-mobile-holder {
+  display: none;
+}
+
+.btn-save-room-reading {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
 .bulk-new-reading {
   width: 100%;
   padding: 7px 10px;
@@ -3260,6 +3332,7 @@ input[type="date"]::-webkit-date-and-time-value {
   transition: var(--transition);
   background: var(--white);
   text-align: center;
+  box-sizing: border-box;
 }
 
 .bulk-new-reading:focus {
@@ -3338,23 +3411,175 @@ input[type="date"]::-webkit-date-and-time-value {
 
   .bulk-summary-bar {
     grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px;
   }
 
-  .bulk-elec-table th,
+  .bulk-summary-item {
+    padding: 6px 8px;
+  }
+
+  /* Khắc phục hoàn toàn tràn ngang & biến table thành Card trên Mobile */
+  #bulk-table-container {
+    overflow-x: hidden !important;
+    padding: 0 !important;
+    background: transparent;
+    border: none;
+  }
+
+  .bulk-elec-table {
+    display: block;
+    width: 100% !important;
+    border: none;
+    background: transparent;
+  }
+
+  .bulk-elec-table thead {
+    display: none !important;
+  }
+
+  .bulk-elec-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .bulk-elec-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    background: var(--white);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .bulk-row-done {
+    border-left: 4px solid var(--success) !important;
+  }
+  .bulk-row-missing {
+    border-left: 4px solid var(--warning) !important;
+  }
+  .bulk-row-vacant {
+    border-left: 4px solid var(--neutral-gray) !important;
+  }
+
   .bulk-elec-table td {
-    padding: 7px 8px;
-    font-size: 12px;
+    padding: 0 !important;
+    border: none !important;
   }
 
+  .bulk-td-room {
+    grid-column: 1 / -1;
+    border-bottom: 1px dashed var(--border-color) !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 2px;
+  }
+
+  .bulk-room-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .bulk-status-mobile-holder {
+    display: inline-flex;
+    margin-left: auto;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .bulk-mobile-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--neutral-gray);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .bulk-td-old {
+    grid-column: 1;
+    text-align: left !important;
+  }
+
+  .bulk-td-new {
+    grid-column: 2;
+    text-align: left !important;
+  }
+
+  .bulk-old-reading,
   .bulk-new-reading {
-    font-size: 13px;
-    padding: 6px 6px;
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 15px;
+    padding: 8px 10px;
+    height: 42px;
   }
 
-  /* Ẩn cột Khu trên mobile */
-  .bulk-elec-table th:nth-child(2),
-  .bulk-elec-table td:nth-child(2) {
-    display: none;
+  .bulk-td-kwh {
+    grid-column: 1;
+    background: hsl(220, 14%, 97%);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px !important;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .bulk-td-kwh .bulk-mobile-label {
+    margin-bottom: 2px;
+  }
+
+  .bulk-val-kwh {
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .bulk-td-cost {
+    grid-column: 2;
+    background: hsl(210, 100%, 97%);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px !important;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .bulk-td-cost .bulk-mobile-label {
+    margin-bottom: 2px;
+    color: var(--primary);
+  }
+
+  .bulk-val-cost {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--primary);
+  }
+
+  .bulk-td-action {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+  }
+
+  .btn-save-room-reading {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    justify-content: center;
   }
 }
 

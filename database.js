@@ -9,6 +9,11 @@ const pool = new Pool({
   }
 });
 
+// Xử lý lỗi ngắt kết nối client nhàn rỗi để tránh crash tiến trình Node.js (đặc thù của serverless Neon Postgres)
+pool.on('error', (err, client) => {
+  console.warn('⚠️ [Postgres Pool] Lỗi kết nối client nhàn rỗi (idle connection):', err.message);
+});
+
 // Hàm khởi tạo cơ sở dữ liệu
 async function initDatabase() {
   const client = await pool.connect();
