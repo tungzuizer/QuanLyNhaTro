@@ -830,6 +830,7 @@ app.put('/api/settings', async (req, res) => {
     const {
       electricity_price, water_price, trash_price, residence_price, payment_due_day,
       bank_name, bank_account, bank_owner,
+      deposit_bank_name, deposit_bank_account, deposit_bank_owner, deposit_default_note,
       email_sender, email_pass, email_receiver, email_enabled
     } = req.body;
 
@@ -841,6 +842,10 @@ app.put('/api/settings', async (req, res) => {
     await upsertSetting('bank_name', bank_name);
     await upsertSetting('bank_account', bank_account);
     await upsertSetting('bank_owner', bank_owner);
+    await upsertSetting('deposit_bank_name', deposit_bank_name);
+    await upsertSetting('deposit_bank_account', deposit_bank_account);
+    await upsertSetting('deposit_bank_owner', deposit_bank_owner);
+    await upsertSetting('deposit_default_note', deposit_default_note);
     await upsertSetting('email_sender', email_sender);
     await upsertSetting('email_pass', email_pass);
     if (email_receiver !== undefined && email_receiver !== null) {

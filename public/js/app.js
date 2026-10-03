@@ -639,6 +639,16 @@ async function loadSettings() {
     if (bankAccount && settings.bank_account) bankAccount.value = settings.bank_account;
     if (bankOwner && settings.bank_owner) bankOwner.value = settings.bank_owner;
 
+    // Load deposit bank info
+    const depBankName = document.getElementById('setting-deposit-bank-name');
+    const depBankAccount = document.getElementById('setting-deposit-bank-account');
+    const depBankOwner = document.getElementById('setting-deposit-bank-owner');
+    const depNote = document.getElementById('setting-deposit-note-default');
+    if (depBankName && settings.deposit_bank_name) depBankName.value = settings.deposit_bank_name;
+    if (depBankAccount && settings.deposit_bank_account) depBankAccount.value = settings.deposit_bank_account;
+    if (depBankOwner && settings.deposit_bank_owner) depBankOwner.value = settings.deposit_bank_owner;
+    if (depNote && settings.deposit_default_note) depNote.value = settings.deposit_default_note;
+
     // Load email receiver info
     const emailReceiver = document.getElementById('setting-email-receiver');
     if (emailReceiver) emailReceiver.value = settings.email_receiver || 'nhatroliso@gmail.com';
@@ -677,7 +687,11 @@ async function handleSettingsSubmit(e) {
     payment_due_day: dueDay,
     bank_name: bankName,
     bank_account: bankAccount,
-    bank_owner: bankOwner
+    bank_owner: bankOwner,
+    deposit_bank_name: document.getElementById('setting-deposit-bank-name')?.value || '',
+    deposit_bank_account: document.getElementById('setting-deposit-bank-account')?.value || '',
+    deposit_bank_owner: document.getElementById('setting-deposit-bank-owner')?.value || '',
+    deposit_default_note: document.getElementById('setting-deposit-note-default')?.value || ''
   };
 
   const emailReceiverEl = document.getElementById('setting-email-receiver');
@@ -2408,6 +2422,10 @@ async function initInvoiceTab() {
     const btnPreview = document.getElementById('btn-preview-invoice');
     if (btnPreview) btnPreview.addEventListener('click', generateInvoicePreview);
 
+    // Invoice type toggle
+    const invTypeSelect = document.getElementById('inv-type-select');
+    if (invTypeSelect) invTypeSelect.addEventListener('change', toggleInvoiceType);
+
     // Print button
     const btnPrint = document.getElementById('btn-print-invoice');
     if (btnPrint) btnPrint.addEventListener('click', () => window.print());
@@ -2592,36 +2610,7 @@ function formatInvoiceDate(dateStr) {
 
 async function generateInvoicePreview() {
   const roomId = document.getElementById('inv-room-select').value;
-  const month = document.getElementById('inv-month').value;
-  const year = document.getElementById('inv-year').value;
-  const note = document.getElementById('inv-note').value.trim();
-  const residenceOption = 'auto';
-
-  // Đọc kỳ thu tiền phòng
-  const rentFrom = document.getElementById('inv-rent-from')?.value || '';
-  const rentTo = document.getElementById('inv-rent-to')?.value || '';
-
-  // Đọc chỉ số điện cũ và mới đã nhập
-  const elecOldInput = document.getElementById('inv-elec-old');
-  const elecNewInput = document.getElementById('inv-elec-new');
-  const elecOld = elecOldInput && elecOldInput.value !== '' ? parseFloat(elecOldInput.value) : null;
-  const elecNew = elecNewInput && elecNewInput.value !== '' ? parseFloat(elecNewInput.value) : null;
-
-  // Đọc chỉ số điện bàn giao
-  const elecHandoverInput = document.getElementById('inv-elec-handover');
-  const elecHandover = elecHandoverInput && elecHandoverInput.value !== '' ? parseFloat(elecHandoverInput.value) : null;
-
-  // Đọc override fees (chỉ khi đã được pre-fill sau lần preview đầu)
-  const overrideRentInput = document.getElementById('inv-override-rent');
-  const overrideWaterInput = document.getElementById('inv-override-water');
-  const overrideTrashInput = document.getElementById('inv-override-trash');
-  const overrideDepositInput = document.getElementById('inv-override-deposit');
-  const overrideResidenceInput = document.getElementById('inv-override-residence');
-  const overrideRent = overrideRentInput && overrideRentInput.value !== '' && !overrideRentInput.disabled ? parseFloat(overrideRentInput.value) : null;
-  const overrideWater = overrideWaterInput && overrideWaterInput.value !== '' && !overrideWaterInput.disabled ? parseFloat(overrideWaterInput.value) : null;
-  const overrideTrash = overrideTrashInput && overrideTrashInput.value !== '' && !overrideTrashInput.disabled ? parseFloat(overrideTrashInput.value) : null;
-  const overrideDeposit = overrideDepositInput && overrideDepositInput.value !== '' && !overrideDepositInput.disabled ? parseFloat(overrideDepositInput.value) : null;
-  const overrideResidence = overrideResidenceInput && overrideResidenceInput.value !== '' && !overrideResidenceInput.disabled ? parseFloat(overrideResidenceInput.value) : null;
+  const invType = document.getElementById('inv-type-select')?.value || 'rent';
 
   if (!roomId) {
     showToast('Vui lòng chọn phòng trước', 'error');
@@ -2633,10 +2622,55 @@ async function generateInvoicePreview() {
   btn.disabled = true;
 
   try {
+    if (invType === 'deposit') {
+      const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`);
+      const depositAmount = parseFloat(document.getElementById('inv-deposit-amount')?.value) || data.room.deposit || 0;
+      const depositNote = document.getElementById('inv-deposit-note')?.value?.trim() || '';
+
+      const titleEl = document.querySelector('.inv-title-box h1');
+      if (titleEl) titleEl.textContent = 'HÓA ĐƠN TIỀN CỌC';
+
+      renderDepositInvoice(data.room, data.tenants, data.settings, depositAmount, depositNote);
+
+      document.getElementById('invoice-empty-state').style.display = 'none';
+      document.getElementById('invoice-preview-container').style.display = 'block';
+      document.getElementById('invoice-preview-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
+    const month = document.getElementById('inv-month').value;
+    const year = document.getElementById('inv-year').value;
+    const note = document.getElementById('inv-note').value.trim();
+    const residenceOption = 'auto';
+
+    const rentFrom = document.getElementById('inv-rent-from')?.value || '';
+    const rentTo = document.getElementById('inv-rent-to')?.value || '';
+
+    const elecOldInput = document.getElementById('inv-elec-old');
+    const elecNewInput = document.getElementById('inv-elec-new');
+    const elecOld = elecOldInput && elecOldInput.value !== '' ? parseFloat(elecOldInput.value) : null;
+    const elecNew = elecNewInput && elecNewInput.value !== '' ? parseFloat(elecNewInput.value) : null;
+
+    const elecHandoverInput = document.getElementById('inv-elec-handover');
+    const elecHandover = elecHandoverInput && elecHandoverInput.value !== '' ? parseFloat(elecHandoverInput.value) : null;
+
+    const overrideRentInput = document.getElementById('inv-override-rent');
+    const overrideWaterInput = document.getElementById('inv-override-water');
+    const overrideTrashInput = document.getElementById('inv-override-trash');
+    const overrideDepositInput = document.getElementById('inv-override-deposit');
+    const overrideResidenceInput = document.getElementById('inv-override-residence');
+    const overrideRent = overrideRentInput && overrideRentInput.value !== '' && !overrideRentInput.disabled ? parseFloat(overrideRentInput.value) : null;
+    const overrideWater = overrideWaterInput && overrideWaterInput.value !== '' && !overrideWaterInput.disabled ? parseFloat(overrideWaterInput.value) : null;
+    const overrideTrash = overrideTrashInput && overrideTrashInput.value !== '' && !overrideTrashInput.disabled ? parseFloat(overrideTrashInput.value) : null;
+    const overrideDeposit = overrideDepositInput && overrideDepositInput.value !== '' && !overrideDepositInput.disabled ? parseFloat(overrideDepositInput.value) : null;
+    const overrideResidence = overrideResidenceInput && overrideResidenceInput.value !== '' && !overrideResidenceInput.disabled ? parseFloat(overrideResidenceInput.value) : null;
+
+    const titleEl = document.querySelector('.inv-title-box h1');
+    if (titleEl) titleEl.textContent = 'HÓA ĐƠN TIỀN TRỌ';
+
     const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}&include_residence=${residenceOption}`);
     renderInvoiceDocument(data, note, { rentFrom, rentTo, elecOld, elecNew, elecHandover, overrideRent, overrideWater, overrideTrash, overrideDeposit, overrideResidence });
 
-    // Pre-fill override inputs từ server data và bật chỉnh sửa
     const s = data.summary;
     const overrideFields = document.getElementById('inv-override-fields');
     if (overrideFields) {
@@ -2653,10 +2687,11 @@ async function generateInvoicePreview() {
       });
     }
 
+    const btnTogglePaid = document.getElementById('btn-invoice-toggle-paid');
+    if (btnTogglePaid) btnTogglePaid.style.display = '';
+
     document.getElementById('invoice-empty-state').style.display = 'none';
     document.getElementById('invoice-preview-container').style.display = 'block';
-
-    // Scroll to preview on mobile
     document.getElementById('invoice-preview-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (err) {
     console.error(err);
@@ -2924,20 +2959,141 @@ function renderInvoiceDocument(data, note, options = {}) {
   }
 }
 
+function toggleInvoiceType() {
+  const type = document.getElementById('inv-type-select').value;
+  const isDeposit = type === 'deposit';
+
+  document.querySelectorAll('.inv-rent-only').forEach(el => {
+    el.style.display = isDeposit ? 'none' : '';
+  });
+  document.querySelectorAll('.inv-deposit-only').forEach(el => {
+    el.style.display = isDeposit ? '' : 'none';
+  });
+
+  if (isDeposit) {
+    const roomId = document.getElementById('inv-room-select').value;
+    if (roomId && currentState.rooms) {
+      const room = currentState.rooms.find(r => String(r.id) === String(roomId));
+      if (room) {
+        document.getElementById('inv-deposit-amount').value = room.deposit || 0;
+      }
+    }
+    const defaultNote = currentState.bankSettings?.deposit_default_note || '';
+    const noteEl = document.getElementById('inv-deposit-note');
+    if (noteEl && !noteEl.value) noteEl.value = defaultNote;
+  }
+}
+
+function renderDepositInvoice(room, tenants, settings, depositAmount, depositNote) {
+  const titleEl = document.querySelector('.inv-title-box h1');
+  titleEl.textContent = 'HÓA ĐƠN TIỀN CỌC';
+
+  document.getElementById('inv-period-label').textContent = new Date().toLocaleDateString('vi-VN');
+  const rentPeriodDisplay = document.getElementById('inv-rent-period-display');
+  rentPeriodDisplay.style.display = 'none';
+
+  document.getElementById('inv-room-code').textContent = `Phòng ${room.room_code}`;
+  document.getElementById('inv-room-zone').textContent = `Khu ${room.zone}`;
+  const statusMap = { vacant: 'Trống', occupied: 'Đang thuê', maintenance: 'Sửa chữa' };
+  const statusColorMap = { vacant: '#16a34a', occupied: '#f97316', maintenance: '#dc2626' };
+  const statusEl = document.getElementById('inv-room-status');
+  statusEl.innerHTML = `<i class="bi bi-circle-fill" style="color:${statusColorMap[room.status] || '#6b7280'}"></i> ${statusMap[room.status] || room.status}`;
+
+  const tenantsList = document.getElementById('inv-tenants-list');
+  tenantsList.innerHTML = '';
+  if (tenants.length === 0) {
+    tenantsList.innerHTML = '<span style="color:var(--neutral-gray);font-size:13px">Chưa có người thuê</span>';
+  } else {
+    tenants.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'inv-tenant-row';
+      div.innerHTML = `
+        <span class="inv-tenant-name">${t.full_name}</span>
+        ${t.phone ? `<span class="inv-tenant-phone"><i class="bi bi-telephone"></i> ${t.phone}</span>` : ''}
+      `;
+      tenantsList.appendChild(div);
+    });
+  }
+
+  const tbody = document.getElementById('inv-charges-tbody');
+  tbody.innerHTML = `
+    <tr>
+      <td><i class="bi bi-wallet2"></i> Tiền đặt cọc</td>
+      <td><small>Đặt cọc giữ phòng</small></td>
+      <td class="text-right">${formatVND(depositAmount)}</td>
+    </tr>
+  `;
+
+  const tfoot = document.querySelector('.inv-charges-table tfoot');
+  tfoot.innerHTML = `
+    <tr class="inv-total-row">
+      <td colspan="2"><strong><i class="bi bi-cash-stack"></i> TỔNG CỘNG</strong></td>
+      <td class="text-right"><strong id="inv-grand-total">${formatVND(depositAmount)}</strong></td>
+    </tr>
+  `;
+
+  const statusBox = document.getElementById('inv-payment-status-box');
+  if (statusBox) statusBox.style.display = 'none';
+
+  const bName = settings.deposit_bank_name;
+  const bAccount = settings.deposit_bank_account;
+  const bOwner = settings.deposit_bank_owner;
+  const bankBox = document.getElementById('inv-bank-details');
+
+  if (bName || bAccount || bOwner) {
+    bankBox.innerHTML = `
+      ${bName ? `<div class="inv-bank-row"><span>Ngân hàng</span><strong>${bName}</strong></div>` : ''}
+      ${bOwner ? `<div class="inv-bank-row"><span>Chủ TK</span><strong>${bOwner}</strong></div>` : ''}
+      ${bAccount ? `<div class="inv-bank-account-highlight">${bAccount}</div>` : ''}
+    `;
+    document.getElementById('inv-bank-info-box').style.display = 'block';
+  } else {
+    document.getElementById('inv-bank-info-box').style.display = 'none';
+  }
+
+  const noteDisplay = document.getElementById('inv-note-display');
+  if (depositNote) {
+    document.getElementById('inv-note-text').textContent = depositNote;
+    noteDisplay.style.display = 'block';
+  } else {
+    noteDisplay.style.display = 'none';
+  }
+
+  const now = new Date();
+  document.getElementById('inv-gen-time').textContent = now.toLocaleString('vi-VN');
+
+  window._currentInvoiceContext = null;
+  const btnTogglePaid = document.getElementById('btn-invoice-toggle-paid');
+  if (btnTogglePaid) btnTogglePaid.style.display = 'none';
+}
+
 function copyInvoiceText() {
+  const titleEl = document.querySelector('.inv-title-box h1');
+  const title = titleEl ? titleEl.textContent : 'HÓA ĐƠN TIỀN TRỌ';
   const room = document.getElementById('inv-room-code').textContent;
   const period = document.getElementById('inv-period-label').textContent;
   const total = document.getElementById('inv-grand-total').textContent;
-  const status = document.getElementById('inv-payment-status-box').textContent.trim();
   const bankDetails = document.getElementById('inv-bank-details').innerText.trim();
 
-  let text = `=== HÓA ĐƠN TIỀN TRỌ ===\n`;
+  let text = `=== ${title} ===\n`;
   text += `${room} — ${period}\n`;
   text += `Tổng cộng: ${total}\n`;
-  text += `Trạng thái: ${status}\n`;
+
+  const invType = document.getElementById('inv-type-select')?.value || 'rent';
+  if (invType !== 'deposit') {
+    const status = document.getElementById('inv-payment-status-box').textContent.trim();
+    text += `Trạng thái: ${status}\n`;
+  }
+
   if (bankDetails) {
     text += `\nThông tin chuyển khoản:\n${bankDetails}\n`;
   }
+
+  const noteText = document.getElementById('inv-note-text')?.textContent?.trim();
+  if (invType === 'deposit' && noteText) {
+    text += `\nĐiều khoản cọc:\n${noteText}\n`;
+  }
+
   text += `\n— Nhà Trọ LISO • Không gian sống tiện nghi & văn minh —`;
 
   navigator.clipboard.writeText(text).then(() => {
@@ -2993,7 +3149,9 @@ async function downloadInvoiceAsImage() {
     const period = document.getElementById('inv-period-label')?.textContent || 'thang';
     const cleanPeriod = period.replace(/Tháng\s*/gi, '').trim().replace('/', '_');
     const cleanRoom = roomCode.replace(/Phòng\s*/gi, '').trim();
-    const filename = `HoaDon_Phong_${cleanRoom}_${cleanPeriod}.png`;
+    const invType = document.getElementById('inv-type-select')?.value || 'rent';
+    const prefix = invType === 'deposit' ? 'HoaDonCoc' : 'HoaDon';
+    const filename = `${prefix}_Phong_${cleanRoom}_${cleanPeriod}.png`;
 
     link.download = filename;
     link.href = image;
@@ -3046,7 +3204,9 @@ async function shareInvoiceViaZalo() {
     const period = document.getElementById('inv-period-label')?.textContent || 'thang';
     const cleanPeriod = period.replace(/Tháng\s*/gi, '').trim().replace('/', '_');
     const cleanRoom = roomCode.replace(/Phòng\s*/gi, '').trim();
-    const filename = `HoaDon_Phong_${cleanRoom}_${cleanPeriod}.png`;
+    const invType = document.getElementById('inv-type-select')?.value || 'rent';
+    const prefix = invType === 'deposit' ? 'HoaDonCoc' : 'HoaDon';
+    const filename = `${prefix}_Phong_${cleanRoom}_${cleanPeriod}.png`;
 
     // Chuyển canvas thành Blob (file ảnh)
     canvas.toBlob(async (blob) => {
