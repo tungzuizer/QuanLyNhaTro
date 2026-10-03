@@ -19,12 +19,13 @@ logger = logging.getLogger("meter-ocr")
 # Cấu hình OmniRoute Gateway
 OMNIROUTE_URL = os.getenv("OMNIROUTE_URL", "http://127.0.0.1:20128/v1/chat/completions")
 OMNIROUTE_API_KEY = os.getenv("OMNIROUTE_API_KEY", "sk-5f238e76072d7926-f6ac33-f145b936")
-MODEL_NAME = os.getenv("OMNIROUTE_MODEL", "antigravity/gemini-3.7-flash-high")
+PRIMARY_MODEL = os.getenv("OMNIROUTE_MODEL", "antigravity/gemini-3.7-flash-high")
+FALLBACK_MODEL = os.getenv("OMNIROUTE_FALLBACK_MODEL", "antigravity/claude-sonnet-4-6")
 
 app = FastAPI(
     title="LISO Mechanical Electricity Meter OCR",
-    description="Backend nhận diện chỉ số công tơ điện cơ khí 1 pha qua OmniRoute model antigravity/gemini-3.7-flash-high",
-    version="1.0.0"
+    description="Backend nhận diện chỉ số công tơ điện cơ khí 1 pha qua OmniRoute (Gemini Flash & Claude Sonnet Fallback)",
+    version="1.1.0"
 )
 
 app.add_middleware(
@@ -170,15 +171,17 @@ async def health_check():
     return {
         "status": "ok",
         "service": "liso-meter-ocr",
-        "model": MODEL_NAME,
+        "primary_model": PRIMARY_MODEL,
+        "fallback_model": FALLBACK_MODEL,
         "omniroute_gateway": omniroute_status
     }
 
 @app.post("/ocr-meter", response_model=MeterOCRResponse)
 async def ocr_meter(req: MeterOCRRequest):
     """
-    Endpoint nhận ảnh công tơ điện và gọi model antigravity/gemini-3.7-flash-high qua OmniRoute
-    để trích xuất chỉ số điện với độ chính xác cao nhất.
+    Endpoint nhận ảnh công tơ điện và gọi model OCR qua OmniRoute.
+    Ưu tiên: antigravity/gemini-3.7-flash-high.
+    Nếu hết token / lỗi -> Tự động chuyển đổi sang model dự phòng: antigravity/claude-sonnet-4-6.
     """
     try:
         # 1. Tiền xử lý & nén ảnh
@@ -193,108 +196,129 @@ async def ocr_meter(req: MeterOCRRequest):
     # 2. Xây dựng Prompt
     prompt_text = build_ocr_prompt(req.old_reading, req.room_code)
 
-    payload = {
-        "model": MODEL_NAME,
-        "temperature": 0.1,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt_text},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": processed_image_uri,
-                            "detail": "high"
+    # Danh sách model theo thứ tự ưu tiên
+    candidate_models = [PRIMARY_MODEL]
+    if FALLBACK_MODEL and FALLBACK_MODEL != PRIMARY_MODEL:
+        candidate_models.append(FALLBACK_MODEL)
+
+    last_error = None
+
+    for idx, current_model in enumerate(candidate_models):
+        logger.info(f"Đang thử nhận diện với model: {current_model} (Ưu tiên {idx + 1}/{len(candidate_models)})")
+
+        payload = {
+            "model": current_model,
+            "temperature": 0.1,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": processed_image_uri,
+                                "detail": "high"
+                            }
                         }
-                    }
-                ]
-            }
-        ]
-    }
+                    ]
+                }
+            ]
+        }
 
-    # 3. Gửi request tới OmniRoute Gateway
-    try:
-        async with httpx.AsyncClient(timeout=40.0) as client:
-            res = await client.post(
-                OMNIROUTE_URL,
-                headers=get_omniroute_headers(),
-                json=payload
-            )
+        # 3. Gửi request tới OmniRoute Gateway
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                res = await client.post(
+                    OMNIROUTE_URL,
+                    headers=get_omniroute_headers(),
+                    json=payload
+                )
 
-        if res.status_code != 200:
-            logger.error(f"OmniRoute error ({res.status_code}): {res.text}")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Lỗi từ OmniRoute Gateway: {res.text[:200]}"
-            )
+            if res.status_code != 200:
+                err_msg = f"Model {current_model} trả về lỗi HTTP {res.status_code}: {res.text[:200]}"
+                logger.warning(err_msg)
+                last_error = err_msg
+                if idx + 1 < len(candidate_models):
+                    logger.info(f"🔄 Chuyển sang model dự phòng: {candidate_models[idx + 1]}...")
+                continue
 
-        response_data = res.json()
-        content = response_data["choices"][0]["message"]["content"]
-        logger.info(f"AI Response raw: {content[:300]}...")
+            response_data = res.json()
+            if "choices" not in response_data or not response_data["choices"]:
+                err_msg = f"Model {current_model} không trả về choices hợp lệ: {response_data}"
+                logger.warning(err_msg)
+                last_error = err_msg
+                continue
 
-    except httpx.RequestError as exc:
-        logger.error(f"Không thể kết nối tới OmniRoute Gateway: {exc}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Không thể kết nối tới OmniRoute Gateway (port 20128). Vui lòng kiểm tra tiến trình OmniRoute trên máy."
-        )
+            content = response_data["choices"][0]["message"]["content"]
+            logger.info(f"[{current_model}] AI Response raw: {content[:200]}...")
 
-    # 4. Phân tích kết quả JSON trả về từ Model
-    try:
-        # Tìm khối JSON trong phản hồi (hỗ trợ cả ```json ... ``` hoặc raw JSON)
-        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-        else:
-            json_match = re.search(r"(\{.*\})", content, re.DOTALL)
-            json_str = json_match.group(1) if json_match else content.strip()
+            # 4. Phân tích kết quả JSON
+            json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_match = re.search(r"(\{.*\})", content, re.DOTALL)
+                json_str = json_match.group(1) if json_match else content.strip()
 
-        parsed = json.loads(json_str)
+            parsed = json.loads(json_str)
 
-        reading = int(parsed.get("reading", 0))
-        decimal_reading = float(parsed.get("decimal_reading", reading))
-        raw_digits = str(parsed.get("raw_digits", str(reading)))
-        confidence = float(parsed.get("confidence", 0.9))
-        rollover_detected = bool(parsed.get("rollover_detected", False))
-        details = parsed.get("details", {})
+            reading = int(parsed.get("reading", 0))
+            decimal_reading = float(parsed.get("decimal_reading", reading))
+            raw_digits = str(parsed.get("raw_digits", str(reading)))
+            confidence = float(parsed.get("confidence", 0.9))
+            rollover_detected = bool(parsed.get("rollover_detected", False))
+            details = parsed.get("details", {})
+            details["model_used"] = current_model
 
-        warning = None
-        if req.old_reading is not None and reading < req.old_reading:
-            warning = f"Chỉ số nhận diện ({reading}) nhỏ hơn chỉ số cũ ({int(req.old_reading)}). Vui lòng kiểm tra lại!"
+            warning = None
+            if req.old_reading is not None and reading < req.old_reading:
+                warning = f"Chỉ số nhận diện ({reading}) nhỏ hơn chỉ số cũ ({int(req.old_reading)}). Vui lòng kiểm tra lại!"
 
-        return MeterOCRResponse(
-            success=True,
-            reading=reading,
-            decimal_reading=decimal_reading,
-            raw_digits=raw_digits,
-            confidence=confidence,
-            rollover_detected=rollover_detected,
-            details=details,
-            warning=warning
-        )
-
-    except Exception as parse_err:
-        logger.error(f"Lỗi parse JSON từ phản hồi AI: {parse_err}. Nội dung: {content}")
-        # Cố gắng trích xuất số bằng regex dự phòng nếu JSON parse thất bại
-        num_match = re.findall(r"\b\d{4,6}\b", content)
-        if num_match:
-            fallback_val = int(num_match[0][:5])
             return MeterOCRResponse(
                 success=True,
-                reading=fallback_val,
-                decimal_reading=float(fallback_val),
-                raw_digits=num_match[0],
-                confidence=0.5,
-                rollover_detected=False,
-                details={"fallback_extracted": True, "raw_response": content[:200]},
-                warning="Kết quả được trích xuất dự phòng do AI trả về định dạng văn bản."
+                reading=reading,
+                decimal_reading=decimal_reading,
+                raw_digits=raw_digits,
+                confidence=confidence,
+                rollover_detected=rollover_detected,
+                details=details,
+                warning=warning
             )
 
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Không thể giải mã kết quả từ AI: {str(parse_err)}"
-        )
+        except httpx.RequestError as exc:
+            logger.error(f"Không thể kết nối tới OmniRoute Gateway khi gọi {current_model}: {exc}")
+            last_error = f"Lỗi kết nối OmniRoute ({exc})"
+            if idx + 1 < len(candidate_models):
+                continue
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Không thể kết nối tới OmniRoute Gateway (port 20128). Vui lòng kiểm tra tiến trình OmniRoute trên máy."
+            )
+        except Exception as parse_err:
+            logger.warning(f"Lỗi parse JSON với model {current_model}: {parse_err}. Thử trích xuất regex...")
+            num_match = re.findall(r"\b\d{4,6}\b", content if 'content' in locals() else "")
+            if num_match:
+                fallback_val = int(num_match[0][:5])
+                return MeterOCRResponse(
+                    success=True,
+                    reading=fallback_val,
+                    decimal_reading=float(fallback_val),
+                    raw_digits=num_match[0],
+                    confidence=0.5,
+                    rollover_detected=False,
+                    details={"fallback_extracted": True, "model_used": current_model},
+                    warning="Kết quả được trích xuất dự phòng do AI trả về định dạng văn bản."
+                )
+            last_error = f"Lỗi giải mã: {parse_err}"
+            if idx + 1 < len(candidate_models):
+                logger.info(f"🔄 Chuyển sang model dự phòng: {candidate_models[idx + 1]}...")
+                continue
+
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=f"Tất cả các model AI đều không thể nhận diện ảnh. Chi tiết lỗi cuối: {last_error}"
+    )
 
 if __name__ == "__main__":
     import uvicorn

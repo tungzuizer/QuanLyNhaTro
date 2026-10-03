@@ -32,6 +32,7 @@ fi
 cd "$PROJECT_DIR" || exit 1
 export OMNIROUTE_API_KEY="sk-5f238e76072d7926-f6ac33-f145b936"
 export OMNIROUTE_MODEL="antigravity/gemini-3.7-flash-high"
+export OMNIROUTE_FALLBACK_MODEL="antigravity/claude-sonnet-4-6"
 
 # Kill tiến trình uvicorn cũ nếu còn sót
 pkill -f "uvicorn main:app" 2>/dev/null
