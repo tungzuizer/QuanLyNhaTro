@@ -3162,6 +3162,32 @@ input[type="date"]::-webkit-date-and-time-value {
   min-width: 0;
 }
 
+.bulk-date-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bulk-date-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 100px;
+}
+
+.bulk-date-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--neutral-gray);
+  margin: 0;
+}
+
+.bulk-ai-badge-wrap {
+  display: flex;
+  align-items: flex-end;
+}
+
 .bulk-toolbar-right {
   display: flex;
   align-items: center;
@@ -3530,6 +3556,7 @@ input[type="date"]::-webkit-date-and-time-value {
 @media (max-width: 768px) {
   .elec-mode-tabs {
     width: 100%;
+    margin-bottom: 10px !important;
   }
 
   .elec-mode-btn {
@@ -3541,7 +3568,31 @@ input[type="date"]::-webkit-date-and-time-value {
 
   .bulk-toolbar {
     flex-direction: column;
-    gap: 12px;
+    gap: 10px !important;
+    padding: 10px 12px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .bulk-date-row {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-end !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .bulk-date-group {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }
+
+  .bulk-date-group select {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .bulk-ai-badge-wrap {
+    flex: 0 0 auto !important;
   }
 
   .bulk-toolbar-right {

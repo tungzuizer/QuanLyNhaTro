@@ -318,16 +318,16 @@
             <!-- Toolbar -->
             <div class="bulk-toolbar card">
               <div class="bulk-toolbar-left">
-                <div class="form-row" style="margin:0; align-items: center; flex-wrap: wrap; gap: 12px;">
-                  <div class="form-group col" style="margin:0; min-width:120px;">
-                    <label for="bulk-month" style="font-size:12px; margin-bottom:4px;">Tháng</label>
+                <div class="bulk-date-row">
+                  <div class="bulk-date-group">
+                    <label for="bulk-month">Tháng</label>
                     <select id="bulk-month" class="form-control form-control-sm"></select>
                   </div>
-                  <div class="form-group col" style="margin:0; min-width:100px;">
-                    <label for="bulk-year" style="font-size:12px; margin-bottom:4px;">Năm</label>
+                  <div class="bulk-date-group">
+                    <label for="bulk-year">Năm</label>
                     <select id="bulk-year" class="form-control form-control-sm"></select>
                   </div>
-                  <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap: wrap;">
+                  <div class="bulk-ai-badge-wrap">
                     <div id="ai-ocr-status-badge" class="ai-status-badge checking" title="Bấm để kiểm tra lại kết nối AI trên điện thoại">
                       <span class="ai-status-dot"></span>
                       <span id="ai-ocr-status-text">AI: Đang kiểm tra...</span>
@@ -407,7 +407,7 @@
                   <tbody id="bulk-elec-tbody">
                     <tr>
                       <td colspan="8" class="text-center text-muted" style="padding:40px;">
-                        Chọn tháng/năm và bấm "Tải danh sách phòng"
+                        Đang tải danh sách chỉ số điện...
                       </td>
                     </tr>
                   </tbody>
