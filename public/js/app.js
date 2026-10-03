@@ -1761,6 +1761,14 @@ function initElectricityModeTabs() {
     });
   });
 
+  document.querySelectorAll('.bulk-zone-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.bulk-zone-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      applyBulkZoneFilter(pill.getAttribute('data-zone'));
+    });
+  });
+
   // AI OCR status check button
   const aiStatusBadge = document.getElementById('ai-ocr-status-badge');
   if (aiStatusBadge) {
@@ -1830,10 +1838,11 @@ async function loadBulkData() {
     document.querySelector('.bulk-pill[data-filter="all"]')?.classList.add('active');
     document.querySelectorAll('.bulk-billing-pill').forEach(p => p.classList.remove('active'));
     document.querySelector('.bulk-billing-pill[data-billing="all"]')?.classList.add('active');
+    document.querySelectorAll('.bulk-zone-pill').forEach(p => p.classList.remove('active'));
+    document.querySelector('.bulk-zone-pill[data-zone="all"]')?.classList.add('active');
 
     updateBulkBillingCounts(data);
-
-    showToast(`Đã tải ${data.length} phòng cho tháng ${month}/${year}`, 'success');
+    updateBulkZoneCounts(data);
   } catch (err) {
     console.error(err);
   } finally {
@@ -1867,6 +1876,7 @@ function renderBulkTable(data, month, year) {
     tr.setAttribute('data-status', room.status);
     tr.setAttribute('data-has-data', hasCurrentData ? '1' : '0');
     tr.setAttribute('data-billing-day', String(room.billing_day || 30));
+    tr.setAttribute('data-zone', room.zone || '');
 
     // Row style
     if (isVacant) tr.className = 'bulk-row-vacant';
@@ -2183,12 +2193,15 @@ function applyBulkFilter(filter) {
   const rows = document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]');
   const activeBillingPill = document.querySelector('.bulk-billing-pill.active');
   const activeBilling = activeBillingPill ? activeBillingPill.getAttribute('data-billing') : 'all';
+  const activeZonePill = document.querySelector('.bulk-zone-pill.active');
+  const activeZone = activeZonePill ? activeZonePill.getAttribute('data-zone') : 'all';
 
   rows.forEach(tr => {
     const status = tr.getAttribute('data-status');
     const hasDone = tr.getAttribute('data-has-data') === '1';
     const isOccupied = status === 'occupied';
     const billingDay = tr.getAttribute('data-billing-day');
+    const zone = tr.getAttribute('data-zone');
 
     let showByStatus = true;
     if (filter === 'occupied') showByStatus = isOccupied;
@@ -2199,7 +2212,10 @@ function applyBulkFilter(filter) {
     if (activeBilling === '15') showByBilling = billingDay === '15';
     else if (activeBilling === '30') showByBilling = billingDay === '30';
 
-    tr.style.display = (showByStatus && showByBilling) ? '' : 'none';
+    let showByZone = true;
+    if (activeZone !== 'all') showByZone = zone === activeZone;
+
+    tr.style.display = (showByStatus && showByBilling && showByZone) ? '' : 'none';
   });
 }
 
@@ -2207,12 +2223,15 @@ function applyBulkBillingFilter(billing) {
   const rows = document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]');
   const activePill = document.querySelector('.bulk-pill.active');
   const activeFilter = activePill ? activePill.getAttribute('data-filter') : 'all';
+  const activeZonePill = document.querySelector('.bulk-zone-pill.active');
+  const activeZone = activeZonePill ? activeZonePill.getAttribute('data-zone') : 'all';
 
   rows.forEach(tr => {
     const status = tr.getAttribute('data-status');
     const hasDone = tr.getAttribute('data-has-data') === '1';
     const isOccupied = status === 'occupied';
     const billingDay = tr.getAttribute('data-billing-day');
+    const zone = tr.getAttribute('data-zone');
 
     let showByStatus = true;
     if (activeFilter === 'occupied') showByStatus = isOccupied;
@@ -2223,7 +2242,40 @@ function applyBulkBillingFilter(billing) {
     if (billing === '15') showByBilling = billingDay === '15';
     else if (billing === '30') showByBilling = billingDay === '30';
 
-    tr.style.display = (showByStatus && showByBilling) ? '' : 'none';
+    let showByZone = true;
+    if (activeZone !== 'all') showByZone = zone === activeZone;
+
+    tr.style.display = (showByStatus && showByBilling && showByZone) ? '' : 'none';
+  });
+}
+
+function applyBulkZoneFilter(zone) {
+  const rows = document.querySelectorAll('#bulk-elec-tbody tr[data-room-id]');
+  const activePill = document.querySelector('.bulk-pill.active');
+  const activeFilter = activePill ? activePill.getAttribute('data-filter') : 'all';
+  const activeBillingPill = document.querySelector('.bulk-billing-pill.active');
+  const activeBilling = activeBillingPill ? activeBillingPill.getAttribute('data-billing') : 'all';
+
+  rows.forEach(tr => {
+    const status = tr.getAttribute('data-status');
+    const hasDone = tr.getAttribute('data-has-data') === '1';
+    const isOccupied = status === 'occupied';
+    const billingDay = tr.getAttribute('data-billing-day');
+    const rowZone = tr.getAttribute('data-zone');
+
+    let showByStatus = true;
+    if (activeFilter === 'occupied') showByStatus = isOccupied;
+    else if (activeFilter === 'missing') showByStatus = isOccupied && !hasDone;
+    else if (activeFilter === 'done') showByStatus = hasDone;
+
+    let showByBilling = true;
+    if (activeBilling === '15') showByBilling = billingDay === '15';
+    else if (activeBilling === '30') showByBilling = billingDay === '30';
+
+    let showByZone = true;
+    if (zone !== 'all') showByZone = rowZone === zone;
+
+    tr.style.display = (showByStatus && showByBilling && showByZone) ? '' : 'none';
   });
 }
 
@@ -2243,6 +2295,24 @@ function updateBulkBillingCounts(data) {
   if (elAll) elAll.textContent = countAll > 0 ? `(${countAll})` : '';
   if (el15) el15.textContent = count15 > 0 ? `(${count15})` : '';
   if (el30) el30.textContent = count30 > 0 ? `(${count30})` : '';
+}
+
+function updateBulkZoneCounts(data) {
+  let countAll = 0, countA = 0, countB = 0;
+  data.forEach(room => {
+    if (room.status === 'occupied') {
+      countAll++;
+      if (room.zone === 'A') countA++;
+      else if (room.zone === 'B') countB++;
+    }
+  });
+
+  const elAll = document.getElementById('bulk-count-zone-all');
+  const elA = document.getElementById('bulk-count-zone-a');
+  const elB = document.getElementById('bulk-count-zone-b');
+  if (elAll) elAll.textContent = countAll > 0 ? `(${countAll})` : '';
+  if (elA) elA.textContent = countA > 0 ? `(${countA})` : '';
+  if (elB) elB.textContent = countB > 0 ? `(${countB})` : '';
 }
 
 async function saveBulkReadings() {
@@ -3662,7 +3732,9 @@ const ocrState = {
   hasHardwareZoom: false,
   capturedImageBase64: null,
   currentOcrResult: null,
-  isAnalyzing: false
+  isAnalyzing: false,
+  activeModel: '',
+  modelShortName: ''
 };
 
 // Mở modal Camera AI OCR cho 1 phòng
@@ -3998,6 +4070,12 @@ async function sendOcrRequest(base64Image) {
   const loadingState = document.getElementById('ocr-loading-state');
   if (loadingState) loadingState.style.display = 'flex';
 
+  const loadingModelText = document.getElementById('ocr-loading-model-text');
+  if (loadingModelText) {
+    const name = ocrState.modelShortName || (ocrState.activeModel ? ocrState.activeModel.split('/').pop() : 'Gemini / Claude');
+    loadingModelText.textContent = `Model ${name} qua OmniRoute...`;
+  }
+
   const resultCard = document.getElementById('ocr-result-card');
   if (resultCard) resultCard.style.display = 'none';
 
@@ -4047,11 +4125,26 @@ function renderOcrResult(data) {
   const actionsConfirm = document.getElementById('ocr-actions-confirm');
   if (actionsConfirm) actionsConfirm.style.display = 'flex';
 
-  // Hiển thị độ tin cậy
+  // Hiển thị độ tin cậy và model đã xử lý
   const confEl = document.getElementById('ocr-result-confidence');
   if (confEl) {
     const confVal = (data.confidence !== undefined) ? Math.round(data.confidence * 100) : 95;
     confEl.textContent = `Độ tin cậy: ${confVal}%`;
+  }
+
+  const modelUsed = data.details?.model_used || ocrState.activeModel || '';
+  const resultModelBadge = document.getElementById('ocr-result-model-badge');
+  if (resultModelBadge) {
+    if (modelUsed) {
+      let shortName = modelUsed.split('/').pop();
+      if (modelUsed.includes('gemini')) shortName = 'Gemini 3.7';
+      else if (modelUsed.includes('claude') || modelUsed.includes('sonnet')) shortName = 'Claude Sonnet 4.6';
+      resultModelBadge.textContent = `⚡ ${shortName}`;
+      resultModelBadge.title = `Model thực thi: ${modelUsed}`;
+      resultModelBadge.style.display = 'inline-block';
+    } else {
+      resultModelBadge.style.display = 'none';
+    }
   }
 
   // Tách và hiển thị 6 ô số (5 đen + 1 đỏ)
@@ -4242,6 +4335,9 @@ async function checkAiOcrStatus(showToastOnManual = false, probe = true) {
       } else if (activeModel.includes('claude') || activeModel.includes('sonnet')) {
         modelShortName = 'Claude Sonnet 4.6';
       }
+
+      ocrState.activeModel = activeModel;
+      ocrState.modelShortName = modelShortName;
 
       const label = modelShortName ? `AI OCR: 🟢 ${modelShortName}` : 'AI OCR: Online 🟢';
       if (textEl) textEl.textContent = label;

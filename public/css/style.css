@@ -3253,6 +3253,33 @@ input[type="date"]::-webkit-date-and-time-value {
   color: var(--primary);
 }
 
+.bulk-zone-pill {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: var(--white);
+  color: var(--neutral-gray);
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bulk-zone-pill:not(.active):hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.bulk-zone-pill.active {
+  background: #0891b2;
+  color: #fff;
+  border-color: #0891b2;
+}
+
 .bulk-billing-pill.active {
   background: var(--primary);
   color: var(--white);
@@ -3449,7 +3476,7 @@ input[type="date"]::-webkit-date-and-time-value {
 
 .bulk-room-code {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-dark);
 }
 

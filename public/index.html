@@ -346,6 +346,14 @@
                   </div>
                 </div>
                 <div class="bulk-filter-group" style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
+                  <label style="font-size:12px;font-weight:600;white-space:nowrap;">Khu:</label>
+                  <div class="bulk-filter-pills">
+                    <button class="bulk-zone-pill active" data-zone="all">Tất cả <span class="bulk-count-badge" id="bulk-count-zone-all"></span></button>
+                    <button class="bulk-zone-pill" data-zone="A"><i class="bi bi-building"></i> Khu A <span class="bulk-count-badge" id="bulk-count-zone-a"></span></button>
+                    <button class="bulk-zone-pill" data-zone="B"><i class="bi bi-building"></i> Khu B <span class="bulk-count-badge" id="bulk-count-zone-b"></span></button>
+                  </div>
+                </div>
+                <div class="bulk-filter-group" style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
                   <label style="font-size:12px;font-weight:600;white-space:nowrap;">Đợt thu:</label>
                   <div class="bulk-filter-pills">
                     <button class="bulk-billing-pill active" data-billing="all">Tất cả <span class="bulk-count-badge" id="bulk-count-billing-all"></span></button>
@@ -1104,13 +1112,14 @@
         <div id="ocr-loading-state" class="ocr-loading-state" style="display:none;">
           <div class="ocr-spinner"></div>
           <h4>🤖 AI đang phân tích bánh xe công tơ...</h4>
-          <p>Model antigravity/gemini-3.7-flash-high qua OmniRoute</p>
+          <p id="ocr-loading-model-text">Model đang hoạt động qua OmniRoute</p>
         </div>
 
         <!-- Kết quả nhận diện AI OCR -->
         <div id="ocr-result-card" class="ocr-result-card" style="display:none;">
           <div class="ocr-result-header">
             <span class="ocr-badge-success"><i class="bi bi-check-circle-fill"></i> Đã nhận diện</span>
+            <span id="ocr-result-model-badge" class="ocr-badge-model" style="font-size: 11px; color: #475569; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; display: none;"></span>
             <span id="ocr-result-confidence" class="ocr-confidence">Độ tin cậy: --%</span>
           </div>
 
