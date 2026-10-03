@@ -3,6 +3,7 @@ import io
 import re
 import json
 import base64
+import time
 import logging
 from typing import Optional, Dict, Any
 
@@ -21,6 +22,14 @@ OMNIROUTE_URL = os.getenv("OMNIROUTE_URL", "http://127.0.0.1:20128/v1/chat/compl
 OMNIROUTE_API_KEY = os.getenv("OMNIROUTE_API_KEY", "sk-5f238e76072d7926-f6ac33-f145b936")
 PRIMARY_MODEL = os.getenv("OMNIROUTE_MODEL", "antigravity/gemini-3.7-flash-high")
 FALLBACK_MODEL = os.getenv("OMNIROUTE_FALLBACK_MODEL", "antigravity/claude-sonnet-4-6")
+
+# Quản lý trạng thái Quota & Token của các model động
+CURRENT_ACTIVE_MODEL = PRIMARY_MODEL
+MODEL_HEALTH = {
+    PRIMARY_MODEL: {"available": True, "last_tested": 0, "status": "untested", "error": None},
+    FALLBACK_MODEL: {"available": True, "last_tested": 0, "status": "untested", "error": None}
+}
+PROBE_CACHE_TTL = 90  # Cache kết quả kiểm tra token trong 90 giây để tối ưu tốc độ và không spam request
 
 app = FastAPI(
     title="LISO Mechanical Electricity Meter OCR",
@@ -73,8 +82,8 @@ def preprocess_and_compress_image(base64_str: str) -> str:
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
 
-    # Resize cạnh lớn nhất về 1200px (giữ nguyên tỷ lệ khung hình)
-    max_dim = 1200
+    # Resize cạnh lớn nhất về 800px (giữ nguyên tỷ lệ khung hình, tối ưu 1 vision tile ~258 token)
+    max_dim = 800
     w, h = img.size
     if max(w, h) > max_dim:
         if w > h:
@@ -86,9 +95,9 @@ def preprocess_and_compress_image(base64_str: str) -> str:
         img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         logger.info(f"Đã resize ảnh từ {w}x{h} về {new_w}x{new_h}")
 
-    # Nén JPEG quality 85
+    # Nén JPEG quality 82 để tối ưu dung lượng siêu nhẹ (~30-40KB) và tốc độ suy luận nhanh nhất
     buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=85, optimize=True)
+    img.save(buffer, format="JPEG", quality=82, optimize=True)
     compressed_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
     return f"data:image/jpeg;base64,{compressed_base64}"
 
@@ -150,15 +159,65 @@ def get_omniroute_headers() -> Dict[str, str]:
         headers["Authorization"] = f"Bearer {OMNIROUTE_API_KEY}"
     return headers
 
+async def probe_model_health(model_name: str, force_check: bool = False) -> bool:
+    """
+    Gửi ping request siêu nhỏ (1 token) tới OmniRoute để kiểm tra quota/token thật sự của model.
+    Sử dụng bộ đệm cache PROBE_CACHE_TTL (90s) để tránh lãng phí token và không spam request.
+    """
+    global CURRENT_ACTIVE_MODEL
+    now = time.time()
+    info = MODEL_HEALTH.setdefault(model_name, {"available": True, "last_tested": 0, "status": "untested", "error": None})
+
+    if not force_check and (now - info.get("last_tested", 0) < PROBE_CACHE_TTL):
+        return info.get("available", True)
+
+    payload = {
+        "model": model_name,
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "1"}]
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            resp = await client.post(
+                OMNIROUTE_URL,
+                headers=get_omniroute_headers(),
+                json=payload
+            )
+
+        info["last_tested"] = now
+        if resp.status_code == 200:
+            info["available"] = True
+            info["status"] = "ready"
+            info["error"] = None
+            logger.info(f"✅ Probe model {model_name}: Sẵn sàng (HTTP 200)")
+            return True
+        else:
+            info["available"] = False
+            info["status"] = f"http_{resp.status_code}"
+            info["error"] = resp.text[:200]
+            logger.warning(f"⚠️ Probe model {model_name} thất bại (HTTP {resp.status_code}): {resp.text[:150]}")
+            return False
+    except Exception as e:
+        info["last_tested"] = now
+        info["available"] = False
+        info["status"] = "error"
+        info["error"] = str(e)
+        logger.warning(f"⚠️ Lỗi kết nối probe model {model_name}: {e}")
+        return False
+
 @app.get("/health")
-async def health_check():
-    """Kiểm tra sức khỏe dịch vụ OCR và kết nối tới OmniRoute Gateway."""
+async def health_check(probe: bool = False):
+    """
+    Kiểm tra sức khỏe dịch vụ OCR và kết nối tới OmniRoute Gateway.
+    Nếu probe=true: Tự động gửi ping 1 token kiểm tra quota của Gemini Flash.
+    Nếu Gemini Flash hết quota -> Tự động chuyển Active Model sang Claude Sonnet 4.6 tức thì!
+    """
+    global CURRENT_ACTIVE_MODEL
     omniroute_status = "unknown"
     try:
         models_url = OMNIROUTE_URL.replace("/chat/completions", "/models")
-        headers = {}
-        if OMNIROUTE_API_KEY:
-            headers["Authorization"] = f"Bearer {OMNIROUTE_API_KEY}"
+        headers = get_omniroute_headers()
         async with httpx.AsyncClient(timeout=3.0) as client:
             resp = await client.get(models_url, headers=headers)
             if resp.status_code == 200:
@@ -168,11 +227,25 @@ async def health_check():
     except Exception as e:
         omniroute_status = f"offline ({str(e)})"
 
+    if probe:
+        # Kiểm tra trước tính khả dụng (quota/token) của Primary model
+        primary_ok = await probe_model_health(PRIMARY_MODEL)
+        if primary_ok:
+            CURRENT_ACTIVE_MODEL = PRIMARY_MODEL
+        else:
+            # Nếu Primary model hết token / lỗi, kiểm tra và chuyển ngay sang Fallback model
+            fallback_ok = await probe_model_health(FALLBACK_MODEL)
+            if fallback_ok:
+                CURRENT_ACTIVE_MODEL = FALLBACK_MODEL
+                logger.info(f"⚡ [Proactive Switch] Primary model hết quota. Đã chuyển active model sang: {FALLBACK_MODEL}")
+
     return {
         "status": "ok",
         "service": "liso-meter-ocr",
+        "active_model": CURRENT_ACTIVE_MODEL,
         "primary_model": PRIMARY_MODEL,
         "fallback_model": FALLBACK_MODEL,
+        "model_health": MODEL_HEALTH,
         "omniroute_gateway": omniroute_status
     }
 
@@ -180,9 +253,10 @@ async def health_check():
 async def ocr_meter(req: MeterOCRRequest):
     """
     Endpoint nhận ảnh công tơ điện và gọi model OCR qua OmniRoute.
-    Ưu tiên: antigravity/gemini-3.7-flash-high.
-    Nếu hết token / lỗi -> Tự động chuyển đổi sang model dự phòng: antigravity/claude-sonnet-4-6.
+    Ưu tiên: Bắt đầu ngay từ model đang Active (đã được probe sẵn để loại bỏ độ trễ chờ đợi).
+    Nếu gặp sự cố -> Tự động thử model tiếp theo.
     """
+    global CURRENT_ACTIVE_MODEL
     try:
         # 1. Tiền xử lý & nén ảnh
         processed_image_uri = preprocess_and_compress_image(req.image)
@@ -196,15 +270,18 @@ async def ocr_meter(req: MeterOCRRequest):
     # 2. Xây dựng Prompt
     prompt_text = build_ocr_prompt(req.old_reading, req.room_code)
 
-    # Danh sách model theo thứ tự ưu tiên
-    candidate_models = [PRIMARY_MODEL]
-    if FALLBACK_MODEL and FALLBACK_MODEL != PRIMARY_MODEL:
-        candidate_models.append(FALLBACK_MODEL)
+    # Danh sách model theo thứ tự ưu tiên (bắt đầu từ model đang Active)
+    candidate_models = []
+    if CURRENT_ACTIVE_MODEL:
+        candidate_models.append(CURRENT_ACTIVE_MODEL)
+    for m in [PRIMARY_MODEL, FALLBACK_MODEL]:
+        if m and m not in candidate_models:
+            candidate_models.append(m)
 
     last_error = None
 
     for idx, current_model in enumerate(candidate_models):
-        logger.info(f"Đang thử nhận diện với model: {current_model} (Ưu tiên {idx + 1}/{len(candidate_models)})")
+        logger.info(f"Đang thực hiện nhận diện với model: {current_model} (Thứ tự {idx + 1}/{len(candidate_models)})")
 
         payload = {
             "model": current_model,
@@ -239,8 +316,18 @@ async def ocr_meter(req: MeterOCRRequest):
                 err_msg = f"Model {current_model} trả về lỗi HTTP {res.status_code}: {res.text[:200]}"
                 logger.warning(err_msg)
                 last_error = err_msg
+
+                # Đánh dấu model lỗi và hoán đổi active model ngay lập tức
+                if current_model in MODEL_HEALTH:
+                    MODEL_HEALTH[current_model]["available"] = False
+                    MODEL_HEALTH[current_model]["status"] = f"http_{res.status_code}"
+                    MODEL_HEALTH[current_model]["error"] = res.text[:200]
+                    MODEL_HEALTH[current_model]["last_tested"] = time.time()
+
                 if idx + 1 < len(candidate_models):
-                    logger.info(f"🔄 Chuyển sang model dự phòng: {candidate_models[idx + 1]}...")
+                    next_model = candidate_models[idx + 1]
+                    CURRENT_ACTIVE_MODEL = next_model
+                    logger.info(f"🔄 Tự động chuyển Active Model sang: {next_model}...")
                 continue
 
             response_data = res.json()
@@ -271,6 +358,14 @@ async def ocr_meter(req: MeterOCRRequest):
             details = parsed.get("details", {})
             details["model_used"] = current_model
 
+            # Đánh dấu model này đang chạy tốt
+            CURRENT_ACTIVE_MODEL = current_model
+            if current_model in MODEL_HEALTH:
+                MODEL_HEALTH[current_model]["available"] = True
+                MODEL_HEALTH[current_model]["status"] = "ready"
+                MODEL_HEALTH[current_model]["error"] = None
+                MODEL_HEALTH[current_model]["last_tested"] = time.time()
+
             warning = None
             if req.old_reading is not None and reading < req.old_reading:
                 warning = f"Chỉ số nhận diện ({reading}) nhỏ hơn chỉ số cũ ({int(req.old_reading)}). Vui lòng kiểm tra lại!"
@@ -300,6 +395,12 @@ async def ocr_meter(req: MeterOCRRequest):
             num_match = re.findall(r"\b\d{4,6}\b", content if 'content' in locals() else "")
             if num_match:
                 fallback_val = int(num_match[0][:5])
+                CURRENT_ACTIVE_MODEL = current_model
+                if current_model in MODEL_HEALTH:
+                    MODEL_HEALTH[current_model]["available"] = True
+                    MODEL_HEALTH[current_model]["status"] = "ready"
+                    MODEL_HEALTH[current_model]["error"] = None
+                    MODEL_HEALTH[current_model]["last_tested"] = time.time()
                 return MeterOCRResponse(
                     success=True,
                     reading=fallback_val,

@@ -885,9 +885,10 @@ app.get('/api/ocr-meter/status', async (req, res) => {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
+    const timeout = setTimeout(() => controller.abort(), 6000);
     try {
-      const pingRes = await fetch(`${tunnelUrl}/health`, { signal: controller.signal });
+      const probeQuery = req.query.probe === 'true' ? '?probe=true' : '';
+      const pingRes = await fetch(`${tunnelUrl}/health${probeQuery}`, { signal: controller.signal });
       clearTimeout(timeout);
       if (pingRes.ok) {
         const info = await pingRes.json().catch(() => ({}));

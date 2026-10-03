@@ -273,6 +273,7 @@ function switchTab(tabId) {
     if (bulkElecMode === 'bulk') {
       initBulkDropdowns();
     }
+    checkAiOcrStatus(false, true);
   } else if (tabId === 'payments') {
     initPaymentsTab();
   } else if (tabId === 'invoice') {
@@ -469,6 +470,9 @@ function registerEventListeners() {
   }
 
   // --- MODAL AI OCR CAMERA EVENT LISTENERS ---
+  const ocrZoomBtn = document.getElementById('ocr-btn-zoom');
+  if (ocrZoomBtn) ocrZoomBtn.addEventListener('click', toggleOcrZoom);
+
   const ocrSwitchBtn = document.getElementById('ocr-btn-switch-cam');
   if (ocrSwitchBtn) ocrSwitchBtn.addEventListener('click', switchOcrCamera);
 
@@ -3653,6 +3657,9 @@ const ocrState = {
   currentOldReading: 0,
   facingMode: 'environment', // 'environment' (camera sau) hoặc 'user' (camera trước)
   torchOn: false,
+  zoom: 1.3,
+  zoomLevels: [1.3, 1.8, 2.5, 1.0],
+  hasHardwareZoom: false,
   capturedImageBase64: null,
   currentOcrResult: null,
   isAnalyzing: false
@@ -3748,6 +3755,9 @@ async function startOcrCamera() {
     videoEl.srcObject = stream;
     await videoEl.play().catch(() => {});
 
+    // Áp dụng mức Zoom mặc định (1.3x)
+    await applyOcrZoom(ocrState.zoom || 1.3);
+
     // Kiểm tra tính năng đèn Flash / Torch nếu có
     const track = stream.getVideoTracks()[0];
     const capabilities = track && track.getCapabilities ? track.getCapabilities() : {};
@@ -3767,6 +3777,56 @@ async function startOcrCamera() {
   }
 }
 
+// Áp dụng mức Zoom (Hỗ trợ cả phần cứng Camera và Digital CSS Fallback)
+async function applyOcrZoom(zoomLevel) {
+  ocrState.zoom = zoomLevel;
+  const zoomText = document.getElementById('ocr-zoom-text');
+  if (zoomText) {
+    zoomText.textContent = `${zoomLevel}x`;
+  }
+
+  const videoEl = document.getElementById('ocr-cam-video');
+  let hardwareApplied = false;
+
+  if (ocrState.stream) {
+    const track = ocrState.stream.getVideoTracks()[0];
+    const capabilities = (track && track.getCapabilities) ? track.getCapabilities() : {};
+    if (capabilities.zoom && track.applyConstraints) {
+      try {
+        const minZ = capabilities.zoom.min || 1;
+        const maxZ = capabilities.zoom.max || 5;
+        const clampedZoom = Math.min(maxZ, Math.max(minZ, zoomLevel));
+        await track.applyConstraints({
+          advanced: [{ zoom: clampedZoom }]
+        });
+        hardwareApplied = true;
+      } catch (e) {
+        console.warn('Hardware zoom not supported or failed, fallback to digital zoom:', e);
+      }
+    }
+  }
+
+  ocrState.hasHardwareZoom = hardwareApplied;
+
+  // Nếu phần cứng camera không hỗ trợ zoom API -> dùng CSS zoom trên video element
+  if (videoEl) {
+    if (!hardwareApplied && zoomLevel > 1.0) {
+      videoEl.style.transform = `scale(${zoomLevel})`;
+      videoEl.style.transformOrigin = 'center center';
+    } else {
+      videoEl.style.transform = 'none';
+    }
+  }
+}
+
+// Chuyển đổi qua lại các mức Zoom
+async function toggleOcrZoom() {
+  const currentIndex = ocrState.zoomLevels.indexOf(ocrState.zoom);
+  const nextIndex = (currentIndex + 1) % ocrState.zoomLevels.length;
+  const nextZoom = ocrState.zoomLevels[nextIndex];
+  await applyOcrZoom(nextZoom);
+}
+
 // Tắt Camera giải phóng tài nguyên
 function stopOcrCamera() {
   if (ocrState.stream) {
@@ -3776,6 +3836,7 @@ function stopOcrCamera() {
   const videoEl = document.getElementById('ocr-cam-video');
   if (videoEl) {
     videoEl.srcObject = null;
+    videoEl.style.transform = 'none';
   }
   ocrState.torchOn = false;
   const torchBtn = document.getElementById('ocr-btn-torch');
@@ -3841,7 +3902,7 @@ function handleOcrFileFallback(e) {
   e.target.value = '';
 }
 
-// Chụp ảnh từ khung video camera
+// Chụp ảnh từ khung video camera với nguyên tắc WYSIWYG và tối ưu độ phân giải 800px
 function captureOcrPhoto() {
   const videoEl = document.getElementById('ocr-cam-video');
   const canvasEl = document.getElementById('ocr-cam-canvas');
@@ -3849,11 +3910,39 @@ function captureOcrPhoto() {
 
   const vw = videoEl.videoWidth || 640;
   const vh = videoEl.videoHeight || 480;
-  canvasEl.width = vw;
-  canvasEl.height = vh;
+
+  // Lấy tỷ lệ hiển thị thực tế của khung ngắm camera (đang áp dụng object-fit: cover)
+  const rect = videoEl.getBoundingClientRect();
+  const displayRatio = (rect.width && rect.height) ? (rect.width / rect.height) : (4 / 3);
+  const videoRatio = vw / vh;
+
+  let sx = 0, sy = 0, sWidth = vw, sHeight = vh;
+
+  // 1. Cắt chính xác vùng video tương ứng với khung ngắm 4:3
+  if (videoRatio > displayRatio) {
+    sWidth = vh * displayRatio;
+    sx = (vw - sWidth) / 2;
+  } else {
+    sHeight = vw / displayRatio;
+    sy = (vh - sHeight) / 2;
+  }
+
+  // 2. Nếu đang dùng Digital Zoom, tính toán thu hẹp vùng lấy mẫu tương ứng
+  const digitalZoom = (!ocrState.hasHardwareZoom && ocrState.zoom > 1.0) ? ocrState.zoom : 1.0;
+  const finalCropW = sWidth / digitalZoom;
+  const finalCropH = sHeight / digitalZoom;
+  const finalSx = sx + (sWidth - finalCropW) / 2;
+  const finalSy = sy + (sHeight - finalCropH) / 2;
+
+  // 3. Tối ưu độ phân giải xuất ra ở mức 800px (tiêu tốn đúng 1 vision tile ~258 tokens)
+  const targetWidth = Math.min(800, Math.round(finalCropW));
+  const targetHeight = Math.round(targetWidth / displayRatio);
+
+  canvasEl.width = targetWidth;
+  canvasEl.height = targetHeight;
 
   const ctx = canvasEl.getContext('2d');
-  ctx.drawImage(videoEl, 0, 0, vw, vh);
+  ctx.drawImage(videoEl, finalSx, finalSy, finalCropW, finalCropH, 0, 0, targetWidth, targetHeight);
 
   const dataUrl = canvasEl.toDataURL('image/jpeg', 0.85);
   ocrState.capturedImageBase64 = dataUrl;
@@ -4130,8 +4219,8 @@ function closeOcrCameraModal() {
   }
 }
 
-// Kiểm tra trạng thái máy chủ AI OCR trên điện thoại Samsung
-async function checkAiOcrStatus(showToastOnManual = false) {
+// Kiểm tra trạng thái máy chủ AI OCR trên điện thoại Samsung (có hỗ trợ probe token chủ động)
+async function checkAiOcrStatus(showToastOnManual = false, probe = true) {
   const badge = document.getElementById('ai-ocr-status-badge');
   const textEl = document.getElementById('ai-ocr-status-text');
   if (!badge) return;
@@ -4140,15 +4229,25 @@ async function checkAiOcrStatus(showToastOnManual = false) {
   if (textEl) textEl.textContent = 'AI: Đang kiểm tra...';
 
   try {
-    const res = await fetch('/api/ocr-meter/status');
+    const probeParam = probe ? '?probe=true' : '';
+    const res = await fetch(`/api/ocr-meter/status${probeParam}`);
     const data = await res.json();
 
     if (data.connected) {
       badge.className = 'ai-status-badge online';
-      if (textEl) textEl.textContent = 'AI OCR: Online 🟢';
-      badge.title = `Máy chủ AI trên điện thoại đã kết nối (${data.tunnelUrl || ''}) - Bấm để kiểm tra lại`;
+      const activeModel = data.info?.active_model || '';
+      let modelShortName = '';
+      if (activeModel.includes('gemini')) {
+        modelShortName = 'Gemini Flash';
+      } else if (activeModel.includes('claude') || activeModel.includes('sonnet')) {
+        modelShortName = 'Claude Sonnet 4.6';
+      }
+
+      const label = modelShortName ? `AI OCR: 🟢 ${modelShortName}` : 'AI OCR: Online 🟢';
+      if (textEl) textEl.textContent = label;
+      badge.title = `Máy chủ AI trên điện thoại đã kết nối [Model: ${activeModel || 'Sẵn sàng'}] - Bấm để kiểm tra lại`;
       if (showToastOnManual) {
-        showToast('🟢 Máy chủ AI OCR trên điện thoại đang hoạt động tốt!', 'success');
+        showToast(`🟢 AI OCR đang sẵn sàng! Model: ${modelShortName || activeModel}`, 'success');
       }
     } else {
       badge.className = 'ai-status-badge offline';
@@ -4176,6 +4275,8 @@ window.startOcrCamera = startOcrCamera;
 window.stopOcrCamera = stopOcrCamera;
 window.switchOcrCamera = switchOcrCamera;
 window.toggleOcrTorch = toggleOcrTorch;
+window.toggleOcrZoom = toggleOcrZoom;
+window.applyOcrZoom = applyOcrZoom;
 window.handleOcrFileFallback = handleOcrFileFallback;
 window.captureOcrPhoto = captureOcrPhoto;
 window.retakeOcrPhoto = retakeOcrPhoto;
