@@ -1,3 +1,4 @@
+import os
 import io
 import re
 import json
@@ -16,8 +17,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("meter-ocr")
 
 # Cấu hình OmniRoute Gateway
-OMNIROUTE_URL = "http://127.0.0.1:20128/v1/chat/completions"
-MODEL_NAME = "antigravity/gemini-3.7-flash-high"
+OMNIROUTE_URL = os.getenv("OMNIROUTE_URL", "http://127.0.0.1:20128/v1/chat/completions")
+OMNIROUTE_API_KEY = os.getenv("OMNIROUTE_API_KEY", "sk-5f238e76072d7926-f6ac33-f145b936")
+MODEL_NAME = os.getenv("OMNIROUTE_MODEL", "antigravity/gemini-3.7-flash-high")
 
 app = FastAPI(
     title="LISO Mechanical Electricity Meter OCR",
@@ -141,13 +143,23 @@ Bạn BẮT BUỘC phải trả về kết quả dưới định dạng JSON thu
 """
     return prompt
 
+def get_omniroute_headers() -> Dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if OMNIROUTE_API_KEY:
+        headers["Authorization"] = f"Bearer {OMNIROUTE_API_KEY}"
+    return headers
+
 @app.get("/health")
 async def health_check():
     """Kiểm tra sức khỏe dịch vụ OCR và kết nối tới OmniRoute Gateway."""
     omniroute_status = "unknown"
     try:
+        models_url = OMNIROUTE_URL.replace("/chat/completions", "/models")
+        headers = {}
+        if OMNIROUTE_API_KEY:
+            headers["Authorization"] = f"Bearer {OMNIROUTE_API_KEY}"
         async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get("http://127.0.0.1:20128/v1/models")
+            resp = await client.get(models_url, headers=headers)
             if resp.status_code == 200:
                 omniroute_status = "connected"
             else:
@@ -206,7 +218,7 @@ async def ocr_meter(req: MeterOCRRequest):
         async with httpx.AsyncClient(timeout=40.0) as client:
             res = await client.post(
                 OMNIROUTE_URL,
-                headers={"Content-Type": "application/json"},
+                headers=get_omniroute_headers(),
                 json=payload
             )
 
