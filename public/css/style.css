@@ -3146,6 +3146,11 @@ input[type="date"]::-webkit-date-and-time-value {
   animation: fadeIn 0.25s ease;
 }
 
+#elec-mode-bulk {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 /* Bulk Toolbar */
 .bulk-toolbar {
   display: flex;
@@ -3191,8 +3196,8 @@ input[type="date"]::-webkit-date-and-time-value {
 .bulk-toolbar-right {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 16px;
+  flex-wrap: nowrap;
 }
 
 .form-control-sm {
@@ -3403,6 +3408,8 @@ input[type="date"]::-webkit-date-and-time-value {
 /* Bulk Electricity Table */
 .bulk-elec-table {
   font-size: 13px;
+  table-layout: fixed;
+  width: 100%;
 }
 
 .bulk-elec-table th {
@@ -3625,6 +3632,8 @@ input[type="date"]::-webkit-date-and-time-value {
   .bulk-toolbar-right {
     width: 100%;
     justify-content: flex-start;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
   }
 
   .bulk-summary-bar {
