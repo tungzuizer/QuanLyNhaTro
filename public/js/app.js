@@ -1916,7 +1916,6 @@ function renderBulkTable(data, month, year) {
           <span class="bulk-status-mobile-holder">${statusBadge}</span>
         </div>
       </td>
-      <td class="bulk-td-zone desktop-only">${room.zone}</td>
       <td class="bulk-td-old text-center">
         <div class="bulk-input-block">
           <label class="bulk-mobile-label">Số cũ:</label>

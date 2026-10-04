@@ -345,7 +345,7 @@
                     <button class="bulk-pill" data-filter="done"><i class="bi bi-check-circle" style="color:#16a34a"></i> Đã nhập</button>
                   </div>
                 </div>
-                <div class="bulk-filter-group" style="display:flex;align-items:center;gap:6px;">
+                <div class="bulk-filter-group">
                   <label style="font-size:12px;font-weight:600;white-space:nowrap;">Khu:</label>
                   <div class="bulk-filter-pills">
                     <button class="bulk-zone-pill active" data-zone="all">Tất cả <span class="bulk-count-badge" id="bulk-count-zone-all"></span></button>
@@ -353,7 +353,7 @@
                     <button class="bulk-zone-pill" data-zone="B"><i class="bi bi-building"></i> Khu B <span class="bulk-count-badge" id="bulk-count-zone-b"></span></button>
                   </div>
                 </div>
-                <div class="bulk-filter-group" style="display:flex;align-items:center;gap:6px;">
+                <div class="bulk-filter-group">
                   <label style="font-size:12px;font-weight:600;white-space:nowrap;">Đợt thu:</label>
                   <div class="bulk-filter-pills">
                     <button class="bulk-billing-pill active" data-billing="all">Tất cả <span class="bulk-count-badge" id="bulk-count-billing-all"></span></button>
@@ -403,7 +403,6 @@
                   <thead>
                     <tr>
                       <th style="width:110px;">Phòng</th>
-                      <th style="width:70px;" class="desktop-only">Khu</th>
                       <th style="width:110px;">Chỉ số cũ</th>
                       <th style="width:140px;">Chỉ số mới <i class="bi bi-pencil"></i></th>
                       <th style="width:100px;">Tiêu thụ</th>
@@ -414,7 +413,7 @@
                   </thead>
                   <tbody id="bulk-elec-tbody">
                     <tr>
-                      <td colspan="8" class="text-center text-muted" style="padding:40px;">
+                      <td colspan="7" class="text-center text-muted" style="padding:40px;">
                         Đang tải danh sách chỉ số điện...
                       </td>
                     </tr>

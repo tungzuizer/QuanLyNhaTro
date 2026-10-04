@@ -1338,86 +1338,6 @@ body {
     gap: 14px;
   }
 
-  .elec-mode-tabs {
-    width: 100%;
-  }
-
-  .elec-mode-btn {
-    flex: 1;
-    justify-content: center;
-    padding: 9px 8px;
-    font-size: 12px;
-  }
-
-  .bulk-toolbar {
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-  }
-
-  .bulk-toolbar-right {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .bulk-summary-bar {
-    display: grid !important;
-    grid-template-columns: repeat(6, 1fr) !important;
-    gap: 6px !important;
-    margin-bottom: 10px !important;
-  }
-
-  .bulk-sum-item {
-    padding: 6px 8px !important;
-    border-radius: 8px !important;
-    gap: 1px !important;
-    min-width: 0 !important;
-  }
-
-  .bulk-summary-bar .bulk-sum-item:nth-child(1),
-  .bulk-summary-bar .bulk-sum-item:nth-child(2),
-  .bulk-summary-bar .bulk-sum-item:nth-child(3) {
-    grid-column: span 2 !important;
-  }
-
-  .bulk-summary-bar .bulk-sum-item:nth-child(4),
-  .bulk-summary-bar .bulk-sum-item:nth-child(5) {
-    grid-column: span 3 !important;
-  }
-
-  .bulk-sum-item span {
-    font-size: 10px !important;
-    gap: 2px !important;
-  }
-
-  .bulk-sum-item span i {
-    font-size: 10px !important;
-  }
-
-  .bulk-sum-item strong {
-    font-size: 13px !important;
-  }
-
-  .bulk-elec-table th,
-  .bulk-elec-table td {
-    padding: 6px 8px !important;
-    font-size: 12px;
-  }
-
-  /* Ẩn cột Khu trên mobile cho gọn */
-  .bulk-elec-table th:nth-child(2),
-  .bulk-elec-table td:nth-child(2) {
-    display: none;
-  }
-
-  .bulk-new-reading {
-    font-size: 13px;
-    padding: 6px 4px;
-    min-width: 70px;
-  }
-
   /* ==========================================
      PAYMENTS: Bảng thu tiền cuộn ngang
      ========================================== */
@@ -3189,7 +3109,7 @@ input[type="date"]::-webkit-date-and-time-value {
 }
 
 .bulk-ai-badge-wrap {
-  display: flex;
+  display: none;
   align-items: flex-end;
 }
 
@@ -3198,6 +3118,12 @@ input[type="date"]::-webkit-date-and-time-value {
   align-items: center;
   gap: 16px;
   flex-wrap: nowrap;
+}
+
+.bulk-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .form-control-sm {
@@ -3626,6 +3552,7 @@ input[type="date"]::-webkit-date-and-time-value {
   }
 
   .bulk-ai-badge-wrap {
+    display: flex !important;
     flex: 0 0 auto !important;
   }
 
