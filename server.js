@@ -990,7 +990,7 @@ function formatVND(amount) {
 
 const DEFAULT_EMAIL_SENDER = process.env.EMAIL_SENDER || 'nhatroliso@gmail.com';
 const DEFAULT_EMAIL_PASS = process.env.EMAIL_PASS || 'cxma vytw meqc bitp';
-const DEFAULT_EMAIL_RECEIVER = process.env.EMAIL_RECEIVER || 'nhatroliso@gmail.com';
+const DEFAULT_EMAIL_RECEIVER = process.env.EMAIL_RECEIVER || 'tunghb2007@gmail.com, duonghb2007@gmail.com, ahsinhhoc@gmail.com';
 const DEFAULT_EMAIL_WEBHOOK_URL = process.env.EMAIL_WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycbxoOaREN1W46IHKhbfb8uyCybAaLpaGqpkL8F_0uUMcgHord_19dsh4MchPj7h_hpQSCA/exec';
 
 function parseEmailRecipients(receiverInput) {
@@ -1668,8 +1668,8 @@ function startDailyReportScheduler() {
       const vnTimeStr = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh' }); // HH:MM:SS
       const [hour, minute] = vnTimeStr.split(':').map(Number);
 
-      // Trigger đúng 12:00 PM (12h trưa) giờ Việt Nam (hoặc 08:00 AM)
-      if ((hour === 12 || hour === 8) && minute === 0) {
+      // Trigger đúng 10:00 AM giờ Việt Nam
+      if (hour === 10 && minute === 0) {
         console.log(`⏰ [Scheduler] ${hour}:00 VN Time - Đang tiến hành gửi email báo cáo tự động...`);
         const result = await sendDailyReportEmail(false);
         if (result.skipped) {
