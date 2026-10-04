@@ -651,7 +651,7 @@ async function loadSettings() {
 
     // Load email receiver info
     const emailReceiver = document.getElementById('setting-email-receiver');
-    if (emailReceiver) emailReceiver.value = settings.email_receiver || 'nhatroliso@gmail.com';
+    if (emailReceiver) emailReceiver.value = settings.email_receiver || 'tunghb2007@gmail.com, duonghb2007@gmail.com, ahsinhhoc@gmail.com';
 
     // Update cron URL display
     const cronSpan = document.getElementById('cron-webhook-url');

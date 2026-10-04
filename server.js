@@ -1560,16 +1560,30 @@ async function sendDailyReportEmail(force = false, customReceiver = null) {
     subjectPrefix = `[NHẮC HẠN - ${dueTodayCount} phòng đến hạn hôm nay]`;
   }
 
-  await sendEmailWithTransporter(sender, pass, {
-    from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
-    to: receiver,
-    subject: `${subjectPrefix} Tổng kết ngày ${vnDate.day}/${vnDate.month}/${vnDate.year}`,
-    html: emailHtml
-  }, settingsMap.email_webhook_url);
+  const subject = `${subjectPrefix} Tổng kết ngày ${vnDate.day}/${vnDate.month}/${vnDate.year}`;
+  const fromField = `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`;
+  const sendResults = [];
+
+  for (const recipient of recipientList) {
+    try {
+      await sendEmailWithTransporter(sender, pass, {
+        from: fromField,
+        to: recipient,
+        subject,
+        html: emailHtml
+      }, settingsMap.email_webhook_url);
+      sendResults.push({ email: recipient, success: true });
+      console.log(`[Email] Gửi thành công tới: ${recipient}`);
+    } catch (err) {
+      sendResults.push({ email: recipient, success: false, error: err.message });
+      console.error(`[Email] Gửi thất bại tới ${recipient}:`, err.message);
+    }
+  }
 
   await upsertSetting('last_email_sent_date', todayStr);
 
-  return { success: true, message: `Đã gửi báo cáo ngày ${todayStr} tới ${receiver}`, reportData };
+  const successCount = sendResults.filter(r => r.success).length;
+  return { success: successCount > 0, message: `Đã gửi báo cáo ngày ${todayStr} tới ${successCount}/${recipientList.length} người nhận`, sendResults, reportData };
 }
 
 // Endpoint gửi email test kết nối SMTP
@@ -1594,25 +1608,39 @@ app.post('/api/settings/test-email', async (req, res) => {
       return res.status(400).json({ error: 'Chưa cấu hình Email người gửi hoặc Mật khẩu ứng dụng (App Password)!' });
     }
 
-    await sendEmailWithTransporter(sender, pass, {
-      from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
-      to: receiver,
-      subject: '[Nhà Trọ] Kiểm tra kết nối Gmail thành công!',
-      html: `
+    const testHtml = `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 500px; margin: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
           <h2 style="color: #2563eb; margin-top: 0;">Kết nối Gmail thành công!</h2>
           <p>Hệ thống Quản lý Nhà Trọ Tiện Nghi đã kết nối thành công với tài khoản Gmail của bạn.</p>
-          <p>Từ bây giờ, hệ thống sẽ tự động tổng hợp báo cáo thu tiền và nhắc nhở phòng quá hạn gửi về danh sách email này hàng ngày lúc 12:00 trưa.</p>
+          <p>Từ bây giờ, hệ thống sẽ tự động tổng hợp báo cáo thu tiền và nhắc nhở phòng quá hạn gửi về danh sách email này hàng ngày lúc 10:00 sáng.</p>
           <div style="background: #f8fafc; padding: 12px; border-radius: 6px; font-size: 13px; color: #64748b; margin-top: 16px;">
             <b>Thời gian gửi:</b> ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}<br/>
             <b>Email phát tán:</b> ${sender}<br/>
             <b>Danh sách nhận (${recipientList.length || 1} email):</b> ${receiver}
           </div>
         </div>
-      `
-    }, settingsMap.email_webhook_url);
+      `;
 
-    res.json({ message: `Đã gửi email test thành công đến: ${receiver}!` });
+    const sendResults = [];
+    for (const recipient of recipientList) {
+      try {
+        await sendEmailWithTransporter(sender, pass, {
+          from: `"Nhà Trọ Tiện Nghi" <${sender.trim()}>`,
+          to: recipient,
+          subject: '[Nhà Trọ] Kiểm tra kết nối Gmail thành công!',
+          html: testHtml
+        }, settingsMap.email_webhook_url);
+        sendResults.push({ email: recipient, success: true });
+      } catch (err) {
+        sendResults.push({ email: recipient, success: false, error: err.message });
+      }
+    }
+
+    const successCount = sendResults.filter(r => r.success).length;
+    if (successCount === 0) {
+      throw sendResults[0] ? new Error(sendResults[0].error) : new Error('Không có email nào được gửi thành công');
+    }
+    res.json({ message: `Đã gửi email test thành công đến ${successCount}/${recipientList.length} người nhận: ${receiver}!` });
   } catch (err) {
     let errMsg = err.message;
     if (err.responseCode === 535 || err.message.includes('Invalid login') || err.message.includes('Username and Password not accepted')) {
