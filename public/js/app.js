@@ -1321,9 +1321,7 @@ function updatePaymentStats(data) {
 }
 
 function renderPaymentsTable(data) {
-  const tbody = document.getElementById('payments-table-body');
   const cardsBody = document.getElementById('payments-cards-body');
-  tbody.innerHTML = '';
   if (cardsBody) cardsBody.innerHTML = '';
 
   if (data.length === 0) {
@@ -1332,7 +1330,6 @@ function renderPaymentsTable(data) {
         <i class="bi bi-check-circle" style="color:#16a34a"></i> Không có phòng nào đang thuê trong tháng này hoặc chưa có dữ liệu
       </div>
     `;
-    tbody.innerHTML = `<tr><td colspan="10">${emptyMsg}</td></tr>`;
     if (cardsBody) cardsBody.innerHTML = emptyMsg;
     return;
   }
@@ -1362,16 +1359,12 @@ function renderPaymentsTable(data) {
 
   // Sắp xếp:
   // 1. Chưa thu lên đầu, đã thu xuống dưới
-  // 2. Trong số chưa thu: Quá hạn nhiều nhất lên đầu (daysUntilDue từ bé đến lớn)
-  // 3. Trong số đã thu: Sắp xếp theo số phòng
+  // 2. Trong mỗi nhóm: Sắp xếp theo số phòng (room_code)
   processedData.sort((a, b) => {
     const aPaid = a.is_paid === 1;
     const bPaid = b.is_paid === 1;
     if (aPaid !== bPaid) {
       return aPaid ? 1 : -1;
-    }
-    if (!aPaid) {
-      return a.daysUntilDue - b.daysUntilDue;
     }
     return a.room_code.localeCompare(b.room_code, undefined, { numeric: true, sensitivity: 'base' });
   });
@@ -1391,96 +1384,21 @@ function renderPaymentsTable(data) {
     const tenantPhones = row.tenant_phones || '';
     const memberCount = row.member_count || 0;
 
-    // --- 1. RENDER DESKTOP TABLE ROW ---
-    const tr = document.createElement('tr');
-    tr.className = isPaid ? 'row-paid' : 'row-unpaid';
-    tr.setAttribute('data-room-id', row.room_id);
-    tr.setAttribute('data-room-code', row.room_code);
-    tr.setAttribute('data-zone', row.zone);
-    tr.setAttribute('data-tenant', tenantNames.toLowerCase());
-    tr.setAttribute('data-phones', tenantPhones);
-    tr.setAttribute('data-paid', isPaid ? '1' : '0');
-    tr.setAttribute('data-billing-day', String(row.billing_day || 30));
-
-    let statusBadgeHtml = '';
     let cardDueTagHtml = '';
     if (!isPaid) {
       if (row.daysUntilDue < 0) {
-        statusBadgeHtml = `<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;"><i class="bi bi-exclamation-triangle" style="color:#dc2626"></i> Trễ ${Math.abs(row.daysUntilDue)} ngày</div>`;
         cardDueTagHtml = `<span class="pay-card-due-tag overdue"><i class="bi bi-exclamation-triangle"></i> Trễ ${Math.abs(row.daysUntilDue)}N</span>`;
       } else if (row.daysUntilDue === 0) {
-        statusBadgeHtml = `<div style="font-size:11px;color:#dc2626;font-weight:600;margin-top:4px;"><i class="bi bi-exclamation-octagon" style="color:#dc2626"></i> Hạn hôm nay!</div>`;
         cardDueTagHtml = `<span class="pay-card-due-tag due-today"><i class="bi bi-exclamation-octagon"></i> Hạn hôm nay!</span>`;
       } else if (row.daysUntilDue <= 3) {
-        statusBadgeHtml = `<div style="font-size:11px;color:#b45309;font-weight:600;margin-top:4px;"><i class="bi bi-alarm" style="color:#b45309"></i> Còn ${row.daysUntilDue} ngày</div>`;
         cardDueTagHtml = `<span class="pay-card-due-tag due-soon"><i class="bi bi-alarm"></i> Còn ${row.daysUntilDue}N</span>`;
       } else {
-        statusBadgeHtml = `<div style="font-size:11px;color:var(--neutral-gray);margin-top:4px;"><i class="bi bi-calendar-event"></i> Hạn: ${row.dueDateStr}</div>`;
         cardDueTagHtml = `<span class="pay-card-due-tag normal">Hạn ${row.dueDateStr}</span>`;
       }
     } else {
       cardDueTagHtml = `<span class="pay-card-due-tag normal" style="color:#16a34a"><i class="bi bi-check2"></i> Đã xong</span>`;
     }
 
-    tr.innerHTML = `
-      <td>
-        <strong>${row.room_code}</strong>
-        <div style="font-size:11px;color:var(--neutral-gray)">Khu ${row.zone}</div>
-      </td>
-      <td>
-        <div style="font-weight:500;">${tenantNames}</div>
-        ${tenantPhones ? `<div style="font-size:12px;color:var(--neutral-gray)"><i class="bi bi-telephone"></i> ${tenantPhones}</div>` : ''}
-        ${memberCount > 0 ? `<div style="font-size:11px;color:var(--neutral-gray);margin-top:2px;"><i class="bi bi-people"></i> ${memberCount} người</div>` : ''}
-        ${row.lease_start_date ? `<div style="font-size:11px;color:var(--neutral-gray);margin-top:2px;"><i class="bi bi-calendar-event"></i> Thuê từ: <strong style="color:var(--neutral-dark)">${formatDate(row.lease_start_date)}</strong></div>` : ''}
-      </td>
-      <td>${formatVND(rentAmt)}</td>
-      <td>
-        ${elecAmt > 0
-        ? `<span class="text-primary">${formatVND(elecAmt)}</span>${row.consumption ? `<div style="font-size:11px;color:var(--neutral-gray)">${row.consumption} kWh</div>` : ''}`
-        : '<span class="text-muted" style="font-size:12px;">Chưa nhập</span>'
-      }
-      </td>
-      <td>
-        ${waterAmt > 0
-        ? `<span class="text-primary">${formatVND(waterAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.waterPrice || (currentState.waterPrice || 20000))}</div>`
-        : '<span class="text-muted" style="font-size:12px;">0đ</span>'
-      }
-      </td>
-      <td>
-        ${trashAmt > 0
-        ? `<span class="text-primary">${formatVND(trashAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.trashPrice || (currentState.trashPrice || 10000))}</div>`
-        : '<span class="text-muted" style="font-size:12px;">0đ</span>'
-      }
-      </td>
-      <td>
-        ${residenceAmt > 0
-        ? `<span class="text-primary">${formatVND(residenceAmt)}</span><div style="font-size:10px;color:var(--neutral-gray)">${memberCount} người × ${formatVND(row.residencePrice || (currentState.residencePrice || 50000))}</div>`
-        : '<span class="text-muted" style="font-size:12px;">0đ</span>'
-      }
-      </td>
-      <td><span class="amount-total">${formatVND(totalAmt)}</span></td>
-      <td>
-        <span class="pay-status-badge ${isPaid ? 'paid' : 'unpaid'}">
-          ${isPaid ? '<i class="bi bi-check-circle" style="color:#16a34a"></i> Đã thu' : '<i class="bi bi-hourglass-split" style="color:#f59e0b"></i> Chưa thu'}
-        </span>
-        ${isPaid && row.paid_at ? `<div style="font-size:10px;color:var(--neutral-gray);margin-top:3px;">Thu lúc: ${formatDateTime(row.paid_at)}</div>` : ''}
-        ${statusBadgeHtml}
-      </td>
-      <td>
-        <div style="display:flex;gap:6px;flex-direction:column;">
-          <button class="btn btn-sm btn-primary" onclick="openInvoiceForRoom(${row.room_id}, ${year}, ${month})">
-            <i class="bi bi-receipt"></i> Xuất HĐ / Thu tiền
-          </button>
-          ${isPaid
-          ? `<button class="btn btn-sm btn-outline-secondary" onclick="markPayment(${row.room_id}, ${year}, ${month}, false)"><i class="bi bi-arrow-counterclockwise"></i> Hoàn trả</button>`
-          : `<button class="btn btn-sm btn-success" onclick="markPayment(${row.room_id}, ${year}, ${month}, true)"><i class="bi bi-check-circle"></i> Đã nhận tiền</button>`
-        }
-        </div>
-      </td>
-    `;
-    tbody.appendChild(tr);
-
-    // --- 2. RENDER COMPACT MOBILE CARD (Lưới 2 Cột / 3 Cột) ---
     if (cardsBody) {
       const card = document.createElement('div');
       card.className = `pay-room-card ${isPaid ? 'card-paid' : 'card-unpaid'}`;
@@ -1583,42 +1501,6 @@ function applyPaymentFilters() {
   let cntPaid = 0;
   let cntUnpaid = 0;
 
-  // Lọc hàng trên Desktop Table
-  const rows = document.querySelectorAll('#payments-table-body tr[data-room-id]');
-  rows.forEach(tr => {
-    const isPaid = tr.getAttribute('data-paid') === '1';
-    const zone = tr.getAttribute('data-zone');
-    const billingDay = tr.getAttribute('data-billing-day');
-    const roomCode = (tr.getAttribute('data-room-code') || '').toLowerCase();
-    const tenant = (tr.getAttribute('data-tenant') || '').toLowerCase();
-    const phones = (tr.getAttribute('data-phones') || '').toLowerCase();
-
-    // 1. Zone
-    const matchZone = (activeZone === 'all' || zone === activeZone);
-
-    // 2. Billing
-    const matchBilling = (activeBilling === 'all' || billingDay === activeBilling);
-
-    // 3. Search
-    const matchSearch = (!query || roomCode.includes(query) || tenant.includes(query) || phones.includes(query));
-
-    // Đếm số lượng theo filter zone + billing + search hiện tại
-    if (matchZone && matchBilling && matchSearch) {
-      cntAll++;
-      if (isPaid) cntPaid++;
-      else cntUnpaid++;
-    }
-
-    // 4. Status
-    let matchStatus = true;
-    if (activeStatus === 'paid') matchStatus = isPaid;
-    else if (activeStatus === 'unpaid') matchStatus = !isPaid;
-
-    const isVisible = matchZone && matchBilling && matchSearch && matchStatus;
-    tr.style.display = isVisible ? '' : 'none';
-  });
-
-  // Lọc thẻ trên Mobile Cards
   const cards = document.querySelectorAll('#payments-cards-body .pay-room-card[data-room-id]');
   cards.forEach(card => {
     const isPaid = card.getAttribute('data-paid') === '1';
@@ -1631,6 +1513,12 @@ function applyPaymentFilters() {
     const matchZone = (activeZone === 'all' || zone === activeZone);
     const matchBilling = (activeBilling === 'all' || billingDay === activeBilling);
     const matchSearch = (!query || roomCode.includes(query) || tenant.includes(query) || phones.includes(query));
+
+    if (matchZone && matchBilling && matchSearch) {
+      cntAll++;
+      if (isPaid) cntPaid++;
+      else cntUnpaid++;
+    }
 
     let matchStatus = true;
     if (activeStatus === 'paid') matchStatus = isPaid;

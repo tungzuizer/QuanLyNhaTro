@@ -1871,11 +1871,15 @@ body {
 
 /* Dual views for payments (Desktop Table vs Mobile Cards) */
 .payments-desktop-table {
-  display: block;
+  display: none;
 }
 
+.payments-cards-grid,
 .payments-mobile-cards {
-  display: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 16px;
 }
 
 /* Toolbar tìm kiếm & Chip lọc nhanh */
@@ -2041,11 +2045,9 @@ body {
 }
 
 /* ==========================================
-   COMPACT MOBILE CARDS (LƯỚI 2 CỘT & 3 CỘT)
+/* ==========================================
+   COMPACT CARDS (LƯỚI RESPONSIVE)
    ========================================== */
-.payments-mobile-cards {
-  display: none;
-}
 
 /* Card Style */
 .pay-room-card {
@@ -2280,21 +2282,23 @@ body {
     display: none !important;
   }
 
-  /* Mặc định hiển thị lưới 2 CỘT trên Mobile */
+  /* Mobile: fixed 2 columns, tighter spacing */
+  .payments-cards-grid,
   .payments-mobile-cards {
-    display: grid !important;
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 8px !important;
     padding: 10px !important;
   }
 
   /* Chế độ 1 Cột khi bật toggle */
+  .payments-cards-grid.cols-1,
   .payments-mobile-cards.cols-1 {
     grid-template-columns: 1fr !important;
     gap: 10px !important;
   }
 
   /* Chế độ 3 Cột khi bật toggle */
+  .payments-cards-grid.cols-3,
   .payments-mobile-cards.cols-3 {
     grid-template-columns: repeat(3, 1fr) !important;
     gap: 6px !important;
@@ -2302,24 +2306,31 @@ body {
   }
 
   /* Điều chỉnh font chữ nhỏ gọn trong chế độ 3 cột */
+  .payments-cards-grid.cols-3 .pay-room-card,
   .payments-mobile-cards.cols-3 .pay-room-card {
     padding: 8px 6px;
   }
+  .payments-cards-grid.cols-3 .pay-card-code,
   .payments-mobile-cards.cols-3 .pay-card-code {
     font-size: 13px;
   }
+  .payments-cards-grid.cols-3 .pay-card-total-val,
   .payments-mobile-cards.cols-3 .pay-card-total-val {
     font-size: 12px;
   }
+  .payments-cards-grid.cols-3 .btn-pay-invoice-1tap,
   .payments-mobile-cards.cols-3 .btn-pay-invoice-1tap {
     font-size: 11px;
     padding: 5px 4px;
   }
+  .payments-cards-grid.cols-3 .pay-card-zone-tag,
+  .payments-cards-grid.cols-3 .pay-card-status-pill,
   .payments-mobile-cards.cols-3 .pay-card-zone-tag,
   .payments-mobile-cards.cols-3 .pay-card-status-pill {
     font-size: 9px;
     padding: 1px 4px;
   }
+  .payments-cards-grid.cols-3 .pay-card-amount-details,
   .payments-mobile-cards.cols-3 .pay-card-amount-details {
     display: none;
   }
