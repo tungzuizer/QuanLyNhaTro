@@ -615,13 +615,6 @@
                 <span class="help-text">Chỉnh sửa chỉ số điện trực tiếp cho hóa đơn này.</span>
               </div>
 
-              <!-- Chỉ số điện bàn giao khi nhận phòng -->
-              <div class="form-group inv-rent-only" id="inv-elec-handover-group" style="display:none;">
-                <label for="inv-elec-handover" style="font-weight:600; color:var(--primary);"><i class="bi bi-plug"></i> Chỉ số điện bàn giao</label>
-                <input type="number" id="inv-elec-handover" class="form-control" min="0" placeholder="Số điện bàn giao khi nhận phòng">
-                <span class="help-text">Chỉ hiển thị khi nhận phòng (Tháng đặt cọc).</span>
-              </div>
-
               <div class="form-group inv-rent-only" id="inv-override-fields" style="display:none;">
                 <label style="font-weight:600; color:var(--primary);"><i class="bi bi-pencil"></i> Chỉnh sửa phí trước khi gửi</label>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px;">
@@ -636,10 +629,6 @@
                   <div>
                     <label for="inv-override-trash" style="font-size:12px;"><i class="bi bi-trash"></i> Tiền rác</label>
                     <input type="number" id="inv-override-trash" class="form-control" min="0" placeholder="Tiền rác">
-                  </div>
-                  <div>
-                    <label for="inv-override-deposit" style="font-size:12px;"><i class="bi bi-handshake"></i> Tiền cọc</label>
-                    <input type="number" id="inv-override-deposit" class="form-control" min="0" placeholder="Tiền đặt cọc">
                   </div>
                   <div>
                     <label for="inv-override-residence" style="font-size:12px;"><i class="bi bi-person-badge"></i> Phí tạm trú</label>
@@ -660,6 +649,11 @@
                 <label for="inv-deposit-amount" style="font-weight:600; color:var(--primary);"><i class="bi bi-wallet2"></i> Số tiền đặt cọc</label>
                 <input type="number" id="inv-deposit-amount" class="form-control" min="0" placeholder="Số tiền cọc">
                 <span class="help-text">Lấy từ tiền cọc của phòng, có thể chỉnh sửa.</span>
+              </div>
+              <div class="form-group inv-deposit-only" style="display:none;">
+                <label for="inv-deposit-handover-elec" style="font-weight:600; color:var(--primary);"><i class="bi bi-plug"></i> Số điện khi vào phòng (kWh)</label>
+                <input type="number" step="0.1" id="inv-deposit-handover-elec" class="form-control" min="0" placeholder="Số điện bàn giao khi nhận phòng">
+                <span class="help-text">Chỉ số công tơ điện ghi nhận lúc nhận phòng/đặt cọc.</span>
               </div>
               <div class="form-group inv-deposit-only" style="display:none;">
                 <label for="inv-deposit-note"><i class="bi bi-journal-text"></i> Điều khoản đặt cọc</label>
@@ -1013,10 +1007,17 @@
                 <input type="date" id="tenant-end-date" class="form-control">
               </div>
             </div>
-            <div class="form-group" id="tenant-member-count-group">
-              <label for="tenant-member-count">Số người ở thực tế (tính phí dịch vụ nước/rác/tạm trú)</label>
-              <input type="number" id="tenant-member-count" class="form-control" min="1" value="1" placeholder="VD: 3">
-              <span class="help-text">Phòng có 1 người đại diện nhưng tiền dịch vụ nhân theo số người ở này.</span>
+            <div class="form-row">
+              <div class="form-group col" id="tenant-member-count-group">
+                <label for="tenant-member-count">Số người ở thực tế (tính phí dịch vụ)</label>
+                <input type="number" id="tenant-member-count" class="form-control" min="1" value="1" placeholder="VD: 1">
+                <span class="help-text">Dùng nhân tiền dịch vụ nước/rác/tạm trú.</span>
+              </div>
+              <div class="form-group col" id="tenant-handover-elec-group">
+                <label for="tenant-handover-elec">Số điện khi vào phòng (kWh)</label>
+                <input type="number" step="0.1" min="0" id="tenant-handover-elec" class="form-control" placeholder="VD: 150">
+                <span class="help-text">Chỉ số công tơ điện khi bàn giao phòng.</span>
+              </div>
             </div>
             <div class="form-group">
               <label for="tenant-notes">Ghi chú</label>

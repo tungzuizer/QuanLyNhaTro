@@ -292,18 +292,155 @@ app.put('/api/rooms/:id', async (req, res) => {
   }
 });
 
+// Cập nhật chỉ số điện khi vào phòng trực tiếp và đồng bộ 2 chiều
+app.put('/api/rooms/:id/handover-electricity', async (req, res) => {
+  try {
+    const roomId = req.params.id;
+    const { handover_electricity } = req.body;
+    if (handover_electricity === undefined || handover_electricity === null || handover_electricity === '') {
+      return res.status(400).json({ error: 'Chỉ số điện bàn giao không hợp lệ' });
+    }
+    const elecVal = parseFloat(handover_electricity) || 0;
+
+    const latestTenant = await db.prepare(
+      'SELECT id, start_date FROM tenants WHERE room_id = ? ORDER BY id DESC LIMIT 1'
+    ).get(roomId);
+
+    if (latestTenant) {
+      await db.prepare(
+        'UPDATE tenants SET handover_electricity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      ).run(elecVal, latestTenant.id);
+
+      await syncHandoverToElectricityReading(roomId, elecVal, latestTenant.start_date);
+    }
+
+    res.json({ message: 'Cập nhật và đồng bộ số điện khi vào phòng thành công', handover_electricity: elecVal });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// HÀM HỖ TRỢ ĐỒNG BỘ 2 CHIỀU SỐ ĐIỆN BÀN GIAO & GHI ĐIỆN
+// ==========================================
+
+// 1. Khi sửa số điện khi vào phòng -> Đồng bộ vào chỉ số điện cũ (old_reading) của kỳ đầu tiên
+async function syncHandoverToElectricityReading(roomId, handoverElec, startDate) {
+  try {
+    if (handoverElec === undefined || handoverElec === null) return;
+    const elecVal = parseFloat(handoverElec);
+    if (isNaN(elecVal)) return;
+
+    let startYM = 0;
+    if (startDate) {
+      if (typeof startDate === 'string') {
+        const parts = startDate.split('T')[0].split('-');
+        if (parts.length >= 2) {
+          startYM = parseInt(parts[0], 10) * 100 + parseInt(parts[1], 10);
+        }
+      }
+      if (!startYM) {
+        const d = new Date(startDate);
+        if (!isNaN(d.getTime())) {
+          startYM = d.getFullYear() * 100 + (d.getMonth() + 1);
+        }
+      }
+    }
+
+    // Tìm bản ghi điện đầu tiên của phòng này từ mốc khách vào phòng
+    const firstReading = await db.prepare(`
+      SELECT * FROM electricity_readings
+      WHERE room_id = ? AND (year * 100 + month) >= ?
+      ORDER BY year ASC, month ASC LIMIT 1
+    `).get(roomId, startYM || 0);
+
+    if (firstReading) {
+      const newReading = parseFloat(firstReading.new_reading) || 0;
+      const unitPrice = parseFloat(firstReading.unit_price) || 3500;
+      const consumption = Math.max(0, newReading - elecVal);
+      const totalCost = consumption * unitPrice;
+
+      await db.prepare(`
+        UPDATE electricity_readings
+        SET old_reading = ?, consumption = ?, total_cost = ?
+        WHERE id = ?
+      `).run(elecVal, consumption, totalCost, firstReading.id);
+
+      // Cập nhật hóa đơn tiền trọ rent_payments nếu có
+      await db.prepare(`
+        UPDATE rent_payments
+        SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount, updated_at = CURRENT_TIMESTAMP
+        WHERE room_id = ? AND year = ? AND month = ?
+      `).run(totalCost, totalCost, roomId, firstReading.year, firstReading.month);
+    }
+  } catch (err) {
+    console.error('Lỗi khi syncHandoverToElectricityReading:', err);
+  }
+}
+
+// 2. Khi sửa chỉ số điện cũ (old_reading) của kỳ đầu tiên -> Đồng bộ ngược lại số điện khi vào phòng của khách
+async function syncElectricityReadingToTenantHandover(roomId, year, month, oldReading) {
+  try {
+    if (oldReading === undefined || oldReading === null) return;
+    const oldVal = parseFloat(oldReading);
+    if (isNaN(oldVal)) return;
+
+    const latestTenant = await db.prepare(
+      'SELECT id, start_date, handover_electricity FROM tenants WHERE room_id = ? ORDER BY id DESC LIMIT 1'
+    ).get(roomId);
+
+    if (!latestTenant) return;
+
+    let tenantStartYM = 0;
+    if (latestTenant.start_date) {
+      if (typeof latestTenant.start_date === 'string') {
+        const parts = latestTenant.start_date.split('T')[0].split('-');
+        if (parts.length >= 2) {
+          tenantStartYM = parseInt(parts[0], 10) * 100 + parseInt(parts[1], 10);
+        }
+      }
+      if (!tenantStartYM) {
+        const d = new Date(latestTenant.start_date);
+        if (!isNaN(d.getTime())) {
+          tenantStartYM = d.getFullYear() * 100 + (d.getMonth() + 1);
+        }
+      }
+    }
+
+    const readingYM = parseInt(year, 10) * 100 + parseInt(month, 10);
+
+    // Kiểm tra xem có bản ghi điện nào sớm hơn kỳ này tính từ khi khách vào phòng không
+    const earlierReading = await db.prepare(`
+      SELECT COUNT(*) as count FROM electricity_readings
+      WHERE room_id = ? AND (year * 100 + month) >= ? AND (year * 100 + month) < ?
+    `).get(roomId, tenantStartYM || 0, readingYM);
+
+    const isFirstReadingForTenant = !earlierReading || parseInt(earlierReading.count, 10) === 0 || readingYM <= tenantStartYM;
+
+    if (isFirstReadingForTenant) {
+      await db.prepare(`
+        UPDATE tenants SET handover_electricity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).run(oldVal, latestTenant.id);
+    }
+  } catch (err) {
+    console.error('Lỗi khi syncElectricityReadingToTenantHandover:', err);
+  }
+}
+
 // ==========================================
 // 3. API NGƯỜI THUÊ (TENANTS)
 // ==========================================
 app.post('/api/tenants', async (req, res) => {
   try {
-    const { room_id, full_name, phone, cccd, start_date, end_date, notes, member_count } = req.body;
+    const { room_id, full_name, phone, cccd, start_date, end_date, notes, member_count, handover_electricity } = req.body;
     if (!room_id || !full_name || !start_date)
       return res.status(400).json({ error: 'Vui lòng điền đầy đủ Họ tên và Ngày bắt đầu' });
 
+    const elecVal = parseFloat(handover_electricity) || 0;
+
     const info = await db.prepare(
-      'INSERT INTO tenants (room_id, full_name, phone, cccd, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id'
-    ).run(room_id, full_name, phone || null, cccd || null, start_date, end_date || null, notes || null);
+      'INSERT INTO tenants (room_id, full_name, phone, cccd, start_date, end_date, notes, handover_electricity) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
+    ).run(room_id, full_name, phone || null, cccd || null, start_date, end_date || null, notes || null, elecVal);
 
     const room = await db.prepare('SELECT member_count FROM rooms WHERE id = ?').get(room_id);
     const currentMembers = room ? (room.member_count || 0) : 0;
@@ -321,7 +458,12 @@ app.post('/api/tenants', async (req, res) => {
       "UPDATE rooms SET member_count = ?, status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     ).run(newMembers, room_id);
 
-    res.status(201).json({ id: info.lastInsertRowid, message: 'Thêm người thuê thành công', member_count: newMembers });
+    // Đồng bộ số điện khi vào phòng vào kỳ ghi điện đầu tiên (nếu có)
+    if (elecVal > 0) {
+      await syncHandoverToElectricityReading(room_id, elecVal, start_date);
+    }
+
+    res.status(201).json({ id: info.lastInsertRowid, message: 'Thêm người thuê thành công', member_count: newMembers, handover_electricity: elecVal });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -329,12 +471,27 @@ app.post('/api/tenants', async (req, res) => {
 
 app.put('/api/tenants/:id', async (req, res) => {
   try {
-    const { full_name, phone, cccd, start_date, end_date, notes } = req.body;
+    const { full_name, phone, cccd, start_date, end_date, notes, handover_electricity } = req.body;
     if (!full_name || !start_date)
       return res.status(400).json({ error: 'Họ tên và Ngày bắt đầu không được để trống' });
-    const info = await db.prepare(
-      'UPDATE tenants SET full_name = ?, phone = ?, cccd = ?, start_date = ?, end_date = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(full_name, phone, cccd, start_date, end_date, notes, req.params.id);
+
+    const oldTenant = await db.prepare('SELECT room_id, start_date FROM tenants WHERE id = ?').get(req.params.id);
+    if (!oldTenant) return res.status(404).json({ error: 'Không tìm thấy người thuê' });
+
+    const elecVal = handover_electricity !== undefined && handover_electricity !== null && handover_electricity !== '' ? parseFloat(handover_electricity) : null;
+    let info;
+    if (elecVal !== null) {
+      info = await db.prepare(
+        'UPDATE tenants SET full_name = ?, phone = ?, cccd = ?, start_date = ?, end_date = ?, notes = ?, handover_electricity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      ).run(full_name, phone, cccd, start_date, end_date, notes, elecVal, req.params.id);
+
+      // Đồng bộ sang số điện cũ của kỳ ghi điện đầu tiên
+      await syncHandoverToElectricityReading(oldTenant.room_id, elecVal, start_date || oldTenant.start_date);
+    } else {
+      info = await db.prepare(
+        'UPDATE tenants SET full_name = ?, phone = ?, cccd = ?, start_date = ?, end_date = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      ).run(full_name, phone, cccd, start_date, end_date, notes, req.params.id);
+    }
     if (info.changes === 0) return res.status(404).json({ error: 'Không tìm thấy người thuê' });
     res.json({ message: 'Sửa thông tin người thuê thành công' });
   } catch (err) {
@@ -378,10 +535,44 @@ app.delete('/api/tenants/:id', async (req, res) => {
 // ==========================================
 app.get('/api/electricity/last-reading/:roomId', async (req, res) => {
   try {
+    const roomId = req.params.roomId;
+    // Lấy thông tin người thuê mới nhất
+    const latestTenant = await db.prepare(
+      'SELECT id, start_date, handover_electricity FROM tenants WHERE room_id = ? ORDER BY id DESC LIMIT 1'
+    ).get(roomId);
+
+    // Lấy chỉ số điện mới nhất đã lưu
     const last = await db.prepare(
-      'SELECT new_reading FROM electricity_readings WHERE room_id = ? ORDER BY year DESC, month DESC LIMIT 1'
-    ).get(req.params.roomId);
-    res.json({ lastReading: last ? last.new_reading : 0 });
+      'SELECT new_reading, year, month FROM electricity_readings WHERE room_id = ? ORDER BY year DESC, month DESC LIMIT 1'
+    ).get(roomId);
+
+    if (latestTenant && latestTenant.handover_electricity > 0) {
+      let tenantStartYM = 0;
+      if (latestTenant.start_date) {
+        const d = new Date(latestTenant.start_date);
+        if (!isNaN(d.getTime())) {
+          tenantStartYM = d.getFullYear() * 100 + (d.getMonth() + 1);
+        }
+      }
+      const lastReadingYM = last ? (last.year * 100 + last.month) : 0;
+
+      // Nếu chưa có lịch sử số điện hoặc lần nhập số điện gần nhất là trước khi người thuê này vào phòng:
+      if (!last || (tenantStartYM > 0 && lastReadingYM < tenantStartYM)) {
+        return res.json({
+          lastReading: latestTenant.handover_electricity,
+          source: 'handover'
+        });
+      }
+    }
+
+    if (last) {
+      return res.json({ lastReading: last.new_reading, source: 'history' });
+    }
+
+    res.json({
+      lastReading: (latestTenant && latestTenant.handover_electricity) ? latestTenant.handover_electricity : 0,
+      source: (latestTenant && latestTenant.handover_electricity) ? 'handover' : 'none'
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -411,9 +602,12 @@ app.post('/api/electricity', async (req, res) => {
     // Đồng bộ với bảng rent_payments nếu bản ghi thanh toán của tháng đó đã tồn tại
     await db.prepare(`
       UPDATE rent_payments
-      SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount + deposit_amount, updated_at = CURRENT_TIMESTAMP
+      SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount, updated_at = CURRENT_TIMESTAMP
       WHERE room_id = ? AND year = ? AND month = ?
     `).run(totalCost, totalCost, room_id, parseInt(year), parseInt(month));
+
+    // Đồng bộ ngược lại số điện khi vào phòng của khách nếu đây là kỳ ghi điện đầu tiên
+    await syncElectricityReadingToTenantHandover(room_id, parseInt(year), parseInt(month), parseFloat(old_reading));
 
     res.json({ message: 'Lưu chỉ số điện thành công', consumption, totalCost });
   } catch (err) {
@@ -446,7 +640,7 @@ app.get('/api/electricity/bulk-data', async (req, res) => {
     const currentMap = {};
     currentReadings.forEach(r => { currentMap[r.room_id] = r; });
 
-    // Lấy chỉ số cũ (new_reading của tháng trước) hoặc chỉ số mới nhất (SQLite compatible)
+    // Lấy chỉ số cũ (new_reading của tháng trước) hoặc chỉ số mới nhất
     const lastReadings = await db.prepare(`
       SELECT e.room_id, e.new_reading, e.year, e.month
       FROM electricity_readings e
@@ -460,17 +654,64 @@ app.get('/api/electricity/bulk-data', async (req, res) => {
     const lastMap = {};
     lastReadings.forEach(r => { lastMap[r.room_id] = r.new_reading; });
 
+    // Lấy handover_electricity và start_date của người thuê mới nhất của mỗi phòng
+    const handoverList = await db.prepare(`
+      SELECT t.room_id, t.handover_electricity, t.start_date
+      FROM tenants t
+      INNER JOIN (
+        SELECT room_id, MAX(id) as max_id FROM tenants GROUP BY room_id
+      ) lt ON t.id = lt.max_id
+    `).all();
+    const handoverMap = {};
+    handoverList.forEach(h => {
+      let startYM = 0;
+      if (h.start_date) {
+        const d = new Date(h.start_date);
+        if (!isNaN(d.getTime())) {
+          startYM = d.getFullYear() * 100 + (d.getMonth() + 1);
+        }
+      }
+      handoverMap[h.room_id] = {
+        handover_electricity: h.handover_electricity !== null && h.handover_electricity !== undefined ? parseFloat(h.handover_electricity) : 0,
+        startYM
+      };
+    });
+
     // Combine
-    const result = rooms.map(room => ({
-      id: room.id,
-      room_code: room.room_code,
-      zone: room.zone,
-      status: room.status,
-      tenant_count: room.tenant_count,
-      billing_day: room.billing_day || 30,
-      last_reading: lastMap[room.id] !== undefined ? lastMap[room.id] : 0,
-      current: currentMap[room.id] || null
-    }));
+    const result = rooms.map(room => {
+      const priorReading = lastReadings.find(lr => lr.room_id === room.id);
+      const tenantHandover = handoverMap[room.id] || { handover_electricity: 0, startYM: 0 };
+      const handoverElec = tenantHandover.handover_electricity;
+
+      let lastReading = 0;
+      let isHandover = false;
+
+      const priorReadingYM = priorReading ? (priorReading.year * 100 + priorReading.month) : 0;
+
+      // Nếu có số điện bàn giao và (chưa có lần ghi điện nào trước đó, hoặc lần ghi trước là trước tháng khách vào phòng):
+      if (handoverElec > 0 && (!priorReading || (tenantHandover.startYM > 0 && priorReadingYM < tenantHandover.startYM))) {
+        lastReading = handoverElec;
+        isHandover = true;
+      } else if (priorReading) {
+        lastReading = priorReading.new_reading;
+      } else if (handoverElec > 0) {
+        lastReading = handoverElec;
+        isHandover = true;
+      }
+
+      return {
+        id: room.id,
+        room_code: room.room_code,
+        zone: room.zone,
+        status: room.status,
+        tenant_count: room.tenant_count,
+        billing_day: room.billing_day || 30,
+        last_reading: lastReading,
+        handover_electricity: handoverElec,
+        is_handover: isHandover,
+        current: currentMap[room.id] || null
+      };
+    });
 
     res.json(result);
   } catch (err) {
@@ -513,9 +754,12 @@ app.post('/api/electricity/bulk', async (req, res) => {
       // Sync với rent_payments nếu tồn tại
       await db.prepare(`
         UPDATE rent_payments
-        SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount + deposit_amount, updated_at = CURRENT_TIMESTAMP
+        SET electricity_amount = ?, total_amount = rent_amount + ? + water_amount + trash_amount + residence_amount, updated_at = CURRENT_TIMESTAMP
         WHERE room_id = ? AND year = ? AND month = ?
       `).run(totalCost, totalCost, room_id, parseInt(year), parseInt(month));
+
+      // Đồng bộ ngược lại số điện khi vào phòng của khách nếu đây là kỳ ghi điện đầu tiên
+      await syncElectricityReadingToTenantHandover(room_id, parseInt(year), parseInt(month), oldVal);
 
       results.push({ room_id, consumption, totalCost });
     }
@@ -775,8 +1019,8 @@ app.post('/api/payments/mark', async (req, res) => {
     const waterAmount = waterPrice * memberCount;
     const trashAmount = trashPrice * memberCount;
     const residenceAmount = isFirstMonth ? (residencePrice * memberCount) : 0;
-    const depositAmount = isFirstMonth ? (room.deposit || 0) : 0;
-    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
+    const depositAmount = 0; // Tiền cọc được thu và quản lý riêng qua Hóa đơn cọc
+    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount;
     const paidAt = is_paid ? new Date().toISOString() : null;
 
     await db.prepare(`
@@ -1246,11 +1490,11 @@ async function getDailyReportData(settingsMap, vnDate) {
     const residenceAmount = (isPaid && row.residence_amount !== null && row.residence_amount !== undefined)
       ? row.residence_amount : (isFirstMonth ? residencePrice * memberCount : 0);
     const depositAmount = (isPaid && row.deposit_amount !== null && row.deposit_amount !== undefined)
-      ? row.deposit_amount : (isFirstMonth ? (row.deposit || 0) : 0);
+      ? row.deposit_amount : 0;
 
     const totalAmount = isPaid && row.total_amount
       ? row.total_amount
-      : (rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount);
+      : (rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount);
 
     totalExpectedMoney += totalAmount;
 
@@ -1821,19 +2065,81 @@ app.get('/api/invoice', async (req, res) => {
     } else {
       residenceAmount = isFirstMonth ? residencePrice * memberCount : 0;
     }
-    const depositAmount = isPaidAlready ? (payment.deposit_amount || 0) : (isFirstMonth ? (room.deposit || 0) : 0);
-    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount + depositAmount;
+    const depositAmount = room.deposit || 0;
+    const totalAmount = rentAmount + elecAmount + waterAmount + trashAmount + residenceAmount;
 
-    // Lấy chỉ số điện mới nhất của phòng
+    // Lấy chỉ số điện mới nhất và số điện bàn giao của phòng
     const latestElec = await db.prepare(
-      'SELECT new_reading FROM electricity_readings WHERE room_id = ? ORDER BY year DESC, month DESC LIMIT 1'
+      'SELECT new_reading, year, month FROM electricity_readings WHERE room_id = ? ORDER BY year DESC, month DESC LIMIT 1'
     ).get(room_id);
+
+    const latestTenantWithElec = await db.prepare(
+      'SELECT handover_electricity, start_date FROM tenants WHERE room_id = ? ORDER BY id DESC LIMIT 1'
+    ).get(room_id);
+    const handoverElectricity = latestTenantWithElec && latestTenantWithElec.handover_electricity ? parseFloat(latestTenantWithElec.handover_electricity) : 0;
+
+    let isWithin15Days = false;
+    let daysSinceMoveIn = null;
+    let tenantStartYM = 0;
+    if (latestTenantWithElec && latestTenantWithElec.start_date) {
+      let startYear, startMonth, startDay;
+      if (typeof latestTenantWithElec.start_date === 'string') {
+        const parts = latestTenantWithElec.start_date.split('T')[0].split('-');
+        if (parts.length === 3) {
+          startYear = parseInt(parts[0], 10);
+          startMonth = parseInt(parts[1], 10) - 1;
+          startDay = parseInt(parts[2], 10);
+        }
+      }
+      if (startYear === undefined) {
+        const sd = new Date(latestTenantWithElec.start_date);
+        if (!isNaN(sd.getTime())) {
+          startYear = sd.getFullYear();
+          startMonth = sd.getMonth();
+          startDay = sd.getDate();
+        }
+      }
+      if (startYear !== undefined && !isNaN(startYear)) {
+        tenantStartYM = startYear * 100 + (startMonth + 1);
+        const today = new Date();
+        const startMidnight = new Date(startYear, startMonth, startDay).getTime();
+        const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+        const diffDays = Math.floor((todayMidnight - startMidnight) / (1000 * 60 * 60 * 24));
+        daysSinceMoveIn = diffDays;
+        if (diffDays >= 0 && diffDays <= 15) {
+          isWithin15Days = true;
+        }
+      }
+    }
+    const currentInvoiceYM = parseInt(year) * 100 + parseInt(month);
+
+    let effectivePrevElecReading = null;
+    if (handoverElectricity > 0 && tenantStartYM > 0 && currentInvoiceYM === tenantStartYM) {
+      effectivePrevElecReading = handoverElectricity;
+    } else if (prevElec) {
+      effectivePrevElecReading = prevElec.new_reading;
+    } else if (handoverElectricity > 0) {
+      effectivePrevElecReading = handoverElectricity;
+    }
+
+    let effectiveCurrentElecIndex = handoverElectricity;
+    if (latestElec) {
+      const latestElecYM = latestElec.year * 100 + latestElec.month;
+      if (tenantStartYM > 0 && latestElecYM < tenantStartYM && handoverElectricity > 0) {
+        effectiveCurrentElecIndex = handoverElectricity;
+      } else {
+        effectiveCurrentElecIndex = latestElec.new_reading;
+      }
+    }
 
     res.json({
       room,
       tenants,
       electricity: elec || null,
-      prevElecReading: prevElec ? prevElec.new_reading : null,
+      prevElecReading: effectivePrevElecReading,
+      handoverElectricity,
+      isWithin15Days,
+      daysSinceMoveIn,
       payment: payment || null,
       settings,
       summary: {
@@ -1853,7 +2159,10 @@ app.get('/api/invoice', async (req, res) => {
         isFirstMonth,
         isCheckout,
         isDepositMonth: isFirstMonth,
-        currentElecIndex: latestElec ? latestElec.new_reading : 0
+        handoverElectricity,
+        isWithin15Days,
+        daysSinceMoveIn,
+        currentElecIndex: effectiveCurrentElecIndex
       }
     });
   } catch (err) {

@@ -333,6 +333,9 @@ function registerEventListeners() {
     document.getElementById('tenant-start-date').value = today;
     document.getElementById('tenant-end-date').value = '';
 
+    const handoverElecInput = document.getElementById('tenant-handover-elec');
+    if (handoverElecInput) handoverElecInput.value = '';
+
     const memberGroup = document.getElementById('tenant-member-count-group');
     if (memberGroup) {
       memberGroup.style.display = 'block';
@@ -922,6 +925,9 @@ function renderTenantsList(tenants) {
     const startDateStr = tenant.start_date ? formatDate(tenant.start_date) : '--';
     const endDateStr = tenant.end_date ? formatDate(tenant.end_date) : 'Dài hạn';
     const isRepresentative = index === 0;
+    const handoverElecStr = (tenant.handover_electricity !== null && tenant.handover_electricity !== undefined && tenant.handover_electricity > 0)
+      ? `<span><i class="bi bi-plug"></i> Điện vào phòng: <strong>${tenant.handover_electricity} kWh</strong></span>`
+      : '';
 
     card.innerHTML = `
       <div class="tenant-main-info">
@@ -933,10 +939,12 @@ function renderTenantsList(tenants) {
           <span><i class="bi bi-telephone"></i> SĐT: <strong class="tenant-phone-label"></strong></span>
           <span><i class="bi bi-person-vcard"></i> CCCD: <strong class="tenant-cccd-label"></strong></span>
           <span><i class="bi bi-calendar-event"></i> HĐ: ${startDateStr} ➔ ${endDateStr}</span>
+          ${handoverElecStr}
         </div>
         <div class="tenant-notes-label" style="display: none; margin-top: 5px;"></div>
       </div>
       <div class="tenant-actions">
+        <button class="btn btn-sm btn-outline-primary btn-deposit-inv" title="Xuất hóa đơn cọc"><i class="bi bi-receipt"></i> Cọc</button>
         <button class="btn btn-sm btn-outline-secondary btn-edit">Sửa</button>
         <button class="btn btn-sm btn-danger btn-delete">Xóa</button>
       </div>
@@ -951,6 +959,14 @@ function renderTenantsList(tenants) {
       notesEl.textContent = ``;
       notesEl.innerHTML = `<i class="bi bi-journal-text"></i> ${tenant.notes}`;
       notesEl.style.display = 'block';
+    }
+
+    const btnDep = card.querySelector('.btn-deposit-inv');
+    if (btnDep) {
+      btnDep.addEventListener('click', () => {
+        closeModal('room-detail-modal');
+        window.openDepositInvoiceForRoom(tenant.room_id, tenant.handover_electricity);
+      });
     }
 
     card.querySelector('.btn-edit').addEventListener('click', () => {
@@ -1013,6 +1029,8 @@ async function handleTenantSubmit(e) {
   const tenantId = document.getElementById('tenant-id').value;
   const memberCountInput = document.getElementById('tenant-member-count');
   const memberCount = memberCountInput ? parseInt(memberCountInput.value) : 1;
+  const handoverElecInput = document.getElementById('tenant-handover-elec');
+  const handoverElec = handoverElecInput && handoverElecInput.value !== '' ? parseFloat(handoverElecInput.value) : 0;
 
   const body = {
     room_id: currentState.selectedRoomId,
@@ -1022,7 +1040,8 @@ async function handleTenantSubmit(e) {
     start_date: document.getElementById('tenant-start-date').value,
     end_date: document.getElementById('tenant-end-date').value || null,
     notes: document.getElementById('tenant-notes').value,
-    member_count: !isNaN(memberCount) && memberCount > 0 ? memberCount : 1
+    member_count: !isNaN(memberCount) && memberCount > 0 ? memberCount : 1,
+    handover_electricity: handoverElec
   };
 
   try {
@@ -1033,19 +1052,27 @@ async function handleTenantSubmit(e) {
         body: JSON.stringify(body)
       });
       showToast('Sửa thông tin người thuê thành công', 'success');
+      document.getElementById('tenant-form').style.display = 'none';
+      refreshRoomModalData();
     } else {
       // Thêm mới
       await fetchAPI('/api/tenants', {
         method: 'POST',
         body: JSON.stringify(body)
       });
-      showToast('Thêm người thuê thành công', 'success');
+      showToast('Thêm người thuê thành công! Đang mở hóa đơn cọc...', 'success');
+      document.getElementById('tenant-form').style.display = 'none';
+
+      // Đóng modal phòng
+      closeModal('room-detail-modal');
+
+      // Tự động mở và xem trước Hóa đơn cọc cho phòng này
+      const targetRoomId = currentState.selectedRoomId;
+      await window.openDepositInvoiceForRoom(targetRoomId, handoverElec);
+
+      // Refresh lại dữ liệu phòng ở nền
+      loadRoomsData();
     }
-
-    document.getElementById('tenant-form').style.display = 'none';
-
-    // Refresh modal
-    refreshRoomModalData();
   } catch (err) {
     console.error(err);
   }
@@ -1066,6 +1093,11 @@ window.editTenant = function (tenant) {
     document.getElementById('tenant-end-date').value = tenant.end_date.split('T')[0];
   } else {
     document.getElementById('tenant-end-date').value = '';
+  }
+
+  const handoverElecInput = document.getElementById('tenant-handover-elec');
+  if (handoverElecInput) {
+    handoverElecInput.value = (tenant.handover_electricity !== null && tenant.handover_electricity !== undefined) ? tenant.handover_electricity : '';
   }
 
   document.getElementById('tenant-notes').value = tenant.notes || '';
@@ -1769,7 +1801,7 @@ function renderBulkTable(data, month, year) {
     // Label giải thích nguồn số cũ
     const oldReadingSource = hasCurrentData
       ? `Số cũ đã lưu tháng ${month}/${year}`
-      : (room.last_reading > 0 ? `Lấy từ số mới tháng trước` : 'Chưa có dữ liệu tháng trước');
+      : (room.is_handover ? `Số điện bàn giao lúc nhận phòng (${room.last_reading} kWh)` : (room.last_reading > 0 ? `Lấy từ số mới tháng trước` : 'Chưa có dữ liệu trước'));
 
     const tr = document.createElement('tr');
     tr.setAttribute('data-room-id', room.id);
@@ -1819,7 +1851,7 @@ function renderBulkTable(data, month, year) {
             title="${oldReadingSource}"
             ${isVacant ? 'disabled' : ''}
           >
-          ${!hasCurrentData && room.last_reading > 0 ? `<div class="bulk-hint-old">↑ tháng trước</div>` : ''}
+          ${!hasCurrentData && room.is_handover ? `<div class="bulk-hint-old" style="color:var(--primary); font-weight:600;"><i class="bi bi-plug"></i> Bàn giao</div>` : (!hasCurrentData && room.last_reading > 0 ? `<div class="bulk-hint-old">↑ tháng trước</div>` : '')}
         </div>
       </td>
       <td class="bulk-td-new">
@@ -2348,6 +2380,24 @@ async function initInvoiceTab() {
       fetchInvoiceElectricityDefault();
     });
 
+    const depHandoverEl = document.getElementById('inv-deposit-handover-elec');
+    if (depHandoverEl) {
+      depHandoverEl.addEventListener('change', async () => {
+        const roomId = document.getElementById('inv-room-select')?.value;
+        const val = depHandoverEl.value;
+        if (roomId && val !== '' && !isNaN(parseFloat(val))) {
+          try {
+            await fetchAPI(`/api/rooms/${roomId}/handover-electricity`, {
+              method: 'PUT',
+              body: JSON.stringify({ handover_electricity: parseFloat(val) })
+            });
+          } catch (err) {
+            console.error('Lỗi khi lưu số điện bàn giao:', err);
+          }
+        }
+      });
+    }
+
     invoiceTabInited = true;
   }
 
@@ -2411,15 +2461,13 @@ async function fetchInvoiceElectricityDefault() {
 
   const oldInput = document.getElementById('inv-elec-old');
   const newInput = document.getElementById('inv-elec-new');
-  const handoverGroup = document.getElementById('inv-elec-handover-group');
-  const handoverInput = document.getElementById('inv-elec-handover');
 
   if (!oldInput || !newInput) return;
 
   // Reset override fields khi đổi phòng/tháng
   const overrideFields = document.getElementById('inv-override-fields');
   if (overrideFields) overrideFields.style.display = 'none';
-  ['inv-override-rent','inv-override-water','inv-override-trash','inv-override-deposit','inv-override-residence'].forEach(id => {
+  ['inv-override-rent','inv-override-water','inv-override-trash','inv-override-residence'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.value = ''; el.disabled = true; }
   });
@@ -2427,14 +2475,36 @@ async function fetchInvoiceElectricityDefault() {
   if (!roomId || !month || !year) {
     oldInput.value = '';
     newInput.value = '';
-    if (handoverGroup) handoverGroup.style.display = 'none';
-    if (handoverInput) handoverInput.value = '';
     return;
   }
 
   try {
     const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}`);
-    
+
+    // Tự động nhận diện nếu khách mới vào ở trong 15 ngày đầu -> Chọn Hóa đơn tiền cọc
+    const typeSelect = document.getElementById('inv-type-select');
+    if (data.isWithin15Days) {
+      if (typeSelect) {
+        typeSelect.value = 'deposit';
+        toggleInvoiceType();
+      }
+      const depAmtInput = document.getElementById('inv-deposit-amount');
+      if (depAmtInput) {
+        depAmtInput.value = (data.room && data.room.deposit) ? data.room.deposit : 0;
+      }
+      const depHandoverInput = document.getElementById('inv-deposit-handover-elec');
+      if (depHandoverInput) {
+        depHandoverInput.value = (data.handoverElectricity !== undefined && data.handoverElectricity !== null)
+          ? data.handoverElectricity
+          : (data.summary?.handoverElectricity || 0);
+      }
+    } else {
+      if (typeSelect && typeSelect.value === 'deposit') {
+        typeSelect.value = 'rent';
+        toggleInvoiceType();
+      }
+    }
+
     // Chỉ số cũ: Lấy từ prevElecReading (số mới của tháng trước), nếu không có thì lấy electricity.old_reading, nếu không có nữa thì lấy 0
     let oldVal = 0;
     if (data.prevElecReading !== null && data.prevElecReading !== undefined) {
@@ -2452,17 +2522,6 @@ async function fetchInvoiceElectricityDefault() {
       newVal = data.electricity.new_reading;
     }
     newInput.value = newVal;
-
-    // Quản lý hiển thị ô Chỉ số điện bàn giao
-    if (data.summary && data.summary.isDepositMonth) {
-      if (handoverGroup) handoverGroup.style.display = 'block';
-      if (handoverInput) {
-        handoverInput.value = data.summary.currentElecIndex !== null && data.summary.currentElecIndex !== undefined ? data.summary.currentElecIndex : 0;
-      }
-    } else {
-      if (handoverGroup) handoverGroup.style.display = 'none';
-      if (handoverInput) handoverInput.value = '';
-    }
   } catch (err) {
     console.error('Lỗi khi tải số điện mặc định:', err);
   }
@@ -2513,11 +2572,26 @@ async function generateInvoicePreview() {
       const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`);
       const depositAmount = parseFloat(document.getElementById('inv-deposit-amount')?.value) || data.room.deposit || 0;
       const depositNote = document.getElementById('inv-deposit-note')?.value?.trim() || '';
+      const handoverElecInput = document.getElementById('inv-deposit-handover-elec');
+      const handoverElec = handoverElecInput && handoverElecInput.value !== ''
+        ? parseFloat(handoverElecInput.value)
+        : (data.handoverElectricity !== undefined ? data.handoverElectricity : (data.summary?.handoverElectricity || 0));
+
+      if (handoverElecInput && (handoverElecInput.value === '' || handoverElecInput.value === '0')) {
+        handoverElecInput.value = handoverElec;
+      }
+
+      if (handoverElec !== undefined && handoverElec !== null && !isNaN(handoverElec)) {
+        fetchAPI(`/api/rooms/${roomId}/handover-electricity`, {
+          method: 'PUT',
+          body: JSON.stringify({ handover_electricity: handoverElec })
+        }).catch(err => console.error('Lỗi khi lưu số điện bàn giao:', err));
+      }
 
       const titleEl = document.querySelector('.inv-title-box h1');
       if (titleEl) titleEl.textContent = 'HÓA ĐƠN TIỀN CỌC';
 
-      renderDepositInvoice(data.room, data.tenants, data.settings, depositAmount, depositNote);
+      renderDepositInvoice(data.room, data.tenants, data.settings, depositAmount, depositNote, handoverElec);
 
       document.getElementById('invoice-empty-state').style.display = 'none';
       document.getElementById('invoice-preview-container').style.display = 'block';
@@ -2538,25 +2612,20 @@ async function generateInvoicePreview() {
     const elecOld = elecOldInput && elecOldInput.value !== '' ? parseFloat(elecOldInput.value) : null;
     const elecNew = elecNewInput && elecNewInput.value !== '' ? parseFloat(elecNewInput.value) : null;
 
-    const elecHandoverInput = document.getElementById('inv-elec-handover');
-    const elecHandover = elecHandoverInput && elecHandoverInput.value !== '' ? parseFloat(elecHandoverInput.value) : null;
-
     const overrideRentInput = document.getElementById('inv-override-rent');
     const overrideWaterInput = document.getElementById('inv-override-water');
     const overrideTrashInput = document.getElementById('inv-override-trash');
-    const overrideDepositInput = document.getElementById('inv-override-deposit');
     const overrideResidenceInput = document.getElementById('inv-override-residence');
     const overrideRent = overrideRentInput && overrideRentInput.value !== '' && !overrideRentInput.disabled ? parseFloat(overrideRentInput.value) : null;
     const overrideWater = overrideWaterInput && overrideWaterInput.value !== '' && !overrideWaterInput.disabled ? parseFloat(overrideWaterInput.value) : null;
     const overrideTrash = overrideTrashInput && overrideTrashInput.value !== '' && !overrideTrashInput.disabled ? parseFloat(overrideTrashInput.value) : null;
-    const overrideDeposit = overrideDepositInput && overrideDepositInput.value !== '' && !overrideDepositInput.disabled ? parseFloat(overrideDepositInput.value) : null;
     const overrideResidence = overrideResidenceInput && overrideResidenceInput.value !== '' && !overrideResidenceInput.disabled ? parseFloat(overrideResidenceInput.value) : null;
 
     const titleEl = document.querySelector('.inv-title-box h1');
     if (titleEl) titleEl.textContent = 'HÓA ĐƠN TIỀN TRỌ';
 
     const data = await fetchAPI(`/api/invoice?room_id=${roomId}&year=${year}&month=${month}&include_residence=${residenceOption}`);
-    renderInvoiceDocument(data, note, { rentFrom, rentTo, elecOld, elecNew, elecHandover, overrideRent, overrideWater, overrideTrash, overrideDeposit, overrideResidence });
+    renderInvoiceDocument(data, note, { rentFrom, rentTo, elecOld, elecNew, overrideRent, overrideWater, overrideTrash, overrideResidence });
 
     const s = data.summary;
     const overrideFields = document.getElementById('inv-override-fields');
@@ -2566,7 +2635,6 @@ async function generateInvoicePreview() {
         { el: overrideRentInput, val: overrideRent !== null ? overrideRent : s.rentAmount },
         { el: overrideWaterInput, val: overrideWater !== null ? overrideWater : s.waterAmount },
         { el: overrideTrashInput, val: overrideTrash !== null ? overrideTrash : s.trashAmount },
-        { el: overrideDepositInput, val: overrideDeposit !== null ? overrideDeposit : s.depositAmount },
         { el: overrideResidenceInput, val: overrideResidence !== null ? overrideResidence : s.residenceAmount },
       ];
       fields.forEach(({ el, val }) => {
@@ -2590,7 +2658,7 @@ async function generateInvoicePreview() {
 
 function renderInvoiceDocument(data, note, options = {}) {
   const { room, tenants, electricity, payment, settings, summary } = data;
-  const { rentFrom, rentTo, elecOld, elecNew, elecHandover, overrideRent, overrideWater, overrideTrash, overrideDeposit, overrideResidence } = options;
+  const { rentFrom, rentTo, elecOld, elecNew, overrideRent, overrideWater, overrideTrash, overrideResidence } = options;
 
   // Period label
   document.getElementById('inv-period-label').textContent = `Tháng ${summary.month}/${summary.year}`;
@@ -2694,7 +2762,7 @@ function renderInvoiceDocument(data, note, options = {}) {
         <td class="text-right">${formatVND(calculatedElecAmount)}</td>
       </tr>
     `;
-  } else if (!summary.isDepositMonth) {
+  } else {
     tbody.innerHTML += `
       <tr>
         <td><i class="bi bi-lightning"></i> Tiền điện</td>
@@ -2708,10 +2776,9 @@ function renderInvoiceDocument(data, note, options = {}) {
   const actualWater = overrideWater !== null && overrideWater !== undefined ? overrideWater : summary.waterAmount;
   const actualTrash = overrideTrash !== null && overrideTrash !== undefined ? overrideTrash : summary.trashAmount;
   const actualResidence = overrideResidence !== null && overrideResidence !== undefined ? overrideResidence : summary.residenceAmount;
-  const actualDeposit = overrideDeposit !== null && overrideDeposit !== undefined ? overrideDeposit : summary.depositAmount;
 
-  // Cập nhật lại tổng cộng trên hóa đơn dựa vào override values
-  const grandTotal = actualRent + calculatedElecAmount + actualWater + actualTrash + actualResidence + actualDeposit;
+  // Hóa đơn tiền trọ: Tổng cộng KHÔNG bao gồm tiền đặt cọc
+  const grandTotal = actualRent + calculatedElecAmount + actualWater + actualTrash + actualResidence;
 
   // Row: Tiền nước (chỉ hiện khi có phát sinh)
   if (actualWater > 0) {
@@ -2746,29 +2813,6 @@ function renderInvoiceDocument(data, note, options = {}) {
     `;
   }
 
-  // Row: Tiền đặt cọc (Tháng đầu cộng vào tổng, tháng sau chỉ hiển thị dưới tổng cộng)
-  if (actualDeposit > 0) {
-    tbody.innerHTML += `
-      <tr>
-        <td><i class="bi bi-handshake"></i> Tiền đặt cọc</td>
-        <td><small>Thu tháng đầu tiên</small></td>
-        <td class="text-right">${formatVND(actualDeposit)}</td>
-      </tr>
-    `;
-  }
-
-  // Hiển thị chỉ số điện ban đầu (số điện bàn giao) nếu ở tháng cọc đầu tiên
-  if (summary.isDepositMonth) {
-    const handoverVal = elecHandover !== null ? elecHandover : (summary.currentElecIndex || 0);
-    tbody.innerHTML += `
-      <tr style="border-top: 1px dashed var(--border-color);">
-        <td><i class="bi bi-plug"></i> Chỉ số điện bàn giao</td>
-        <td><small style="color:var(--success)">Số điện hiện tại khi nhận phòng (Không tính phí)</small></td>
-        <td class="text-right" style="color:var(--neutral-gray)">${handoverVal} kWh</td>
-      </tr>
-    `;
-  }
-
   // Reset và hiển thị Grand total
   const tfoot = document.querySelector('.inv-charges-table tfoot');
   tfoot.innerHTML = `
@@ -2778,8 +2822,8 @@ function renderInvoiceDocument(data, note, options = {}) {
     </tr>
   `;
 
-  // Nếu là tháng sau và phòng có tiền cọc, hiển thị thông tin cọc đang giữ dưới dòng Tổng cộng
-  if (summary.depositAmount === 0 && room.deposit > 0) {
+  // Nếu phòng có tiền cọc, hiển thị thông tin cọc đang giữ dưới dòng Tổng cộng (chỉ để khách biết đang cọc bao nhiêu, không tính vào hóa đơn)
+  if (room && room.deposit > 0) {
     tfoot.innerHTML += `
       <tr class="inv-deposit-ref-row" style="font-size: 13px; color: var(--neutral-gray); border-top: 1px dashed var(--border-color);">
         <td colspan="2"><i class="bi bi-handshake"></i> Tiền cọc đang giữ:</td>
@@ -2868,10 +2912,20 @@ function toggleInvoiceType() {
     const defaultNote = currentState.bankSettings?.deposit_default_note || '';
     const noteEl = document.getElementById('inv-deposit-note');
     if (noteEl && !noteEl.value) noteEl.value = defaultNote;
+
+    if (roomId) {
+      fetchAPI(`/api/invoice?room_id=${roomId}&year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`)
+        .then(data => {
+          const handoverInput = document.getElementById('inv-deposit-handover-elec');
+          if (handoverInput && (!handoverInput.value || handoverInput.value === '0')) {
+            handoverInput.value = data.handoverElectricity || 0;
+          }
+        }).catch(e => console.error(e));
+    }
   }
 }
 
-function renderDepositInvoice(room, tenants, settings, depositAmount, depositNote) {
+function renderDepositInvoice(room, tenants, settings, depositAmount, depositNote, handoverElec) {
   const titleEl = document.querySelector('.inv-title-box h1');
   titleEl.textContent = 'HÓA ĐƠN TIỀN CỌC';
 
@@ -2902,6 +2956,17 @@ function renderDepositInvoice(room, tenants, settings, depositAmount, depositNot
     });
   }
 
+  let handoverRow = '';
+  if (handoverElec !== undefined && handoverElec !== null && handoverElec !== '') {
+    handoverRow = `
+      <tr>
+        <td><i class="bi bi-plug"></i> Số điện khi vào phòng</td>
+        <td><small>Chỉ số công tơ điện ghi nhận lúc nhận phòng</small></td>
+        <td class="text-right" style="font-weight:600; color:var(--primary);">${handoverElec} kWh</td>
+      </tr>
+    `;
+  }
+
   const tbody = document.getElementById('inv-charges-tbody');
   tbody.innerHTML = `
     <tr>
@@ -2909,6 +2974,7 @@ function renderDepositInvoice(room, tenants, settings, depositAmount, depositNot
       <td><small>Đặt cọc giữ phòng</small></td>
       <td class="text-right">${formatVND(depositAmount)}</td>
     </tr>
+    ${handoverRow}
   `;
 
   const tfoot = document.querySelector('.inv-charges-table tfoot');
@@ -2922,9 +2988,9 @@ function renderDepositInvoice(room, tenants, settings, depositAmount, depositNot
   const statusBox = document.getElementById('inv-payment-status-box');
   if (statusBox) statusBox.style.display = 'none';
 
-  const bName = settings.deposit_bank_name;
-  const bAccount = settings.deposit_bank_account;
-  const bOwner = settings.deposit_bank_owner;
+  const bName = settings.deposit_bank_name || settings.bank_name;
+  const bAccount = settings.deposit_bank_account || settings.bank_account;
+  const bOwner = settings.deposit_bank_owner || settings.bank_owner;
   const bankBox = document.getElementById('inv-bank-details');
 
   if (bName || bAccount || bOwner) {
@@ -2967,9 +3033,16 @@ function copyInvoiceText() {
   text += `Tổng cộng: ${total}\n`;
 
   const invType = document.getElementById('inv-type-select')?.value || 'rent';
-  if (invType !== 'deposit') {
-    const status = document.getElementById('inv-payment-status-box').textContent.trim();
-    text += `Trạng thái: ${status}\n`;
+  if (invType === 'deposit') {
+    const handoverVal = document.getElementById('inv-deposit-handover-elec')?.value;
+    if (handoverVal !== undefined && handoverVal !== null && handoverVal !== '') {
+      text += `Số điện khi vào phòng: ${handoverVal} kWh\n`;
+    }
+  } else {
+    const depositRefRow = document.querySelector('.inv-deposit-ref-row td.text-right strong');
+    if (depositRefRow) {
+      text += `(Tiền cọc đang giữ: ${depositRefRow.textContent})\n`;
+    }
   }
 
   if (bankDetails) {
@@ -3162,10 +3235,38 @@ window.openInvoiceForRoom = async function (roomId, year, month) {
   // Cập nhật kỳ thu tiền phòng theo chu kỳ thu của phòng
   autoFillInvoiceDates(true);
 
-  // 3. Tải số điện mặc định của phòng
+  // 3. Tải số điện mặc định & tự động nhận diện hóa đơn cọc nếu khách mới vào trong 15 ngày
   await fetchInvoiceElectricityDefault();
 
   // 4. Tự động xuất xem trước hóa đơn
+  await generateInvoicePreview();
+};
+
+// Mở hóa đơn tiền cọc cho phòng
+window.openDepositInvoiceForRoom = async function (roomId, handoverElec) {
+  // 1. Chuyển sang tab Xuất hóa đơn
+  switchTab('invoice');
+
+  // 2. Khởi tạo tab hóa đơn nếu chưa
+  await initInvoiceTab();
+
+  const typeSelect = document.getElementById('inv-type-select');
+  if (typeSelect) {
+    typeSelect.value = 'deposit';
+    toggleInvoiceType();
+  }
+
+  const roomSelect = document.getElementById('inv-room-select');
+  if (roomSelect && roomId) {
+    roomSelect.value = roomId;
+  }
+
+  if (handoverElec !== undefined && handoverElec !== null && handoverElec !== '') {
+    const handoverInput = document.getElementById('inv-deposit-handover-elec');
+    if (handoverInput) handoverInput.value = handoverElec;
+  }
+
+  // 3. Tự động xuất xem trước hóa đơn cọc
   await generateInvoicePreview();
 };
 

@@ -108,6 +108,10 @@ async function initDatabase() {
       await execQuery(`ALTER TABLE rooms ADD COLUMN IF NOT EXISTS billing_day INTEGER DEFAULT 30`);
     } catch (e) { }
 
+    try {
+      await execQuery(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS handover_electricity REAL DEFAULT 0`);
+    } catch (e) { }
+
     console.log('✅ [Database] Kết nối thành công tới PostgreSQL Cloud (Neon). Toàn bộ dữ liệu trực tiếp đã sẵn sàng!');
   } catch (err) {
     console.error('❌ Lỗi khởi tạo database Postgres:', err);
